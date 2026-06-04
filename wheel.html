@@ -203,12 +203,14 @@ function remainingTeams(){ return wheelOrder.filter(t=>!drawn.has(t.name)); }
 function teamSlices(list){ const wt=t=>(mode==='weighted'?WEIGHT[t.tier]:1); const tot=list.reduce((s,t)=>s+wt(t),0)||1; let a=-90; const m=new Map();
   for(const t of list){ const span=wt(t)/tot*360; m.set(t.name,{a0:a,span,center:a+span/2}); a+=span; } return m; }
 
-/* fair = balanced snake over the strongest inPlay teams */
+/* fair = balanced snake over the strongest inPlay teams, shuffled within each tier band */
 function computeFair(){
   const n=order.length, pool=teams.slice().sort((x,y)=> y.composite-x.composite).slice(0,inPlay);
   fairAssign={}; order.forEach(p=>fairAssign[p]=[]);
   for(let pot=0;pot<perPlayer;pot++){
-    const slice=pool.slice(pot*n,pot*n+n), seq= pot%2? order.slice().reverse() : order;
+    const slice=pool.slice(pot*n,pot*n+n);
+    for(let i=slice.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[slice[i],slice[j]]=[slice[j],slice[i]];}  // every team in the band equally likely for any player
+    const seq= pot%2? order.slice().reverse() : order;
     seq.forEach((p,i)=> fairAssign[p].push(slice[i]));
   }
 }

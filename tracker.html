@@ -247,15 +247,7 @@
       <button id="setSave">Save settings</button>
       <div class="hint" id="setMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
-        <p style="margin:0 0 4px"><b>Telegram alerts — one-time bot setup.</b> After this, every player subscribes themselves from the 🔔 <b>Get alerts</b> menu (no key needed).</p>
-        <ol style="margin:0 0 10px 18px;padding:0;color:var(--muted);font-size:12.5px;line-height:1.7">
-          <li>In Telegram, search <b>@BotFather</b> → send <b>/newbot</b> → follow the prompts → copy the <b>token</b>.</li>
-          <li>Paste it below and tap <b>Save bot</b>.</li>
-          <li>Share the tracker link — players tap 🔔 Get alerts and pick their name.</li>
-        </ol>
-        <input id="setTgToken" type="password" placeholder="bot token (123456:ABC-DEF…)">
-        <div class="row2" style="margin-top:8px"><button id="setTgSave">Save bot</button><button id="setTgTest">Send test to all</button></div>
-        <div class="hint" id="setTgMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
+        <p style="margin:0"><b>Alerts.</b> Notifications are built in now — no bots, no setup. Anyone tap <b>🔔 Get alerts</b> in the menu, allow notifications once, and pick their name. They'll get pinged about their teams while the tracker is open.</p>
       </div>
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
         <p style="margin:0 0 8px"><b>Backup &amp; restore.</b> Download your draw + results so nothing is ever lost — and restore it on this or a fresh server.</p>
@@ -374,6 +366,7 @@ async function load(){
 function render(d){
   document.getElementById('updated').textContent='Updated: '+fmtUpdated(d.updated_at);
   COMP={}; (d.groups||[]).forEach(g=>(g.table||[]).forEach(r=>COMP[r.team]=r.composite||0));
+  checkNotify(d);
   renderWinners(d);
   renderOverview(d);
   // leaderboard for the active mode
@@ -841,48 +834,63 @@ document.getElementById('setSave').onclick=async()=>{
     else msg.textContent=j.error||'Could not save.';
   }catch(e){ msg.textContent='Could not reach the server.'; }
 };
-document.getElementById('setTgSave').onclick=async()=>{
-  const m=document.getElementById('setTgMsg');m.textContent='Saving…';
-  const payload={admin_key:ADMINKEY,telegram_token:document.getElementById('setTgToken').value.trim()};
-  try{ const j=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(r=>r.json());
-    if(j.ok){ m.textContent='Bot saved. Players can now use 🔔 Get alerts to subscribe.'; refreshStatus(); }
-    else if(j.need_key){ m.textContent='Session expired — unlock Settings again.'; ADMINKEY=''; }
-    else m.textContent=j.error||'Could not save.';
-  }catch(e){ m.textContent='Could not reach the server.'; }
-};
-document.getElementById('setTgTest').onclick=async()=>{
-  const m=document.getElementById('setTgMsg');m.textContent='Sending…';
-  try{ const j=await fetch('/api/telegram_test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:ADMINKEY})}).then(r=>r.json());
-    m.textContent=j.ok?'Test sent to everyone who subscribed ✓':(j.need_key?'Unlock Settings again.':'Failed.');
-  }catch(e){ m.textContent='Could not reach the server.'; }
-};
-// ---- open, no-key alerts subscription ----
+// ---- built-in browser notifications (no server, no Telegram) ----
 function closeAlerts(){ document.getElementById('alertsModal').style.display='none'; }
 document.getElementById('alertsClose').onclick=closeAlerts;
 document.getElementById('alertsModal').onclick=e=>{ if(e.target.id==='alertsModal') closeAlerts(); };
-document.getElementById('alertsBtn').onclick=async()=>{
-  const modal=document.getElementById('alertsModal'), body=document.getElementById('alertsBody');
-  modal.style.display='block'; body.innerHTML='<div class="empty">Loading…</div>';
-  let j; try{ j=await fetch('/api/telegram_links').then(r=>r.json()); }catch(e){ body.innerHTML='<div class="empty">Could not reach the server.</div>'; return; }
-  if(!j.ok || !j.configured || !j.bot_username){ body.innerHTML='<div class="empty">Alerts aren\'t switched on yet — ask whoever set up the sweepstake to add the Telegram bot in Settings.</div>'; return; }
-  body.innerHTML='<div style="color:var(--muted);font-size:13px;margin:0 0 10px">Tap your name — it opens our Telegram bot. Press <b>Start</b> there, come back and tap <b>Link me</b>.</div>'
-    +j.players.map(p=>`<div class="alrow" data-code="${p.code}" data-name="${p.name}" style="border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-          <b>${p.name}${p.subscribed?' <span style="color:var(--t2);font-weight:400;font-size:12px">· subscribed</span>':''}</b>
-          <a class="mini allink" href="https://t.me/${j.bot_username}?start=${p.code}" target="_blank" rel="noopener" style="text-decoration:none">Open Telegram →</a>
-        </div>
-        <div class="row2" style="margin-top:8px"><button class="mini allinkme">I'm done — Link me</button></div>
-        <div class="hint almsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
-      </div>`).join('');
-  body.querySelectorAll('.alrow').forEach(row=>{
-    row.querySelector('.allinkme').onclick=async()=>{
-      const msg=row.querySelector('.almsg'); msg.textContent='Linking…';
-      try{ const r=await fetch('/api/telegram_subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:row.dataset.code})}).then(x=>x.json());
-        msg.textContent = r.ok ? '✅ Subscribed! Check Telegram for a confirmation.' : (r.error||'Not found yet — open Telegram, press Start, then tap Link me again.');
-      }catch(e){ msg.textContent='Could not reach the server.'; }
-    };
-  });
-};
+function notifyMe(){ return localStorage.getItem('wc26_me')||''; }
+function renderAlerts(){
+  const body=document.getElementById('alertsBody');
+  const supported=('Notification' in window);
+  const perm=supported?Notification.permission:'unsupported';
+  const players=(STATUS.players||[]).map(p=>p.name);
+  if(!supported){ body.innerHTML='<div class="empty">This browser can\'t show notifications. Try Chrome, Edge, or Safari.</div>'; return; }
+  if(!players.length){ body.innerHTML='<div class="empty">Set up the players first (Setup), then come back.</div>'; return; }
+  const me=notifyMe();
+  let h='<div style="color:var(--ink);opacity:.85;font-size:13px;margin:0 0 12px">Pick your name and allow notifications. You\'ll get pinged about your teams whenever this tracker is open in a tab.</div>';
+  h+='<label style="font-size:12px;color:var(--muted)">I am</label><select id="alMe" style="width:100%;margin:4px 0 12px;padding:10px;border-radius:10px;background:#08180f;color:var(--ink);border:1px solid var(--line);font-family:Sora">'
+    +'<option value="">— choose your name —</option>'+players.map(p=>`<option value="${p}"${p===me?' selected':''}>${p}</option>`).join('')+'</select>';
+  if(perm==='granted') h+='<div style="color:var(--t2);font-size:13px">✅ Notifications are on.'+(me?' You\'re set as <b>'+me+'</b>.':' Now pick your name above.')+'</div><div class="row2" style="margin-top:10px"><button class="mini" id="alTest">Send me a test</button></div>';
+  else if(perm==='denied') h+='<div style="color:var(--t4);font-size:13px">Notifications are blocked for this site. Turn them back on in your browser\'s site settings, then reopen this.</div>';
+  else h+='<button id="alEnable">Allow notifications</button>';
+  h+='<div class="hint" id="alMsg" style="color:var(--muted);font-size:12px;margin-top:8px"></div>';
+  body.innerHTML=h;
+  const sel=document.getElementById('alMe');
+  if(sel) sel.onchange=()=>{ localStorage.setItem('wc26_me',sel.value); NOTIFYSNAP=null; renderAlerts(); };
+  const en=document.getElementById('alEnable');
+  if(en) en.onclick=async()=>{ try{ await Notification.requestPermission(); }catch(e){} renderAlerts(); };
+  const tb=document.getElementById('alTest');
+  if(tb) tb.onclick=()=>{ if(!notifyMe()){document.getElementById('alMsg').textContent='Pick your name first.';return;}
+    try{ new Notification('WC26 Sweepstake',{body:'✅ Alerts are working, '+notifyMe()+'!'}); }catch(e){} };
+}
+document.getElementById('alertsBtn').onclick=()=>{ document.getElementById('alertsModal').style.display='block'; renderAlerts(); };
+// fire notifications by diffing each refresh for the chosen player's teams
+let NOTIFYSNAP=null;
+function ping(title,body){ try{ if(('Notification'in window)&&Notification.permission==='granted') new Notification(title,{body}); }catch(e){} }
+function checkNotify(d){
+  const me=notifyMe();
+  if(!me || !('Notification'in window) || Notification.permission!=='granted'){ NOTIFYSNAP=null; return; }
+  const myTeams=new Set(((d.players||[]).find(p=>p.name===me)||{teams:[]}).teams.map(t=>t.name));
+  const fx={}; (d.fixtures||[]).forEach(m=>{ fx[m.home+'|'+m.away]={st:m.status,hs:m.homeScore,as:m.awayScore,h:m.home,a:m.away}; });
+  const alive={}; ((d.players||[]).find(p=>p.name===me)||{teams:[]}).teams.forEach(t=>alive[t.name]=(t.status==='alive'));
+  const leader=((d.leaderboards||{}).hybrid||[])[0]; const leaderName=leader&&leader.name;
+  const LIVE=['IN_PLAY','PAUSED','LIVE','SUSPENDED'];
+  const snap={fx,alive,leaderName};
+  if(NOTIFYSNAP){
+    for(const k in fx){ const n=fx[k], o=NOTIFYSNAP.fx[k]; if(!o) continue;
+      const mine = myTeams.has(n.h)?n.h:(myTeams.has(n.a)?n.a:null); if(!mine) continue;
+      const opp = mine===n.h?n.a:n.h;
+      if(LIVE.includes(n.st)&&!LIVE.includes(o.st)) ping('⚽ Your team is playing', mine+' kick off now — vs '+opp+'.');
+      else if(LIVE.includes(n.st)&&n.hs!=null&&o.hs!=null){
+        const mineScored = (mine===n.h&&n.hs>o.hs)||(mine===n.a&&n.as>o.as);
+        if(mineScored) ping('⚽ '+mine+' scored!', n.h+' '+n.hs+'–'+n.as+' '+n.a);
+      }
+    }
+    for(const t in alive){ if(NOTIFYSNAP.alive[t]&&!alive[t]) ping('❌ '+t+' is out', 'Check the leaderboard to see where you stand.'); }
+    if(leaderName && NOTIFYSNAP.leaderName && leaderName!==NOTIFYSNAP.leaderName) ping('📈 New leader', leaderName+' now tops the table.');
+  }
+  NOTIFYSNAP=snap;
+}
 document.getElementById('setRotate').onclick=async()=>{
   const m=document.getElementById('setRotateMsg');
   if(!confirm('Generate a new admin key? The current key will stop working immediately on every device.')) return;
