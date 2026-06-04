@@ -879,7 +879,8 @@ function renderAlerts(){
   let h='<div style="color:var(--ink);opacity:.85;font-size:13px;margin:0 0 12px">Pick your name and allow notifications. You\'ll get pinged about your teams whenever this tracker is open in a tab.</div>';
   h+='<label style="font-size:12px;color:var(--muted)">I am</label><select id="alMe" style="width:100%;margin:4px 0 12px;padding:10px;border-radius:10px;background:#08180f;color:var(--ink);border:1px solid var(--line);font-family:Sora">'
     +'<option value="">— choose your name —</option>'+players.map(p=>`<option value="${p}"${p===me?' selected':''}>${p}</option>`).join('')+'</select>';
-  if(perm==='granted') h+='<div style="color:var(--t2);font-size:13px">✅ Notifications are on.'+(me?' You\'re set as <b>'+me+'</b>.':' Now pick your name above.')+'</div><div class="row2" style="margin-top:10px"><button class="mini" id="alTest">Send me a test</button><button class="mini" id="alDemo">Demo a live game</button></div>';
+  if(perm==='granted'){ h+='<div style="color:var(--t2);font-size:13px">✅ Notifications are on.'+(me?' You\'re set as <b>'+me+'</b>.':' Now pick your name above.')+'</div><div class="row2" style="margin-top:10px"><button class="mini" id="alTest">Send me a test</button><button class="mini" id="alDemo">Demo a live game</button></div>';
+    if(me) h+='<div style="margin-top:8px"><button class="mini" id="alOff">🔕 Turn off my alerts</button></div>'; }
   else if(perm==='denied') h+='<div style="color:var(--t4);font-size:13px">Notifications are blocked for this site. Turn them back on in your browser\'s site settings, then reopen this.</div>';
   else h+='<button id="alEnable">Allow notifications</button>';
   h+='<div class="hint" id="alMsg" style="color:var(--muted);font-size:12px;margin-top:8px"></div>';
@@ -903,6 +904,10 @@ function renderAlerts(){
       [11000,'📈 New leader', who+' now tops the table.']
     ];
     seq.forEach(s=>setTimeout(()=>ping(s[1],s[2]),s[0])); };
+  const off=document.getElementById('alOff');
+  if(off) off.onclick=()=>{ localStorage.removeItem('wc26_me'); NOTIFYSNAP=null;
+    document.getElementById('alMsg').textContent='Alerts off — you won\'t get any more pings. Pick your name again any time to turn them back on.';
+    renderAlerts(); };
 }
 document.getElementById('alertsBtn').onclick=()=>{ document.getElementById('alertsModal').style.display='block'; renderAlerts(); };
 // fire notifications by diffing each refresh for the chosen player's teams
