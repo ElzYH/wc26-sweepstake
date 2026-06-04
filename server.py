@@ -284,14 +284,17 @@ class Handler(BaseHTTPRequestHandler):
             })
             if body.get("token"):
                 cfg["token"] = body["token"].strip()
-            if draw_locked() and not key_ok(body):
+            if not key_ok(body):
                 return self._send(403, json.dumps({"ok": False, "need_key": True,
-                    "error": "A draw is already locked. Enter the admin key (shown in the server terminal) to overwrite it."}))
+                    "error": "Admin key required to change setup."}))
             with _lock:
                 save_config(cfg)
                 reset_draw()
             return self._send(200, json.dumps({"ok": True}))
         if path == "/api/save_draw":
+            if not key_ok(body):
+                return self._send(403, json.dumps({"ok": False, "need_key": True,
+                    "error": "Admin key required to run the draw."}))
             cfg = load_config()
             body_players = [p.get("name") for p in (body.get("players") or [])
                             if isinstance(p, dict) and p.get("name")]

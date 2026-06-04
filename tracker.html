@@ -85,6 +85,8 @@
   .stagetag{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
   .empty{color:var(--muted);padding:30px;text-align:center}
   .modesel{display:flex;gap:8px;margin-bottom:14px}
+  .modecap{color:var(--muted);font-size:12.5px;line-height:1.5;margin:-6px 0 14px;padding:9px 12px;background:#08180f;border:1px solid var(--line);border-radius:9px}
+  .modecap b{color:var(--ink)}
   #modesel{display:flex}
   .modesel button{font-family:'Sora';font-weight:700;font-size:13px;padding:8px 16px;border-radius:999px;cursor:pointer;
     background:#10301f;border:1px solid var(--line);color:var(--ink)}
@@ -217,6 +219,7 @@
       <button data-m="survival">Survival</button>
       <button data-m="hybrid">Both</button>
     </div>
+    <div class="modecap" id="modeCap"></div>
     <div class="lb" id="lbBody"></div>
   </section>
   <section id="players"><div class="hint" style="color:var(--muted);font-size:12.5px;margin:0 0 10px">The number on the right of each team is the <b style="color:var(--ink)">points it has earned</b> that player. The G-tag is its group.</div><div class="pcards" id="playersBody"></div></section>
@@ -280,6 +283,12 @@ function render(d){
   MODE=d.default_mode||'hybrid';
   const lbm=LBMODE||MODE;
   document.querySelectorAll('#modesel button').forEach(b=>b.classList.toggle('on',b.dataset.m===lbm));
+  const CAP={
+    points:"<b>Points</b> — teams earn points for goals, wins, clean sheets and bonuses for reaching each knockout round. Rewards teams that perform, even ones knocked out early.",
+    survival:"<b>Survival</b> — ranked on how many of your teams are still alive and how far they go. Rewards backing teams that last.",
+    hybrid:"<b>Both</b> — Points and Survival added into one number. A single winner: the squad that racks up points <b>and</b> survives deep."
+  };
+  document.getElementById('modeCap').innerHTML=CAP[lbm]||'';
   const board=(d.leaderboards&&d.leaderboards[lbm])||[];
   const unit=lbm==='survival'?'STILL IN':(lbm==='hybrid'?'TOTAL':'PTS');
   document.getElementById('lbBody').innerHTML=board.map((p,i)=>`

@@ -31,6 +31,9 @@
   .add{background:#10301f;color:var(--ink);border:1px solid var(--line)}
   .go{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205;width:100%;padding:15px;font-size:17px;margin-top:6px}
   .hint{color:var(--muted);font-size:12px;margin-top:6px}
+  .explain{margin-top:10px;padding:12px 14px;background:#08180f;border:1px solid var(--line);border-radius:10px}
+  .explain p{color:var(--muted);font-size:12.5px;line-height:1.55;margin:0 0 7px}
+  .explain p:last-child{margin-bottom:0}.explain b{color:var(--ink)}
   .links a{display:inline-block;margin-right:12px;color:var(--gold);font-weight:700;text-decoration:none}
   .done{display:none;text-align:center}
   fieldset{border:0}
@@ -50,9 +53,9 @@
   <div class="sub">Add players, choose how the draw and scoring work, then run it.</div>
 
   <div id="lockGate" class="card" style="display:none;text-align:center">
-    <h1 style="font-size:24px;margin-bottom:6px">🔒 This box has a locked draw</h1>
-    <p class="sub">Changing setup wipes the current draw and tracker. Enter the admin key to continue.</p>
-    <input type="text" id="adminKey" placeholder="admin key — shown in the server terminal" style="max-width:340px;margin:12px auto">
+    <h1 style="font-size:24px;margin-bottom:6px">🔒 Admin access</h1>
+    <p class="sub">Setup is admin-only. Enter the admin key to add players and run the draw.</p>
+    <input type="text" id="adminKey" placeholder="admin key" style="max-width:340px;margin:12px auto">
     <div><button class="go" id="unlockBtn" type="button" style="max-width:260px">Unlock setup</button></div>
     <div class="hint" id="gateMsg"></div>
   </div>
@@ -74,7 +77,12 @@
         <div class="opt on" data-v="weighted">Weighted<small>any team, favourites likelier</small></div>
         <div class="opt" data-v="random">Random<small>every team equally likely</small></div>
       </div>
-      <div class="hint">Players still take turns in clockwork order; this sets how each pick is chosen. Fair is pre-balanced; Weighted makes favourites likelier; Random gives every team an equal chance.</div>
+      <div class="hint">Players still take turns in clockwork order; this only sets how each team is chosen on their turn.</div>
+      <div class="explain">
+        <p><b>Fair</b> — teams are split into equal strength bands and everyone gets exactly one from each band. Balanced squads all round: nobody lands all the giants, nobody gets stuck with all the minnows. Lowest drama.</p>
+        <p><b>Weighted</b> — favourites are far likelier to be drawn (top tier ~8× a minnow). One player can luck into France + Brazil while another gets a weak bag. Swingy, classic pub-sweepstake feel.</p>
+        <p><b>Random</b> — every remaining team has an equal chance each spin, no strength bias at all. Pure luck.</p>
+      </div>
     </div>
 
     <div class="card">
@@ -105,6 +113,11 @@
         <div class="opt" data-v="points">Points<small>goals / wins</small></div>
         <div class="opt" data-v="survival">Survival<small>last team standing</small></div>
         <div class="opt on" data-v="hybrid">Both<small>points + survival</small></div>
+      </div>
+      <div class="explain">
+        <p><b>Points</b> — your teams earn points for goals, wins, clean sheets and bonuses for reaching each knockout round. Rewards teams that perform, even ones that go out early.</p>
+        <p><b>Survival</b> — you're ranked on how many of your teams are still alive and how deep they go. Rewards backing teams that last, not flashy early form.</p>
+        <p><b>Both</b> — Points and Survival added into one number. A single winner: the player whose squad both racks up points <i>and</i> survives deep. (Default.)</p>
       </div>
     </div>
 
@@ -173,17 +186,19 @@ document.getElementById('go').onclick=async()=>{
   }catch(e){msg.textContent='Could not reach the server.';}
 };
 const formEl=document.getElementById('form'), gateEl=document.getElementById('lockGate');
+// Always require the admin key before showing the setup form.
+gateEl.style.display='block'; formEl.style.display='none';
 fetch('/api/status').then(r=>r.json()).then(s=>{
-  if(s&&s.drawn){ gateEl.style.display='block'; formEl.style.display='none'; }
-  else formEl.style.display='block';
-}).catch(()=>{ formEl.style.display='block'; });
+  const gm=document.getElementById('gateMsg');
+  if(s&&s.drawn) gm.textContent='A draw is already locked — entering the key lets you overwrite it.';
+}).catch(()=>{});
 document.getElementById('unlockBtn').onclick=async()=>{
   const key=document.getElementById('adminKey').value.trim(), gm=document.getElementById('gateMsg');
-  if(!key){ gm.textContent='Enter the key from the server terminal.'; return; }
+  if(!key){ gm.textContent='Enter the admin key.'; return; }
   gm.textContent='Checking…';
   try{ const j=await fetch('/api/check_key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:key})}).then(r=>r.json());
-    if(j.ok){ gateEl.style.display='none'; formEl.style.display='block'; }
-    else gm.textContent='Wrong key — check the terminal where the server is running.';
+    if(j.ok){ localStorage.setItem('wc26_admin_key', key); gateEl.style.display='none'; formEl.style.display='block'; }
+    else gm.textContent='Wrong key.';
   }catch(e){ gm.textContent='Could not reach the server.'; }
 };
 

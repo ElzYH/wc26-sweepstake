@@ -300,8 +300,16 @@ async function finish(){ phase='done'; auto=false;
   const box=$('saved');box.style.display='block';
   if(!isServer()){ box.classList.add('err');box.innerHTML='<b>Preview only</b><div class="note">Open from the running server to save the draw.</div>';return; }
   box.innerHTML='<b>Saving…</b>';
-  try{ const j=await fetch('/api/save_draw',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(r=>r.json());
-    if(j.ok) box.innerHTML='🏆 <b>Draw locked &amp; saved.</b> The tracker is now unlocked.<br><a href="/tracker">Go to the live tracker →</a><div class="note">To run a new draw, open Setup and enter the admin key from the terminal.</div>';
+  const trySave=async(key)=>{
+    payload.admin_key=(key||localStorage.getItem('wc26_admin_key')||'');
+    return fetch('/api/save_draw',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(r=>r.json());
+  };
+  try{ let j=await trySave();
+    if(j&&j.need_key){
+      const k=prompt('Enter the admin key to lock this draw:');
+      if(k){ localStorage.setItem('wc26_admin_key',k.trim()); j=await trySave(k.trim()); }
+    }
+    if(j.ok) box.innerHTML='🏆 <b>Draw locked &amp; saved.</b> The tracker is now unlocked.<br><a href="/tracker">Go to the live tracker →</a><div class="note">To run a new draw, open Setup and enter the admin key.</div>';
     else{ box.classList.add('err');box.innerHTML='<b>Could not save</b><div class="note">'+(j.error||'error')+'</div>'; }
   }catch(e){ box.classList.add('err');box.innerHTML='<b>Could not reach the server</b><div class="note">'+e+'</div>'; } }
 function showLocked(saved){ phase='done'; order=saved.players.map(p=>p.name);
