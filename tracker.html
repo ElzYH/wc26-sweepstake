@@ -547,16 +547,18 @@ let ADMINKEY='';
 document.getElementById('setBtn').onclick=()=>{
   const p=document.getElementById('setPanel'); const show=p.style.display==='none'; p.style.display=show?'block':'none';
   if(show){ const locked=STATUS.drawn && !ADMINKEY;
+    const saved=localStorage.getItem('wc26_admin_key'); const kf=document.getElementById('setGateKey'); if(saved&&kf&&!kf.value) kf.value=saved;
     document.getElementById('setGate').style.display=locked?'block':'none';
     document.getElementById('setFields').style.display=locked?'none':'block'; }
 };
 document.getElementById('setUnlock').onclick=async()=>{
   const k=document.getElementById('setGateKey').value.trim(), gm=document.getElementById('setGateMsg');
-  if(!k){gm.textContent='Enter the key from the server terminal.';return;}
+  if(!k){gm.textContent='Enter the admin key.';return;}
   gm.textContent='Checking…';
-  try{ const j=await fetch('/api/check_key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:k})}).then(r=>r.json());
-    if(j.ok){ ADMINKEY=k; document.getElementById('setGate').style.display='none'; document.getElementById('setFields').style.display='block'; }
-    else gm.textContent='Wrong key — check the server terminal.';
+  try{ const r=await fetch('/api/check_key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:k})}); const j=await r.json();
+    if(j.ok){ ADMINKEY=k; localStorage.setItem('wc26_admin_key',k); document.getElementById('setGate').style.display='none'; document.getElementById('setFields').style.display='block'; }
+    else if(r.status===429) gm.textContent='Too many tries — wait a few seconds and try again.';
+    else gm.textContent='Wrong key.';
   }catch(e){ gm.textContent='Could not reach the server.'; }
 };
 document.getElementById('setSave').onclick=async()=>{

@@ -190,9 +190,10 @@ const formEl=document.getElementById('form'), gateEl=document.getElementById('lo
 // Always require the admin key — but remember this device: if a valid key is stored, skip the gate.
 gateEl.style.display='block'; formEl.style.display='none';
 (async()=>{
+  if(sessionStorage.getItem('wc26_unlocked')==='1'){ gateEl.style.display='none'; formEl.style.display='block'; return; }
   const saved=localStorage.getItem('wc26_admin_key');
   if(saved){ try{ const j=await fetch('/api/check_key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:saved})}).then(r=>r.json());
-    if(j&&j.ok){ gateEl.style.display='none'; formEl.style.display='block'; } }catch(e){} }
+    if(j&&j.ok){ sessionStorage.setItem('wc26_unlocked','1'); gateEl.style.display='none'; formEl.style.display='block'; } }catch(e){} }
 })();
 fetch('/api/status').then(r=>r.json()).then(s=>{
   const gm=document.getElementById('gateMsg');
@@ -202,8 +203,9 @@ document.getElementById('unlockBtn').onclick=async()=>{
   const key=document.getElementById('adminKey').value.trim(), gm=document.getElementById('gateMsg');
   if(!key){ gm.textContent='Enter the admin key.'; return; }
   gm.textContent='Checking…';
-  try{ const j=await fetch('/api/check_key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:key})}).then(r=>r.json());
-    if(j.ok){ localStorage.setItem('wc26_admin_key', key); gateEl.style.display='none'; formEl.style.display='block'; }
+  try{ const r=await fetch('/api/check_key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:key})}); const j=await r.json();
+    if(j.ok){ localStorage.setItem('wc26_admin_key', key); sessionStorage.setItem('wc26_unlocked','1'); gateEl.style.display='none'; formEl.style.display='block'; }
+    else if(r.status===429) gm.textContent='Too many tries — wait a few seconds and try again.';
     else gm.textContent='Wrong key.';
   }catch(e){ gm.textContent='Could not reach the server.'; }
 };

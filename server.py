@@ -21,6 +21,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(os.environ.get("WC26_DATA", APP_DIR))
+
+def log(*a):
+    print("[wc26]", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), *a, flush=True)
+
 _hits = defaultdict(list)
 _rl_lock = threading.Lock()
 def rate_ok(ip, limit, window=60):
@@ -255,6 +259,7 @@ class Handler(BaseHTTPRequestHandler):
             self._do_POST()
         except Exception:
             import traceback; traceback.print_exc()
+            log("ERROR handling POST", self.path)
             try:
                 self._send(500, json.dumps({"ok": False, "error": "server error — check the logs"}))
             except Exception:
@@ -272,9 +277,11 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(body, dict):
             return self._send(400, json.dumps({"ok": False, "error": "bad request"}))
         ip = self.client_address[0]
-        strict = path in ("/api/check_key", "/api/setup", "/api/settings", "/api/redraw", "/api/save_draw", "/api/export", "/api/import")
+        strict = path in ("/api/setup", "/api/settings", "/api/redraw", "/api/save_draw", "/api/export", "/api/import")
         if not rate_ok(ip, 10 if strict else 60):
             return self._send(429, json.dumps({"ok": False, "error": "too many requests — slow down"}))
+        if path not in ("/api/poll", "/api/status"):
+            log("POST", path, "from", ip)
         if path == "/api/setup":
             players = [str(p).strip()[:40] for p in body.get("players", []) if str(p).strip()]
             if len(players) < 2:
@@ -300,6 +307,7 @@ class Handler(BaseHTTPRequestHandler):
             with _lock:
                 save_config(cfg)
                 reset_draw()
+            log("setup saved:", len(cfg.get("players", [])), "players, mode", cfg.get("draw_mode"))
             return self._send(200, json.dumps({"ok": True}))
         if path == "/api/save_draw":
             if not key_ok(body):
@@ -319,6 +327,7 @@ class Handler(BaseHTTPRequestHandler):
             with _lock:
                 json.dump(build_draw_result(body), open("draw_result.json", "w"), indent=2)
                 ok, err = update_now(cfg)
+            log("draw locked" if ok else "draw save FAILED:", err or "")
             return self._send(200 if ok else 500, json.dumps({"ok": ok, "error": err}))
         if path == "/api/settings":
             cfg = load_config()

@@ -156,7 +156,10 @@ async function init(){
     if(saved&&saved.players){ showLocked(saved); return; }
   }
   if(!offline && !(st.players&&st.players.length)){ showNeedSetup(); return; }   // server is up but no players configured — don't run a sample draw
-  if(!offline && !(await keyValid(localStorage.getItem('wc26_admin_key')))){ showAdminGate(); return; }
+  const haveKey=localStorage.getItem('wc26_admin_key');
+  const unlocked=sessionStorage.getItem('wc26_unlocked')==='1' && haveKey;
+  if(!offline && !unlocked && !(await keyValid(haveKey))){ showAdminGate(); return; }
+  if(haveKey) sessionStorage.setItem('wc26_unlocked','1');
   startOrder();
 }
 
@@ -173,11 +176,11 @@ function showAdminGate(){
   const box=$('saved'); box.style.display='block'; box.classList.remove('err');
   box.innerHTML='\uD83D\uDD12 <b>Running the draw is admin-only.</b><div class="note">Spectators can follow along live on the tracker. To run it, enter the admin key.</div>'
     +'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><input id="wkey" type="text" placeholder="admin key" style="flex:1;min-width:160px;padding:9px 11px;border-radius:8px;border:1px solid #1f4733;background:#08180f;color:#eafff4;font-family:Sora"><button id="wkeyBtn" type="button">Unlock</button></div>'
-    +'<div class="note" id="wkeyMsg"></div><div class="note" style="margin-top:8px"><a href="/tracker" style="color:var(--gold)">Watch live on the tracker →</a></div>';
+    +'<div class="note" id="wkeyMsg"></div><div style="margin-top:10px"><a href="/tracker" style="color:var(--gold);background:none;text-decoration:underline;font-weight:600">Watch live on the tracker →</a></div>';
   $('wkeyBtn').onclick=async()=>{
     const k=$('wkey').value.trim(); if(!k){ $('wkeyMsg').textContent='Enter the key.'; return; }
     $('wkeyMsg').textContent='Checking\u2026';
-    if(await keyValid(k)){ localStorage.setItem('wc26_admin_key',k); const rb=$('resetBtn'); if(rb){rb.disabled=false;rb.style.opacity='';rb.style.pointerEvents='';} box.style.display='none'; startOrder(); }
+    if(await keyValid(k)){ localStorage.setItem('wc26_admin_key',k); sessionStorage.setItem('wc26_unlocked','1'); const rb=$('resetBtn'); if(rb){rb.disabled=false;rb.style.opacity='';rb.style.pointerEvents='';} box.style.display='none'; startOrder(); }
     else $('wkeyMsg').textContent='Wrong key.';
   };
 }
