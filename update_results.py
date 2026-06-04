@@ -55,6 +55,7 @@ def normalize_matches(api_matches, resolve):
             "home": h, "away": a,
             "homeScore": ft.get("home"), "awayScore": ft.get("away"),
             "winner": winner,
+            "minute": m.get("minute"),          # populated for live matches on paid (live) tiers
         })
     return out
 

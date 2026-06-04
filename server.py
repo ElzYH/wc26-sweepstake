@@ -625,7 +625,8 @@ def discord_command(name, opts):
         if live:
             out.append("**Live now**")
             for m in live:
-                out.append("🔴 %s %s-%s %s" % (m.get("home"), m.get("homeScore", 0), m.get("awayScore", 0), m.get("away")))
+                out.append("🔴 %s%s %s-%s %s" % (("%s' " % m["minute"]) if m.get("minute") else "",
+                                                  m.get("home"), m.get("homeScore", 0), m.get("awayScore", 0), m.get("away")))
         if upcoming:
             out.append("**Next up**")
             for m in upcoming:

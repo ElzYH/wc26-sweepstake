@@ -240,6 +240,10 @@
     <p><b>How "Both" picks a winner:</b> one winner only — the player with the highest Points + Survival total combined. A single ranking, not two prizes.</p>
     <p><b>Fixtures:</b> the bar under each match is the win chance — home / draw / away — from team strength, shifting toward the leader once a game is in-play.</p>
     <p><b>Odds &amp; stats:</b> the win bars are your live chance of owning the champion (from bookmaker prices, updating as teams go out). The simulator there estimates your odds of winning on Points, Survival or Both.</p>
+    <p><b>📋 Summary:</b> the quick digest at the top of Overview — leaders, teams left, top team and goals. The same digest can be posted to Discord from Settings.</p>
+    <p><b>🔔 Get alerts:</b> tap it in the ⋯ menu, pick your name, and turn on alerts for your teams — goals, kick-offs, half-time, knockouts and lead changes. Tick exactly which of those you want. On iPhone you must first add the site to your Home Screen (Share → Add to Home Screen) and open it from that icon; on a laptop just allow notifications. You can also join the group Discord, where the same alerts post for everyone.</p>
+    <p><b>Discord bot:</b> in the group server, type <code>/</code> to pull live data — <code>/leaderboard</code>, <code>/summary</code>, <code>/odds</code>, <code>/fixtures</code>, <code>/myteams</code>, <code>/help</code>. It's read-only; nobody can change the draw from Discord.</p>
+    <p><b>The draw — Fair vs Weighted:</b> Fair spreads the strongest teams evenly so everyone gets a balanced mix (within each strength band it's still random, so it's fair but not predictable). Weighted is luck-of-the-draw — a bigger team gives better odds but you might land several strong or several weak ones. On the Reveal page, <b>Run draw on the server</b> does the draw on the server and keeps going even if you close the tab — everyone can watch it live.</p>
   </div>
   <div class="panel" id="setPanel" style="display:none">
     <h4>Settings — add live scores later</h4>
@@ -253,7 +257,8 @@
       <p>Paste a football-data.org token to turn on live scores. This does <b>not</b> touch the draw.</p>
       <input id="setToken" type="password" placeholder="football-data.org API token">
       <div class="row2"><input id="setPoll" type="number" min="1" placeholder="refresh mins (e.g. 10)"><input id="setComp" type="text" placeholder="competition (WC)"></div>
-      <button id="setSave">Save settings</button>
+      <div class="hint" style="color:var(--muted);font-size:12px;margin:4px 0 0">On a live-scores plan set <b>refresh = 1</b> so scores and alerts update every minute (the free plan delays scores, so a higher number is fine there).</div>
+      <button id="setSave" style="margin-top:8px">Save settings</button>
       <div class="hint" id="setMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
         <p style="margin:0 0 8px"><b>Alerts.</b> Two ways to get notified — players switch them on via <b>🔔 Get alerts</b> in the menu.</p>
@@ -608,7 +613,7 @@ function renderOverview(d){
   // LIVE NOW
   html+='<div class="ovsec"><div class="ovh">🔴 Live now</div>';
   if(live.length){
-    html+='<div class="livegrid">'+live.map(m=>`<div class="livecard"><span class="livedot"></span>LIVE${m.stage&&m.stage!=='GROUP_STAGE'?' · '+(STAGE_LABEL[m.stage]||m.stage):''}
+    html+='<div class="livegrid">'+live.map(m=>`<div class="livecard"><span class="livedot"></span>LIVE${m.minute?" "+m.minute+"'":""}${m.stage&&m.stage!=='GROUP_STAGE'?' · '+(STAGE_LABEL[m.stage]||m.stage):''}
       <div class="lmatch"><span>${flag(m.home)}${m.home}${own(m.homeOwner)}</span><span class="lsc">${m.homeScore??0}–${m.awayScore??0}</span><span class="lr">${flag(m.away)}${m.away}${own(m.awayOwner)}</span></div></div>`).join('')+'</div>';
   } else {
     html+='<div class="empty">No games in play right now — live scores appear here the moment a match kicks off.</div>';
