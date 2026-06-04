@@ -18,8 +18,8 @@ SCORING = {
     "stage_bonus": {"LAST_32": 5, "LAST_16": 5, "QUARTER_FINALS": 10,
                     "SEMI_FINALS": 15, "FINAL": 20, "WINNER": 30},
 }
-SURVIVAL_VALUE = {"LAST_32": 15, "LAST_16": 30, "QUARTER_FINALS": 50,
-                  "SEMI_FINALS": 75, "FINAL": 100, "WINNER": 150}
+SURVIVAL_VALUE = {"LAST_32": 15, "LAST_16": 27, "QUARTER_FINALS": 42,
+                  "SEMI_FINALS": 60, "FINAL": 80, "WINNER": 100}
 KO_ORDER = ["LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "FINAL"]
 
 
@@ -52,7 +52,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
     ko_started = any(m["status"] in ("FINISHED", "IN_PLAY", "PAUSED") for m in ko_matches)
 
     pts = defaultdict(int); record = defaultdict(lambda: [0, 0, 0])
-    gf = defaultdict(int); ga = defaultdict(int)
+    gf = defaultdict(int); ga = defaultdict(int); cs = defaultdict(int)
     reached = defaultdict(set); lost_ko_at = {}
 
     for m in matches:                                  # which KO stages a team appears in
@@ -71,7 +71,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
             pts[team] += scored * SCORING["per_goal"]
             gf[team] += scored; ga[team] += conceded
             if conceded == 0:
-                pts[team] += SCORING["clean_sheet"]
+                pts[team] += SCORING["clean_sheet"]; cs[team] += 1
             if scored > conceded:
                 pts[team] += SCORING["win"]; record[team][0] += 1
             elif scored == conceded:
@@ -221,7 +221,8 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
     played = [n for n in played if n in teams]
     pgf = {p["name"]: sum(t["gf"] for t in p["teams"]) for p in players_out}
     pga = {p["name"]: sum(t["ga"] for t in p["teams"]) for p in players_out}
-    over_t = under_t = best_def = over_p = under_p = top_sc = most_con = gl = None
+    pcs = {p["name"]: sum(cs[t["name"]] for t in p["teams"]) for p in players_out}
+    over_t = under_t = best_def = over_p = under_p = top_sc = most_con = gl = most_cs = None
     if played:
         bp = sorted(played, key=lambda n: -pts[n]); bs = sorted(played, key=lambda n: -teams[n]["composite"])
         prk = {n: i for i, n in enumerate(bp)}; srk = {n: i for i, n in enumerate(bs)}
@@ -234,6 +235,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
         over_p, under_p = max(presid, key=presid.get), min(presid, key=presid.get)
         top_sc = max(pgf, key=pgf.get) if max(pgf.values(), default=0) > 0 else None
         most_con = max(pga, key=pga.get) if max(pga.values(), default=0) > 0 else None
+        most_cs = max(pcs, key=pcs.get) if max(pcs.values(), default=0) > 0 else None
         leaders = defaultdict(int)
         for st_ in results.get("standings", []):
             for r in st_["table"]:
@@ -260,6 +262,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
              "most_favourites": (mf["favourites"] if mf else 0),
              "top_scorer_player": top_sc, "top_scorer_player_goals": (pgf.get(top_sc, 0) if top_sc else 0),
              "most_conceded_player": most_con, "most_conceded_player_goals": (pga.get(most_con, 0) if most_con else 0),
+             "clean_sheets_player": most_cs, "clean_sheets_value": (pcs.get(most_cs, 0) if most_cs else 0),
              "over_player": over_p, "under_player": under_p,
              "over_team": over_t, "under_team": under_t,
              "best_defence_team": best_def, "best_defence_conceded": (ga[best_def] if best_def else 0),
