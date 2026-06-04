@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>World Cup 2026 Sweepstake — Live Tracker</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0b1f14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="WC26">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
@@ -250,7 +256,12 @@
       <button id="setSave">Save settings</button>
       <div class="hint" id="setMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
-        <p style="margin:0"><b>Alerts.</b> Notifications are built in now — no bots, no setup. Anyone tap <b>🔔 Get alerts</b> in the menu, allow notifications once, and pick their name. They'll get pinged about their teams while the tracker is open.</p>
+        <p style="margin:0 0 8px"><b>Alerts.</b> Two ways to get notified — players switch them on via <b>🔔 Get alerts</b> in the menu.</p>
+        <p style="margin:0 0 8px;color:var(--muted);font-size:12.5px">• <b>Phone &amp; desktop push</b> — arrives even when the app is closed. On iPhone each person taps Share → <b>Add to Home Screen</b> first. Needs <code>pip install pywebpush</code> on the server, then restart. Status: <b id="setPushState">—</b></p>
+        <p style="margin:0 0 8px;color:var(--muted);font-size:12.5px">• <b>Discord (group)</b> — paste a channel webhook and every kickoff / goal / knockout / lead change posts there. Most reliable on phones.</p>
+        <input id="setDiscord" type="text" placeholder="https://discord.com/api/webhooks/…">
+        <div class="row2" style="margin-top:6px"><button id="setSaveDiscord">Save webhook</button><button id="setTestDiscord" class="mini">Send Discord test</button></div>
+        <div class="hint" id="setDiscordMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
       </div>
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
         <p style="margin:0 0 8px"><b>Backup &amp; restore.</b> Download your draw + results so nothing is ever lost — and restore it on this or a fresh server.</p>
@@ -829,6 +840,8 @@ async function refreshStatus(){
     `<span class="badge ${live?'live':''}">Live scores: <b>${live?'on':'off'}</b></span>`;
   if(STATUS.poll_minutes) document.getElementById('setPoll').placeholder='refresh mins (now '+STATUS.poll_minutes+')';
   if(STATUS.competition) document.getElementById('setComp').placeholder='competition (now '+STATUS.competition+')';
+  const ps=document.getElementById('setPushState'); if(ps) ps.textContent=STATUS.push_enabled?'on ✅':'off (pywebpush not installed)';
+  const dw=document.getElementById('setDiscord'); if(dw && STATUS.discord) dw.placeholder='webhook saved ✅ (paste to replace, or clear to remove)';
 }
 document.getElementById('helpBtn').onclick=()=>{const p=document.getElementById('helpPanel');p.style.display=p.style.display==='none'?'block':'none';};
 document.getElementById('refreshBtn').onclick=async()=>{
@@ -866,35 +879,82 @@ document.getElementById('setSave').onclick=async()=>{
     else msg.textContent=j.error||'Could not save.';
   }catch(e){ msg.textContent='Could not reach the server.'; }
 };
-// ---- built-in browser notifications (no server, no Telegram) ----
+document.getElementById('setSaveDiscord').onclick=async()=>{
+  const m=document.getElementById('setDiscordMsg'); const v=document.getElementById('setDiscord').value.trim();
+  if(v && !v.startsWith('https://')){ m.textContent='That doesn\'t look like a webhook URL (must start with https://).'; return; }
+  m.textContent='Saving…';
+  try{ const j=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({discord_webhook:v,admin_key:ADMINKEY})}).then(r=>r.json());
+    if(j.ok){ m.textContent=v?'Saved — try “Send Discord test”.':'Webhook cleared.'; refreshStatus(); }
+    else if(j.need_key){ m.textContent='Session expired — reopen Settings and unlock again.'; ADMINKEY=''; }
+    else m.textContent=j.error||'Could not save.';
+  }catch(e){ m.textContent='Could not reach the server.'; }
+};
+document.getElementById('setTestDiscord').onclick=async()=>{
+  const m=document.getElementById('setDiscordMsg'); m.textContent='Sending…';
+  try{ const j=await fetch('/api/discord_test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:ADMINKEY})}).then(r=>r.json());
+    if(j.ok) m.textContent='Sent — check your Discord channel.';
+    else if(j.need_key){ m.textContent='Session expired — reopen Settings and unlock again.'; ADMINKEY=''; }
+    else m.textContent=j.error||'Could not send.';
+  }catch(e){ m.textContent='Could not reach the server.'; }
+};
 function closeAlerts(){ document.getElementById('alertsModal').style.display='none'; }
 document.getElementById('alertsClose').onclick=closeAlerts;
 document.getElementById('alertsModal').onclick=e=>{ if(e.target.id==='alertsModal') closeAlerts(); };
 function notifyMe(){ return localStorage.getItem('wc26_me')||''; }
 function renderAlerts(){
   const body=document.getElementById('alertsBody');
+  const players=(STATUS.players||[]).map(p=>typeof p==='string'?p:(p&&p.name)).filter(Boolean);
+  if(!players.length){ body.innerHTML='<div class="empty">Set up the players first (Setup), then come back.</div>'; return; }
+  const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  const standalone=(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||window.navigator.standalone===true;
   const supported=('Notification' in window);
   const perm=supported?Notification.permission:'unsupported';
-  const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
-  const players=(STATUS.players||[]).map(p=>typeof p==='string'?p:(p&&p.name)).filter(Boolean);
-  if(!supported){
-    if(isIOS) body.innerHTML='<div class="empty">On iPhone/iPad, Safari blocks web alerts in a normal tab — Apple only allows them for sites <b>added to the Home Screen</b>, delivered via push. Proper push alerts can be switched on (they\'ll work on iPhone once the site is added to your Home Screen). For now, alerts work great on a laptop — Chrome, Edge, or desktop Safari.</div>';
-    else body.innerHTML='<div class="empty">This browser can\'t show notifications. Alerts work on Chrome, Edge, or desktop Safari.</div>';
-    return;
-  }
-  if(!players.length){ body.innerHTML='<div class="empty">Set up the players first (Setup), then come back.</div>'; return; }
+  const pushCap=('serviceWorker' in navigator)&&('PushManager' in window)&&!!STATUS.push_enabled&&!!STATUS.vapid_public;
+  const pushOn=localStorage.getItem('wc26_push_on')==='1';
   const me=notifyMe();
-  let h='<div style="color:var(--ink);opacity:.85;font-size:13px;margin:0 0 12px">Pick your name and allow notifications. You\'ll get pinged about your teams whenever this tracker is open in a tab.</div>';
+  let h='<div style="color:var(--ink);opacity:.85;font-size:13px;margin:0 0 12px">Pick your name, then turn on alerts. You\'ll get pinged when your teams kick off, score, or go out — and when the lead changes.</div>';
   h+='<label style="font-size:12px;color:var(--muted)">I am</label><select id="alMe" style="width:100%;margin:4px 0 12px;padding:10px;border-radius:10px;background:#08180f;color:var(--ink);border:1px solid var(--line);font-family:Sora">'
     +'<option value="">— choose your name —</option>'+players.map(p=>`<option value="${p}"${p===me?' selected':''}>${p}</option>`).join('')+'</select>';
-  if(perm==='granted'){ h+='<div style="color:var(--t2);font-size:13px">✅ Notifications are on.'+(me?' You\'re set as <b>'+me+'</b>.':' Now pick your name above.')+'</div><div class="row2" style="margin-top:10px"><button class="mini" id="alTest">Send me a test</button><button class="mini" id="alDemo">Demo a live game</button></div>';
-    if(me) h+='<div style="margin-top:8px"><button class="mini" id="alOff">🔕 Turn off my alerts</button></div>'; }
-  else if(perm==='denied') h+='<div style="color:var(--t4);font-size:13px">Notifications are blocked for this site. Turn them back on in your browser\'s site settings, then reopen this.</div>';
-  else h+='<button id="alEnable">Allow notifications</button>';
+  if(pushCap){
+    if(isIOS && !standalone){
+      h+='<div style="background:#10240f;border:1px solid var(--line);border-radius:12px;padding:12px;font-size:13px;color:var(--ink)">📱 <b>On iPhone/iPad:</b> tap the <b>Share</b> icon, choose <b>Add to Home Screen</b>, then open the app from your Home Screen and come back here to switch on alerts.<div style="color:var(--muted);font-size:11.5px;margin-top:6px">Apple only allows alerts for web apps added to the Home Screen.</div></div>';
+    } else if(pushOn){
+      h+='<div style="color:var(--t2);font-size:13px">✅ Alerts are on for this device — they arrive even when the app is closed'+(me?', <b>'+me+'</b>':'')+'.</div>';
+      h+='<div class="row2" style="margin-top:10px"><button class="mini" id="alPushTest">Send a test</button><button class="mini" id="alPushOff">🔕 Turn off on this device</button></div>';
+    } else {
+      h+='<button id="alPushOn">Turn on alerts on this device</button>';
+      h+='<div style="color:var(--muted);font-size:11.5px;margin-top:6px">Works even when the app is closed.</div>';
+    }
+  } else if(supported){
+    if(perm==='granted'){
+      h+='<div style="color:var(--t2);font-size:13px">✅ Notifications are on <span style="color:var(--muted)">(while this tab is open)</span>.'+(me?' You\'re set as <b>'+me+'</b>.':' Now pick your name above.')+'</div>';
+      h+='<div class="row2" style="margin-top:10px"><button class="mini" id="alTest">Send me a test</button><button class="mini" id="alDemo">Demo a live game</button></div>';
+      if(me) h+='<div style="margin-top:8px"><button class="mini" id="alOff">🔕 Turn off my alerts</button></div>';
+    } else if(perm==='denied'){
+      h+='<div style="color:var(--t4);font-size:13px">Notifications are blocked for this site. Turn them back on in your browser\'s site settings, then reopen this.</div>';
+    } else {
+      h+='<button id="alEnable">Allow notifications</button>';
+    }
+  } else {
+    if(isIOS) h+='<div style="background:#10240f;border:1px solid var(--line);border-radius:12px;padding:12px;font-size:13px;color:var(--ink)">📱 On iPhone/iPad, add this to your <b>Home Screen</b> (Share → Add to Home Screen) and open it from there to get alerts.'+(!STATUS.push_enabled?'<div style="color:var(--muted);font-size:11.5px;margin-top:6px">Push isn\'t switched on by the host yet.</div>':'')+'</div>';
+    else h+='<div class="empty">This browser can\'t show notifications. Alerts work on Chrome, Edge, or desktop Safari.</div>';
+  }
+  if(STATUS.discord) h+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);color:var(--muted);font-size:12px">💬 Group alerts also post to your Discord channel.</div>';
   h+='<div class="hint" id="alMsg" style="color:var(--muted);font-size:12px;margin-top:8px"></div>';
   body.innerHTML=h;
   const sel=document.getElementById('alMe');
-  if(sel) sel.onchange=()=>{ localStorage.setItem('wc26_me',sel.value); NOTIFYSNAP=null; renderAlerts(); };
+  if(sel) sel.onchange=async()=>{ localStorage.setItem('wc26_me',sel.value); NOTIFYSNAP=null;
+    if(localStorage.getItem('wc26_push_on')==='1' && sel.value){ await pushSubscribe(sel.value); } renderAlerts(); };
+  const pOn=document.getElementById('alPushOn');
+  if(pOn) pOn.onclick=async()=>{ const who=notifyMe(); const m=document.getElementById('alMsg'); if(!who){m.textContent='Pick your name first.';return;}
+    m.textContent='Turning on…'; const ok=await pushSubscribe(who); if(ok&&m) m.textContent='Done — you\'re subscribed on this device.'; renderAlerts(); };
+  const pOff=document.getElementById('alPushOff');
+  if(pOff) pOff.onclick=async()=>{ await pushUnsubscribe(); renderAlerts(); };
+  const pTest=document.getElementById('alPushTest');
+  if(pTest) pTest.onclick=async()=>{ const who=notifyMe(); const m=document.getElementById('alMsg'); if(!who){m.textContent='Pick your name first.';return;}
+    m.textContent='Sending…';
+    try{ const j=await fetch('/api/push_test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:who})}).then(r=>r.json());
+      m.textContent=j.ok?'Sent — check your notifications.':('Couldn\'t send: '+(j.error||'try again')); }catch(e){ m.textContent='Couldn\'t send.'; } };
   const en=document.getElementById('alEnable');
   if(en) en.onclick=async()=>{ try{ await Notification.requestPermission(); }catch(e){} renderAlerts(); };
   const tb=document.getElementById('alTest');
@@ -914,8 +974,38 @@ function renderAlerts(){
     seq.forEach(s=>setTimeout(()=>ping(s[1],s[2]),s[0])); };
   const off=document.getElementById('alOff');
   if(off) off.onclick=()=>{ localStorage.removeItem('wc26_me'); NOTIFYSNAP=null;
-    document.getElementById('alMsg').textContent='Alerts off — you won\'t get any more pings. Pick your name again any time to turn them back on.';
+    document.getElementById('alMsg').textContent='Alerts off — pick your name again any time to turn them back on.';
     renderAlerts(); };
+}
+function urlB64ToUint8(b64){
+  const pad='='.repeat((4-b64.length%4)%4);
+  const s=(b64+pad).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=atob(s); const arr=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) arr[i]=raw.charCodeAt(i);
+  return arr;
+}
+async function pushSubscribe(player){
+  const m=document.getElementById('alMsg');
+  try{
+    const perm=await Notification.requestPermission();
+    if(perm!=='granted'){ if(m)m.textContent='Permission not granted.'; return false; }
+    const reg=await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:urlB64ToUint8(STATUS.vapid_public)});
+    const j=await fetch('/api/push_subscribe',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({player:player, subscription:(sub.toJSON?sub.toJSON():sub)})}).then(r=>r.json());
+    if(j&&j.ok){ localStorage.setItem('wc26_push_on','1'); return true; }
+    if(m) m.textContent=(j&&j.error)||'Could not subscribe.'; return false;
+  }catch(e){ if(m) m.textContent='Could not turn on alerts: '+((e&&e.message)||e); return false; }
+}
+async function pushUnsubscribe(){
+  try{
+    const reg=await navigator.serviceWorker.ready;
+    const sub=await reg.pushManager.getSubscription();
+    if(sub){ const ep=sub.endpoint; await sub.unsubscribe().catch(()=>{});
+      await fetch('/api/push_unsubscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:ep})}).catch(()=>{}); }
+  }catch(e){}
+  localStorage.removeItem('wc26_push_on');
 }
 document.getElementById('alertsBtn').onclick=()=>{ document.getElementById('alertsModal').style.display='block'; renderAlerts(); };
 // fire notifications by diffing each refresh for the chosen player's teams
@@ -932,6 +1022,7 @@ function ping(title,body){
 }
 function checkNotify(d){
   const me=notifyMe();
+  if(localStorage.getItem('wc26_push_on')==='1'){ NOTIFYSNAP=null; return; }  // native push covers this device
   if(!me || !('Notification'in window) || Notification.permission!=='granted'){ NOTIFYSNAP=null; return; }
   const myTeams=new Set(((d.players||[]).find(p=>p.name===me)||{teams:[]}).teams.map(t=>t.name));
   const fx={}; (d.fixtures||[]).forEach(m=>{ fx[m.home+'|'+m.away]={st:m.status,hs:m.homeScore,as:m.awayScore,h:m.home,a:m.away}; });

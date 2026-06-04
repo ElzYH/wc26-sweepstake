@@ -100,6 +100,21 @@ def run():
 
         st, body = req("GET", "/api/telegram_links")                     # dead but must not 500
         check("telegram_links doesn't 500 on string players", st == 200, str(st))
+
+        # --- two-channel notification endpoints ---
+        st, body = req("GET", "/api/status")
+        j = json.loads(body)
+        check("status exposes push_enabled flag", "push_enabled" in j, body[:160])
+        check("status exposes discord flag", "discord" in j, body[:160])
+        check("push disabled w/o pywebpush (vapid_public null)", j.get("vapid_public") in (None, ""), str(j.get("vapid_public")))
+        st, body = req("POST", "/api/discord_test", {"admin_key": "wrong"})
+        check("discord_test needs admin key (403)", st == 403, str(st))
+        st, body = req("POST", "/api/push_subscribe", {"player": "Nobody", "subscription": {"endpoint": "x"}})
+        check("push_subscribe rejects unknown player (400)", st == 400, f"{st} {body[:80]}")
+        st, body = req("POST", "/api/push_test", {"player": "Erol"})
+        check("push_test 400 when push not enabled", st == 400, f"{st} {body[:80]}")
+        st, body = req("GET", "/manifest.webmanifest")
+        check("manifest served (200)", st == 200 and "{" in body, str(st))
     finally:
         proc.terminate()
         try:

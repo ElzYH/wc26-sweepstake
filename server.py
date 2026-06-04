@@ -21,6 +21,15 @@ import urllib.parse
 from collections import defaultdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+try:                                              # optional — only needed for native Web Push (Path A)
+    import base64
+    from pywebpush import webpush, WebPushException
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives import serialization
+    HAVE_WEBPUSH = True
+except Exception:
+    HAVE_WEBPUSH = False
+
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(os.environ.get("WC26_DATA", APP_DIR))
 
@@ -48,7 +57,8 @@ CONFIG = os.environ.get("WC26_CONFIG", "config.json")
 PORT = int(os.environ.get("PORT", "8000"))
 HOST = os.environ.get("HOST", "0.0.0.0")   # set HOST=127.0.0.1 when behind a reverse proxy
 STATIC = {"tracker.html", "wheel.html", "setup.html", "me.html", "watch.html",
-          "teams.json", "tracker_data.json", "draw_result.json", "sw.js"}
+          "teams.json", "tracker_data.json", "draw_result.json", "sw.js",
+          "manifest.webmanifest", "icon.svg"}
 _lock = threading.Lock()
 
 
@@ -236,6 +246,117 @@ def bot_username():
     return _bot_user["name"]
 
 
+# ---------------- Discord webhook (Path B) — pure stdlib, group channel ----------------
+def discord_send(text):
+    url = (load_config().get("discord_webhook") or "").strip()
+    if not url.startswith("https://"):
+        return
+    try:
+        data = json.dumps({"content": text[:1900]}).encode()
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=8)
+    except Exception as e:
+        log("discord send failed:", e)
+
+
+# ---------------- Web Push (Path A) — needs pywebpush; guarded so missing lib is harmless ----------------
+PUSH_FILE = "push_subs.json"          # {player_name: [subscription_obj, ...]}
+
+
+def ensure_vapid():
+    """Generate a VAPID keypair once (only if the push lib is installed). Returns the public key (b64url)."""
+    if not HAVE_WEBPUSH:
+        return None
+    cfg = load_config()
+    if cfg.get("vapid_private") and cfg.get("vapid_public"):
+        return cfg["vapid_public"]
+    try:
+        pk = ec.generate_private_key(ec.SECP256R1())
+        priv = pk.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                                serialization.NoEncryption()).decode()
+        pub = pk.public_key().public_bytes(serialization.Encoding.X962,
+                                            serialization.PublicFormat.UncompressedPoint)
+        pub_b64 = base64.urlsafe_b64encode(pub).rstrip(b"=").decode()
+        cfg["vapid_private"], cfg["vapid_public"] = priv, pub_b64
+        save_config(cfg)
+        log("generated VAPID keys for web push")
+        return pub_b64
+    except Exception as e:
+        log("vapid gen failed:", e)
+        return None
+
+
+def push_enabled():
+    return bool(HAVE_WEBPUSH and load_config().get("vapid_public"))
+
+
+def _load_push():
+    try:
+        with open(PUSH_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_push(d):
+    with open(PUSH_FILE, "w") as f:
+        json.dump(d, f)
+
+
+def _webpush_one(sub, title, body):
+    """Send one push. Returns True to keep the subscription, False if it's dead (expired)."""
+    cfg = load_config()
+    try:
+        webpush(subscription_info=sub, data=json.dumps({"title": title, "body": body}),
+                vapid_private_key=cfg.get("vapid_private"),
+                vapid_claims={"sub": cfg.get("vapid_sub", "mailto:admin@bbmsweepstake.co.uk")})
+        return True
+    except WebPushException as e:
+        code = getattr(getattr(e, "response", None), "status_code", None)
+        if code in (404, 410):
+            return False                  # subscription gone — prune it
+        log("webpush failed:", code, e)
+        return True
+    except Exception as e:
+        log("webpush error:", e)
+        return True
+
+
+def push_player(player, title, body):
+    if not push_enabled():
+        return
+    subs = _load_push()
+    lst = subs.get(player, [])
+    keep, changed = [], False
+    for s in lst:
+        if _webpush_one(s, title, body):
+            keep.append(s)
+        else:
+            changed = True
+    if changed:
+        subs[player] = keep
+        _save_push(subs)
+
+
+def push_broadcast(title, body):
+    if not push_enabled():
+        return
+    for player in list(_load_push().keys()):
+        push_player(player, title, body)
+
+
+# ---------------- unified dispatch: both channels at once ----------------
+def alert_player(player, title, body, group_line):
+    if player and player not in ("—", "-"):
+        push_player(player, title, body)
+    discord_send(group_line)
+
+
+def alert_all(title, body, group_line):
+    push_broadcast(title, body)
+    discord_send(group_line)
+
+
 def _load_tracker():
     try:
         with open("tracker_data.json") as f:
@@ -266,21 +387,22 @@ LIVE_STATUSES = ("IN_PLAY", "PAUSED", "LIVE", "SUSPENDED")
 
 
 def notify_changes(old):
-    """Compare previous tracker snapshot to the new one and ping each player about their teams."""
+    """Compare previous tracker snapshot to the new one and alert players (Web Push + Discord)."""
     new = _load_tracker()
     if not new or old is None:
         return                              # first compute / no data: nothing to compare
     if (new.get("stats") or {}).get("matches_played", 0) == 0:
         return
-    # overall (Both) leader change -> broadcast
+    # overall (Both) leader change -> everyone
     try:
         ol = (old["leaderboards"]["hybrid"][0] or {}).get("name")
         nl = (new["leaderboards"]["hybrid"][0] or {}).get("name")
         if nl and ol and nl != ol:
-            tg_broadcast("📈 New leader: <b>%s</b> now tops the table." % nl)
+            alert_all("New leader 📈", "%s now tops the table." % nl,
+                      "📈 New leader: **%s** now tops the table." % nl)
     except Exception:
         pass
-    # a player's team kicks off or scores -> tell that player
+    # a player's team kicks off or scores -> that player (push) + the group (Discord)
     try:
         of, nf = _fixture_status(old), _fixture_status(new)
         for key, nv in nf.items():
@@ -288,27 +410,33 @@ def notify_changes(old):
             st, ho, ao, nhs, nas = nv
             ov = of.get(key)
             was = ov[0] if ov else None
-            home_owned = ho and ho not in ("—", "-")
-            away_owned = ao and ao not in ("—", "-")
+            ho_ok = ho and ho not in ("—", "-")
+            ao_ok = ao and ao not in ("—", "-")
             if st in LIVE_STATUSES and was not in LIVE_STATUSES:        # kickoff
-                if home_owned: tg_player(ho, "🔵 Your team <b>%s</b> is playing now — vs %s." % (h, a))
-                if away_owned: tg_player(ao, "🔵 Your team <b>%s</b> is playing now — vs %s." % (a, h))
+                if ho_ok:
+                    alert_player(ho, "%s vs %s" % (h, a), "Kicked off — your team %s is playing!" % h,
+                                 "🔵 **%s** (%s) kicked off — %s vs %s" % (h, ho, h, a))
+                if ao_ok:
+                    alert_player(ao, "%s vs %s" % (h, a), "Kicked off — your team %s is playing!" % a,
+                                 "🔵 **%s** (%s) kicked off — %s vs %s" % (a, ao, h, a))
             elif st in LIVE_STATUSES and ov:                            # goal during play
                 ohs, oas = ov[3], ov[4]
                 if None not in (nhs, nas, ohs, oas):
                     score = "%s %d–%d %s" % (h, nhs, nas, a)
-                    if nhs > ohs and home_owned: tg_player(ho, "⚽ <b>%s</b> scored! %s" % (h, score))
-                    if nas > oas and away_owned: tg_player(ao, "⚽ <b>%s</b> scored! %s" % (a, score))
+                    if nhs > ohs and ho_ok:
+                        alert_player(ho, "%s scored! ⚽" % h, score, "⚽ **%s** (%s) scored — %s" % (h, ho, score))
+                    if nas > oas and ao_ok:
+                        alert_player(ao, "%s scored! ⚽" % a, score, "⚽ **%s** (%s) scored — %s" % (a, ao, score))
     except Exception:
         pass
-    # a player's team is knocked out -> tell that player
+    # a player's team is knocked out
     try:
         oa, na = _alive_owners(old), _alive_owners(new)
         for t in oa:
             if oa[t][0] and t in na and not na[t][0]:
                 owner = na[t][1]
-                if owner and owner not in ("—", "-"):
-                    tg_player(owner, "❌ Your team <b>%s</b> is out. Check the leaderboard to see where you stand." % t)
+                alert_player(owner, "%s is out ❌" % t, "Check the leaderboard to see where you stand.",
+                             "❌ **%s** (%s) is out." % (t, owner))
     except Exception:
         pass
 
@@ -389,7 +517,16 @@ class Handler(BaseHTTPRequestHandler):
         full = name if name in generated else os.path.join(APP_DIR, name)
         if name not in STATIC or not os.path.exists(full):
             return self._send(404, "not found", "text/plain")
-        ctype = "text/html" if name.endswith(".html") else ("text/javascript" if name.endswith(".js") else "application/json")
+        if name.endswith(".html"):
+            ctype = "text/html"
+        elif name.endswith(".js"):
+            ctype = "text/javascript"
+        elif name.endswith(".webmanifest"):
+            ctype = "application/manifest+json"
+        elif name.endswith(".svg"):
+            ctype = "image/svg+xml"
+        else:
+            ctype = "application/json"
         with open(full, "rb") as f:
             self._send(200, f.read(), ctype)
 
@@ -432,7 +569,10 @@ class Handler(BaseHTTPRequestHandler):
                 "leftover": cfg.get("leftover", "pool"),
                 "max_per_player": cfg.get("max_per_player"),
                 "poll_minutes": cfg.get("poll_minutes", 10),
-                "has_telegram": bool(cfg.get("telegram_token"))}))
+                "has_telegram": bool(cfg.get("telegram_token")),
+                "push_enabled": push_enabled(),
+                "vapid_public": (cfg.get("vapid_public") if push_enabled() else None),
+                "discord": bool(cfg.get("discord_webhook"))}))
         return self._file(path.lstrip("/"))
 
     def do_POST(self):
@@ -538,6 +678,11 @@ class Handler(BaseHTTPRequestHandler):
             if "telegram_token" in body:
                 cfg["telegram_token"] = str(body["telegram_token"]).strip()
                 _bot_user["name"] = None        # re-fetch username for the new bot
+            if "discord_webhook" in body:
+                w = str(body["discord_webhook"]).strip()
+                cfg["discord_webhook"] = w if (w == "" or w.startswith("https://")) else cfg.get("discord_webhook", "")
+            if body.get("vapid_sub"):
+                cfg["vapid_sub"] = str(body["vapid_sub"]).strip()[:120]
             with _lock:
                 save_config(cfg)
                 ok, err = update_now(cfg)
@@ -588,6 +733,49 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200 if ok else 500, json.dumps({"ok": ok, "error": err}))
         if path == "/api/check_key":
             return self._send(200, json.dumps({"ok": key_ok(body)}))
+        if path == "/api/discord_test":
+            if not key_ok(body):
+                return self._send(403, json.dumps({"ok": False, "need_key": True}))
+            if not (load_config().get("discord_webhook") or "").startswith("https://"):
+                return self._send(400, json.dumps({"ok": False, "error": "Add a Discord webhook URL first."}))
+            discord_send("✅ WC26 test — Discord alerts are working.")
+            return self._send(200, json.dumps({"ok": True}))
+        if path == "/api/push_subscribe":          # OPEN: a player subscribes this device to push
+            cfg = load_config()
+            players = [(p if isinstance(p, str) else p.get("name", "")) for p in cfg.get("players", [])]
+            player = str(body.get("player", "")).strip()
+            sub = body.get("subscription")
+            if player not in players or not isinstance(sub, dict) or not sub.get("endpoint"):
+                return self._send(400, json.dumps({"ok": False, "error": "bad subscription"}))
+            with _lock:
+                subs = _load_push()
+                lst = subs.setdefault(player, [])
+                if not any(s.get("endpoint") == sub["endpoint"] for s in lst):
+                    lst.append(sub)
+                # one device endpoint belongs to one player: drop it from any other player
+                for other in list(subs.keys()):
+                    if other != player:
+                        subs[other] = [s for s in subs[other] if s.get("endpoint") != sub["endpoint"]]
+                _save_push(subs)
+            log("push subscribe:", player)
+            return self._send(200, json.dumps({"ok": True}))
+        if path == "/api/push_test":               # OPEN: server sends a real push to this player's devices
+            player = str(body.get("player", "")).strip()
+            if not push_enabled():
+                return self._send(400, json.dumps({"ok": False, "error": "push not enabled"}))
+            if not _load_push().get(player):
+                return self._send(400, json.dumps({"ok": False, "error": "no devices subscribed yet"}))
+            push_player(player, "WC26 Sweepstake", "✅ Push alerts are working, %s!" % player)
+            return self._send(200, json.dumps({"ok": True}))
+        if path == "/api/push_unsubscribe":        # OPEN: remove this device
+            ep = str(body.get("endpoint", "")).strip()
+            if ep:
+                with _lock:
+                    subs = _load_push()
+                    for k in list(subs.keys()):
+                        subs[k] = [s for s in subs[k] if s.get("endpoint") != ep]
+                    _save_push(subs)
+            return self._send(200, json.dumps({"ok": True}))
         if path == "/api/telegram_test":
             if not key_ok(body):
                 return self._send(403, json.dumps({"ok": False, "need_key": True}))
@@ -679,7 +867,10 @@ if __name__ == "__main__":
     if hasattr(os, "geteuid") and os.geteuid() == 0:
         print("[warn] running as root is risky — create a normal user to run this server.")
     _key = ensure_admin_key()
+    if HAVE_WEBPUSH:
+        ensure_vapid()                    # one-time keypair so native Web Push (Path A) can work
     threading.Thread(target=poller, daemon=True).start()
     print(f"Sweepstake server on http://{HOST}:{PORT}  (Ctrl-C to stop)")
     print(f"Admin key (needed only to overwrite a finished draw): {_key}")
+    print("Web Push: " + ("ENABLED" if push_enabled() else "off (pip install pywebpush to turn on)"))
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
