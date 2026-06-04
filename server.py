@@ -16,6 +16,8 @@ import secrets
 import shutil
 import threading
 import time
+import urllib.request
+import urllib.parse
 from collections import defaultdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -87,7 +89,7 @@ def backup_data():
 
 def reset_draw():
     backup_draw()                       # keep a copy before wiping, so a re-draw is recoverable
-    for f in ("draw_result.json", "tracker_data.json", "results.json", LIVE_FILE):
+    for f in ("draw_result.json", "tracker_data.json", "results.json", LIVE_FILE, HISTORY_FILE):
         if os.path.exists(f):
             os.remove(f)
 
@@ -167,10 +169,99 @@ def key_ok(body):
                                str(load_config().get("admin_key", "")))
 
 
+HISTORY_FILE = "history.json"
+
+
+def tg_notify(text):
+    """Fire-and-forget Telegram message to every configured chat. Never raises."""
+    cfg = load_config()
+    tok = cfg.get("telegram_token"); chats = str(cfg.get("telegram_chats", "")).strip()
+    if not tok or not chats:
+        return
+    for cid in [c.strip() for c in chats.replace(";", ",").split(",") if c.strip()]:
+        try:
+            data = urllib.parse.urlencode({"chat_id": cid, "text": text, "parse_mode": "HTML",
+                                           "disable_web_page_preview": "true"}).encode()
+            urllib.request.urlopen("https://api.telegram.org/bot%s/sendMessage" % tok, data=data, timeout=8)
+        except Exception as e:
+            log("telegram send failed:", e)
+
+
+def _load_tracker():
+    try:
+        with open("tracker_data.json") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _alive_owners(td):
+    """{team_name: (alive_bool, owner)} from a tracker_data snapshot."""
+    out = {}
+    for p in (td or {}).get("players", []):
+        for t in p.get("teams", []):
+            out[t.get("name")] = (t.get("status") == "alive", p.get("name"))
+    return out
+
+
+def append_history(td):
+    """Append a points/survival snapshot keyed by matches played; embed history into tracker_data."""
+    snap = {"t": td.get("updated_at"),
+            "m": (td.get("stats") or {}).get("matches_played", 0),
+            "p": {p["name"]: {"pts": p["points"], "hyb": p["hybrid"], "srv": p["survival"]}
+                  for p in td.get("players", [])}}
+    hist = []
+    try:
+        with open(HISTORY_FILE) as f:
+            hist = json.load(f)
+    except Exception:
+        hist = []
+    if hist and hist[-1].get("m") == snap["m"]:
+        hist[-1] = snap                     # one point per distinct match count
+    else:
+        hist.append(snap)
+    hist = hist[-300:]
+    with open(HISTORY_FILE, "w") as f:
+        json.dump(hist, f)
+    td["history"] = hist
+    with open("tracker_data.json", "w") as f:
+        json.dump(td, f, indent=2)
+
+
+def notify_changes(old):
+    """Compare the previous tracker snapshot to the new one and ping Telegram on big moments."""
+    new = _load_tracker()
+    if not new:
+        return
+    append_history(new)
+    if old is None:
+        return                              # first compute: nothing to compare
+    if (new.get("stats") or {}).get("matches_played", 0) == 0:
+        return
+    # new overall (Both) leader
+    try:
+        ol = (old["leaderboards"]["hybrid"][0] or {}).get("name")
+        nl = (new["leaderboards"]["hybrid"][0] or {}).get("name")
+        if nl and ol and nl != ol:
+            tg_notify("📈 New leader: <b>%s</b> now tops the table." % nl)
+    except Exception:
+        pass
+    # newly eliminated teams
+    try:
+        oa, na = _alive_owners(old), _alive_owners(new)
+        gone = [(t, oa[t][1]) for t in oa if oa[t][0] and t in na and not na[t][0]]
+        if gone:
+            lines = ", ".join("%s (%s)" % (t, o) for t, o in gone[:8])
+            tg_notify("❌ Knocked out: %s" % lines)
+    except Exception:
+        pass
+
+
 def update_now(cfg):
     """Fetch results (if a token is set) and recompute the tracker."""
     if not os.path.exists("draw_result.json"):
         return True, None
+    old_snapshot = _load_tracker()
     token = cfg.get("token")
     try:
         if token:
@@ -190,6 +281,7 @@ def update_now(cfg):
         scoring_mod.compute(out="tracker_data.json", default_mode=cfg.get("scoring_mode", "hybrid"))
         cfg["last_update"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         save_config(cfg)
+        notify_changes(old_snapshot)        # append history + Telegram pings
         backup_data()
         return True, None
     except Exception as e:
@@ -270,7 +362,8 @@ class Handler(BaseHTTPRequestHandler):
                 "drawn": draw_locked(), "needs_key": draw_locked(),
                 "leftover": cfg.get("leftover", "pool"),
                 "max_per_player": cfg.get("max_per_player"),
-                "poll_minutes": cfg.get("poll_minutes", 10)}))
+                "poll_minutes": cfg.get("poll_minutes", 10),
+                "has_telegram": bool(cfg.get("telegram_token") and cfg.get("telegram_chats"))}))
         return self._file(path.lstrip("/"))
 
     def do_POST(self):
@@ -352,6 +445,8 @@ class Handler(BaseHTTPRequestHandler):
                 json.dump(build_draw_result(body), open("draw_result.json", "w"), indent=2)
                 ok, err = update_now(cfg)
             log("draw locked" if ok else "draw save FAILED:", err or "")
+            if ok:
+                tg_notify("🏆 The WC26 draw is locked — open the tracker to see your teams!")
             return self._send(200 if ok else 500, json.dumps({"ok": ok, "error": err}))
         if path == "/api/settings":
             cfg = load_config()
@@ -366,6 +461,10 @@ class Handler(BaseHTTPRequestHandler):
                 cfg["poll_minutes"] = int(body["poll_minutes"])
             if body.get("competition"):
                 cfg["competition"] = str(body["competition"]).strip()[:8]
+            if "telegram_token" in body:
+                cfg["telegram_token"] = str(body["telegram_token"]).strip()
+            if "telegram_chats" in body:
+                cfg["telegram_chats"] = str(body["telegram_chats"]).strip()[:400]
             with _lock:
                 save_config(cfg)
                 ok, err = update_now(cfg)
@@ -413,6 +512,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200 if ok else 500, json.dumps({"ok": ok, "error": err}))
         if path == "/api/check_key":
             return self._send(200, json.dumps({"ok": key_ok(body)}))
+        if path == "/api/telegram_test":
+            if not key_ok(body):
+                return self._send(403, json.dumps({"ok": False, "need_key": True}))
+            tg_notify("✅ WC26 test message — notifications are working.")
+            return self._send(200, json.dumps({"ok": True}))
         if path == "/api/rotate_key":
             if not key_ok(body):
                 return self._send(403, json.dumps({"ok": False, "need_key": True}))
