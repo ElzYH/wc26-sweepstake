@@ -15,11 +15,11 @@ from datetime import datetime, timezone
 
 SCORING = {
     "per_goal": 1, "win": 3, "draw": 1, "clean_sheet": 1,
-    "stage_bonus": {"LAST_32": 5, "LAST_16": 5, "QUARTER_FINALS": 10,
-                    "SEMI_FINALS": 15, "FINAL": 20, "WINNER": 30},
+    "stage_bonus": {"LAST_32": 4, "LAST_16": 6, "QUARTER_FINALS": 9,
+                    "SEMI_FINALS": 12, "FINAL": 16, "WINNER": 20},
 }
-SURVIVAL_VALUE = {"LAST_32": 15, "LAST_16": 27, "QUARTER_FINALS": 42,
-                  "SEMI_FINALS": 60, "FINAL": 80, "WINNER": 100}
+SURVIVAL_VALUE = {"LAST_32": 18, "LAST_16": 26, "QUARTER_FINALS": 34,
+                  "SEMI_FINALS": 44, "FINAL": 56, "WINNER": 70}
 KO_ORDER = ["LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "FINAL"]
 
 
@@ -92,9 +92,8 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
         if m["stage"] == "FINAL" and champ in teams:
             reached[champ].add("WINNER")
 
-    for team, stages in reached.items():
-        for st in stages:
-            pts[team] += SCORING["stage_bonus"].get(st, 0)
+    for team, stages in reached.items():       # furthest stage reached only (not stacked per round)
+        pts[team] += max((SCORING["stage_bonus"].get(st, 0) for st in stages), default=0)
 
     def furthest_stage(team):
         ko = [s for s in reached[team] if s in KO_ORDER]

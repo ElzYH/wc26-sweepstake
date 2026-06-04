@@ -152,6 +152,7 @@
   <div class="subbar">
     <div class="badges" id="badges"></div>
     <div class="ctrls">
+      <button class="mini" id="refreshBtn">↻ Refresh now</button>
       <button class="mini" id="helpBtn">What am I looking at?</button>
       <button class="mini" id="setBtn">⚙ Settings</button>
     </div>
@@ -547,6 +548,11 @@ async function refreshStatus(){
   if(STATUS.competition) document.getElementById('setComp').placeholder='competition (now '+STATUS.competition+')';
 }
 document.getElementById('helpBtn').onclick=()=>{const p=document.getElementById('helpPanel');p.style.display=p.style.display==='none'?'block':'none';};
+document.getElementById('refreshBtn').onclick=async()=>{
+  const b=document.getElementById('refreshBtn'); const t=b.textContent; b.textContent='↻ Refreshing…'; b.disabled=true;
+  try{ await fetch('/api/poll',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); }catch(e){}
+  await load(); refreshStatus(); b.textContent=t; b.disabled=false;
+};
 let ADMINKEY='';
 document.getElementById('setBtn').onclick=()=>{
   const p=document.getElementById('setPanel'); const show=p.style.display==='none'; p.style.display=show?'block':'none';

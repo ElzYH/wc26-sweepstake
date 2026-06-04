@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>World Cup 2026 Sweepstake — Live Draw</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#04140d;--panel:#0d2419;--line:#1f4733;--ink:#eafff4;--muted:#7fae97;--gold:#ffc83d;--gold2:#ffe39a;
+    --t1:#ffc83d;--t2:#3dd9c9;--t3:#5b8def;--t4:#8a93a6}
+  *{box-sizing:border-box}
+  body{font-family:'Sora',system-ui,sans-serif;color:var(--ink);min-height:100vh;margin:0;
+    background:radial-gradient(1200px 600px at 70% -10%,#11543a55,transparent 60%),
+      radial-gradient(900px 500px at -10% 110%,#0b3a2755,transparent 60%),var(--bg);padding:24px 20px 60px}
+  .topnav{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+    margin-bottom:16px;padding-bottom:13px;border-bottom:1px solid var(--line)}
+  .brand{font-family:'Anton';font-size:20px;color:var(--gold);text-decoration:none;letter-spacing:.02em}
+  .navlinks a{color:var(--muted);text-decoration:none;font-weight:600;font-size:13px;padding:7px 13px;border-radius:999px}
+  .navlinks a:hover{color:var(--ink)}
+  h1{font-family:'Anton';font-weight:400;letter-spacing:.02em;font-size:clamp(28px,5vw,48px);line-height:.95;
+    text-transform:uppercase;margin:6px 0 4px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  h1 .y{color:var(--gold)}
+  .phasetag{font-family:'Sora';font-weight:700;font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;
+    color:#1a1205;background:linear-gradient(180deg,var(--gold2),var(--gold));padding:5px 12px;border-radius:999px}
+  .phasetag.wait{background:none;border:1px solid var(--line);color:var(--muted)}
+  .status{color:var(--muted);font-size:14px;margin:0 0 16px}
+  .status a{color:var(--gold);font-weight:700;text-decoration:none}
+  .reveal{min-height:0;opacity:0;transform:translateY(6px);transition:opacity .25s,transform .25s;
+    display:flex;align-items:center;justify-content:center;gap:14px;text-align:center;
+    font-family:'Anton';font-weight:400;letter-spacing:.02em;text-transform:uppercase;font-size:clamp(20px,3.4vw,30px);margin-bottom:8px}
+  .reveal.show{opacity:1;transform:none;min-height:46px}
+  .reveal .arrow{color:var(--muted);font-size:.6em}
+  .reveal .who{color:var(--gold)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 15px}
+  .card h3{margin:0 0 10px;font-family:'Anton';font-weight:400;letter-spacing:.02em;font-size:19px;
+    display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+  .card h3 .pts{font-family:'Sora';font-weight:700;font-size:12px;color:var(--gold)}
+  .chips{display:flex;flex-direction:column;gap:7px}
+  .chip{display:flex;align-items:center;gap:8px;background:#0a1f15;border:1px solid var(--line);
+    border-radius:9px;padding:7px 10px;font-size:13.5px;font-weight:600}
+  .chip.new{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset;animation:pop .5s ease}
+  @keyframes pop{0%{transform:scale(.85);opacity:0}100%{transform:scale(1);opacity:1}}
+  .chip .dot{width:9px;height:9px;border-radius:50%;flex:none}
+  .chip .grp{margin-left:auto;color:var(--muted);font-size:10.5px;font-weight:700;letter-spacing:.06em}
+  .empty{color:var(--muted);font-size:13px}
+  @media(max-width:560px){ body{padding:18px 14px 50px} .grid{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+  <div class="topnav">
+    <a class="brand" href="/tracker">⚽ WC26 Sweepstake</a>
+    <div class="navlinks"><a href="/tracker">Tracker →</a></div>
+  </div>
+  <h1>Live <span class="y">Draw</span> <span class="phasetag wait" id="tag">Connecting…</span></h1>
+  <div class="status" id="status">Connecting to the draw…</div>
+  <div class="reveal" id="reveal"></div>
+  <div class="grid" id="grid"></div>
+<script>
+const $=id=>document.getElementById(id);
+const TIER={1:'#ffc83d',2:'#3dd9c9',3:'#5b8def',4:'#8a93a6'};
+let lastN=-1;
+function render(st){
+  const picks=st.picks||[];
+  let order=(st.order&&st.order.length)?st.order.slice():[];
+  if(!order.length){ picks.forEach(p=>{ if(p.player&&!order.includes(p.player)) order.push(p.player); }); }
+  const tag=$('tag'), status=$('status');
+  if(st.done){ tag.textContent='Complete'; tag.classList.remove('wait');
+    status.innerHTML='Draw complete — <a href="/tracker">see the live tracker →</a>'; }
+  else if(st.active||picks.length){ tag.textContent='Live'; tag.classList.remove('wait');
+    status.textContent='Teams are being drawn live…'; }
+  else { tag.textContent='Waiting'; tag.classList.add('wait');
+    status.textContent='Waiting for the host to start the draw…'; }
+  const newest=(picks.length>lastN && lastN>=0)?picks.length-1:-1;
+  $('grid').innerHTML=order.map(p=>{
+    const mine=[]; picks.forEach((x,i)=>{ if(x.player===p) mine.push({...x,i}); });
+    const chips=mine.map(t=>`<div class="chip${t.i===newest?' new':''}"><span class="dot" style="background:${TIER[t.tier]||'#8a93a6'}"></span>${t.team||''}<span class="grp">GRP ${t.group||'?'}</span></div>`).join('');
+    const n=mine.length;
+    return `<div class="card"><h3>${p}<span class="pts">${n} team${n===1?'':'s'}</span></h3><div class="chips">${chips||'<span class="empty">waiting…</span>'}</div></div>`;
+  }).join('');
+  if(newest>=0){ const last=picks[newest]; const rev=$('reveal');
+    rev.innerHTML=`${last.team}<span class="arrow">▶</span><span class="who">${last.player}</span>`; rev.classList.add('show'); }
+  if(st.done){ $('reveal').classList.remove('show'); }
+  lastN=picks.length;
+}
+async function poll(){ try{ const st=await fetch('/api/live_state?'+Date.now()).then(r=>r.json()); render(st); }catch(e){} }
+poll(); setInterval(poll,1200);
+</script>
+</body>
+</html>
