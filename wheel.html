@@ -371,7 +371,8 @@ window.addEventListener('pointerup',pressEnd);
 cvEl.addEventListener('pointerleave',()=>{ if(holding)pressEnd(); });
 $('spinBtn').onclick=()=>{ if(!holding) beginSpin(rand(3,7), AUTO_DUR[speed]); };
 $('autoBtn').onclick=()=>{ auto=!auto; syncUI(); if(auto&&!spinning) beginSpin(rand(3,6),AUTO_DUR[speed]); };
-$('resetBtn').onclick=()=>{ auto=false;spinning=false;holding=false;if(holdRAF)cancelAnimationFrame(holdRAF);
+$('resetBtn').onclick=async()=>{ if(isServer() && !(await keyValid(localStorage.getItem('wc26_admin_key')))){ showAdminGate(); return; }
+  auto=false;spinning=false;holding=false;if(holdRAF)cancelAnimationFrame(holdRAF);
   $('saved').style.display='none';$('saved').className='saved';$('reveal').classList.remove('show');startOrder(); };
 document.querySelectorAll('#speed button').forEach(b=>b.onclick=()=>{ speed=b.dataset.s;
   document.querySelectorAll('#speed button').forEach(x=>x.classList.toggle('on',x===b)); });
