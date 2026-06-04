@@ -174,8 +174,9 @@ document.getElementById('go').onclick=async()=>{
   if(players.length<2){msg.textContent='Add at least 2 players.';return;}
   msg.textContent='Saving…';
   const payload={players,...sel,token:document.getElementById('token').value,
-    admin_key:document.getElementById('adminKey').value.trim(),
+    admin_key:(document.getElementById('adminKey').value.trim()||localStorage.getItem('wc26_admin_key')||''),
     poll_minutes:+document.getElementById('poll').value, competition:document.getElementById('comp').value.trim()||'WC'};
+  if(payload.admin_key) localStorage.setItem('wc26_admin_key', payload.admin_key);
   try{
     const r=await fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const j=await r.json();
@@ -186,8 +187,13 @@ document.getElementById('go').onclick=async()=>{
   }catch(e){msg.textContent='Could not reach the server.';}
 };
 const formEl=document.getElementById('form'), gateEl=document.getElementById('lockGate');
-// Always require the admin key before showing the setup form.
+// Always require the admin key — but remember this device: if a valid key is stored, skip the gate.
 gateEl.style.display='block'; formEl.style.display='none';
+(async()=>{
+  const saved=localStorage.getItem('wc26_admin_key');
+  if(saved){ try{ const j=await fetch('/api/check_key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:saved})}).then(r=>r.json());
+    if(j&&j.ok){ gateEl.style.display='none'; formEl.style.display='block'; } }catch(e){} }
+})();
 fetch('/api/status').then(r=>r.json()).then(s=>{
   const gm=document.getElementById('gateMsg');
   if(s&&s.drawn) gm.textContent='A draw is already locked — entering the key lets you overwrite it.';

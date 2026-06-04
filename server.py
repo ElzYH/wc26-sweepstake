@@ -251,6 +251,16 @@ class Handler(BaseHTTPRequestHandler):
         return self._file(path.lstrip("/"))
 
     def do_POST(self):
+        try:
+            self._do_POST()
+        except Exception:
+            import traceback; traceback.print_exc()
+            try:
+                self._send(500, json.dumps({"ok": False, "error": "server error — check the logs"}))
+            except Exception:
+                pass
+
+    def _do_POST(self):
         path = self.path.split("?")[0]
         length = int(self.headers.get("Content-Length", 0))
         if length > 100_000:
