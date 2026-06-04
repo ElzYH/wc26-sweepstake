@@ -584,6 +584,14 @@ def discord_command(name, opts):
     d = _load_tracker() or {}
     mode = _active_mode()
     label = "survival" if mode == "survival" else "pts"
+    if name == "help":
+        return ("**WC26 bot commands**\n"
+                "/leaderboard - top of the table\n"
+                "/summary - current standings digest\n"
+                "/odds - who's most likely to win\n"
+                "/fixtures - live and upcoming games\n"
+                "/myteams <player> - that player's teams\n"
+                "/help - this list")
     if name == "summary":
         return "\n".join(build_summary())
     if name == "leaderboard":
@@ -640,6 +648,7 @@ def register_discord_commands():
     if not app_id or not token:
         return False, "Set the Application ID and Bot token first."
     cmds = [
+        {"name": "help", "description": "List the available commands", "type": 1},
         {"name": "summary", "description": "Current sweepstake summary", "type": 1},
         {"name": "leaderboard", "description": "Top of the table", "type": 1},
         {"name": "odds", "description": "Who's most likely to win", "type": 1},
