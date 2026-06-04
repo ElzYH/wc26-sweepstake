@@ -89,7 +89,7 @@ def backup_data():
 
 def reset_draw():
     backup_draw()                       # keep a copy before wiping, so a re-draw is recoverable
-    for f in ("draw_result.json", "tracker_data.json", "results.json", LIVE_FILE, SUBS_FILE):
+    for f in ("draw_result.json", "tracker_data.json", "results.json", LIVE_FILE):
         if os.path.exists(f):
             os.remove(f)
 
@@ -251,10 +251,11 @@ def _alive_owners(td):
 
 
 def _fixture_status(td):
-    """{(home,away): (status, homeOwner, awayOwner)} for detecting kickoffs."""
+    """{(home,away): (status, homeOwner, awayOwner, homeScore, awayScore)} for kickoff + goal alerts."""
     out = {}
     for m in (td or {}).get("fixtures", []):
-        out[(m.get("home"), m.get("away"))] = (m.get("status"), m.get("homeOwner"), m.get("awayOwner"))
+        out[(m.get("home"), m.get("away"))] = (m.get("status"), m.get("homeOwner"), m.get("awayOwner"),
+                                               m.get("homeScore"), m.get("awayScore"))
     return out
 
 
@@ -276,17 +277,25 @@ def notify_changes(old):
             tg_broadcast("📈 New leader: <b>%s</b> now tops the table." % nl)
     except Exception:
         pass
-    # a player's team kicks off -> tell that player (with the opponent)
+    # a player's team kicks off or scores -> tell that player
     try:
         of, nf = _fixture_status(old), _fixture_status(new)
-        for key, (st, ho, ao) in nf.items():
+        for key, nv in nf.items():
             h, a = key
-            was = (of.get(key) or (None,))[0]
-            if st in LIVE_STATUSES and was not in LIVE_STATUSES:
-                if ho and ho not in ("—", "-"):
-                    tg_player(ho, "🔵 Your team <b>%s</b> is playing now — vs %s." % (h, a))
-                if ao and ao not in ("—", "-"):
-                    tg_player(ao, "🔵 Your team <b>%s</b> is playing now — vs %s." % (a, h))
+            st, ho, ao, nhs, nas = nv
+            ov = of.get(key)
+            was = ov[0] if ov else None
+            home_owned = ho and ho not in ("—", "-")
+            away_owned = ao and ao not in ("—", "-")
+            if st in LIVE_STATUSES and was not in LIVE_STATUSES:        # kickoff
+                if home_owned: tg_player(ho, "🔵 Your team <b>%s</b> is playing now — vs %s." % (h, a))
+                if away_owned: tg_player(ao, "🔵 Your team <b>%s</b> is playing now — vs %s." % (a, h))
+            elif st in LIVE_STATUSES and ov:                            # goal during play
+                ohs, oas = ov[3], ov[4]
+                if None not in (nhs, nas, ohs, oas):
+                    score = "%s %d–%d %s" % (h, nhs, nas, a)
+                    if nhs > ohs and home_owned: tg_player(ho, "⚽ <b>%s</b> scored! %s" % (h, score))
+                    if nas > oas and away_owned: tg_player(ao, "⚽ <b>%s</b> scored! %s" % (a, score))
     except Exception:
         pass
     # a player's team is knocked out -> tell that player
@@ -396,6 +405,14 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/watch":   return self._file("watch.html")
         if path == "/api/live_state": return self._send(200, json.dumps(live_load()))
         if path == "/api/draw_result": return self._file("draw_result.json")
+        if path == "/api/telegram_links":          # OPEN read: players self-subscribe, no admin key
+            cfg = load_config()
+            players = [p["name"] for p in cfg.get("players", [])]
+            subs = _load_subs()
+            return self._send(200, json.dumps({"ok": True,
+                "configured": bool(_tg_token()), "bot_username": bot_username(),
+                "players": [{"name": nm, "code": "p%d" % i, "subscribed": len(subs.get(nm, []))}
+                            for i, nm in enumerate(players)]}))
         if path == "/api/status":
             cfg = load_config()
             return self._send(200, json.dumps({
@@ -496,7 +513,7 @@ class Handler(BaseHTTPRequestHandler):
             cfg = load_config()
             if not cfg.get("players"):
                 return self._send(400, json.dumps({"ok": False, "error": "not configured"}))
-            if draw_locked() and not key_ok(body):
+            if not key_ok(body):
                 return self._send(403, json.dumps({"ok": False, "need_key": True,
                     "error": "Enter the admin key to change settings."}))
             if "token" in body and body["token"].strip():
@@ -560,14 +577,6 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(403, json.dumps({"ok": False, "need_key": True}))
             tg_broadcast("✅ WC26 test — alerts are working.")
             return self._send(200, json.dumps({"ok": True}))
-        if path == "/api/telegram_links":          # OPEN: players self-subscribe, no admin key
-            cfg = load_config()
-            players = [p["name"] for p in cfg.get("players", [])]
-            subs = _load_subs()
-            return self._send(200, json.dumps({"ok": True,
-                "configured": bool(_tg_token()), "bot_username": bot_username(),
-                "players": [{"name": nm, "code": "p%d" % i, "subscribed": len(subs.get(nm, []))}
-                            for i, nm in enumerate(players)]}))
         if path == "/api/telegram_subscribe":      # OPEN: link the chat that sent /start <code>
             cfg = load_config()
             players = [p["name"] for p in cfg.get("players", [])]
