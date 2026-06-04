@@ -273,6 +273,16 @@
         <div class="hint" id="setSiteMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
       </div>
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
+        <p style="margin:0 0 8px"><b>Discord bot (slash commands).</b> Lets anyone in the server type <code>/leaderboard</code>, <code>/summary</code>, <code>/odds</code>, <code>/fixtures</code>, <code>/myteams</code> to pull live data. Read-only — no admin commands.</p>
+        <p style="margin:0 0 8px;color:var(--muted);font-size:12px">Create an app at <b>discord.com/developers</b> → copy the three values below. Then set its <b>Interactions Endpoint URL</b> to:<br><code id="botEndpoint" style="word-break:break-all">https://YOUR-SITE/api/discord_interactions</code></p>
+        <input id="setBotApp" type="text" placeholder="Application ID">
+        <input id="setBotPub" type="text" placeholder="Public Key" style="margin-top:6px">
+        <input id="setBotGuild" type="text" placeholder="Server (Guild) ID — optional, makes commands instant" style="margin-top:6px">
+        <input id="setBotToken" type="password" placeholder="Bot Token" style="margin-top:6px">
+        <div class="row2" style="margin-top:6px"><button id="setSaveBot">Save bot</button><button id="setRegBot" class="mini">Register commands</button></div>
+        <div class="hint" id="setBotMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
+      </div>
+      <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
         <p style="margin:0 0 8px"><b>Backup &amp; restore.</b> Download your draw + results so nothing is ever lost — and restore it on this or a fresh server.</p>
         <div class="row2"><button id="setExport">⬇ Download backup</button><button id="setImportBtn">⬆ Restore from file</button></div>
         <input id="setImportFile" type="file" accept="application/json,.json" style="display:none">
@@ -874,6 +884,9 @@ async function refreshStatus(){
   const dw=document.getElementById('setDiscord'); if(dw && STATUS.discord) dw.placeholder='webhook saved ✅ (paste to replace, or clear to remove)';
   if(STATUS.has_invite){ const iv=document.getElementById('setInvite'); if(iv) iv.placeholder='invite saved ✅ (paste to replace)'; }
   const su=document.getElementById('setSite'); if(su && STATUS.site_url) su.value=STATUS.site_url;
+  const ep=document.getElementById('botEndpoint'); if(ep) ep.textContent=(STATUS.site_url||location.origin)+'/api/discord_interactions';
+  if(STATUS.bot_ready){ const ba=document.getElementById('setBotApp'), bt=document.getElementById('setBotToken');
+    if(ba) ba.placeholder='Application ID (saved ✅)'; if(bt) bt.placeholder='Bot Token (saved ✅ — leave blank to keep)'; }
 }
 document.getElementById('helpBtn').onclick=()=>{const p=document.getElementById('helpPanel');p.style.display=p.style.display==='none'?'block':'none';};
 document.getElementById('refreshBtn').onclick=async()=>{
@@ -919,6 +932,27 @@ document.getElementById('setSaveDiscord').onclick=async()=>{
     if(j.ok){ m.textContent=v?'Saved — try “Send Discord test”.':'Webhook cleared.'; refreshStatus(); }
     else if(j.need_key){ m.textContent='Session expired — reopen Settings and unlock again.'; ADMINKEY=''; }
     else m.textContent=j.error||'Could not save.';
+  }catch(e){ m.textContent='Could not reach the server.'; }
+};
+document.getElementById('setSaveBot').onclick=async()=>{
+  const m=document.getElementById('setBotMsg'); m.textContent='Saving…';
+  const payload={discord_app_id:document.getElementById('setBotApp').value.trim(),
+    discord_pubkey:document.getElementById('setBotPub').value.trim(),
+    discord_guild_id:document.getElementById('setBotGuild').value.trim(),
+    admin_key:ADMINKEY};
+  const tok=document.getElementById('setBotToken').value.trim(); if(tok) payload.discord_bot_token=tok;
+  try{ const j=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(r=>r.json());
+    if(j.ok){ m.textContent='Saved. Now set the Interactions Endpoint URL in the Developer Portal, then Register commands.'; refreshStatus(); }
+    else if(j.need_key){ m.textContent='Session expired — reopen Settings and unlock again.'; ADMINKEY=''; }
+    else m.textContent=j.error||'Could not save.';
+  }catch(e){ m.textContent='Could not reach the server.'; }
+};
+document.getElementById('setRegBot').onclick=async()=>{
+  const m=document.getElementById('setBotMsg'); m.textContent='Registering…';
+  try{ const j=await fetch('/api/register_commands',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:ADMINKEY})}).then(r=>r.json());
+    if(j.ok) m.textContent='Commands registered ✅ (guild = instant; global can take up to an hour).';
+    else if(j.need_key){ m.textContent='Session expired — reopen Settings and unlock again.'; ADMINKEY=''; }
+    else m.textContent='Failed: '+(j.error||'check App ID + Bot token');
   }catch(e){ m.textContent='Could not reach the server.'; }
 };
 document.getElementById('setSaveSite').onclick=async()=>{

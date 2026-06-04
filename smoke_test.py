@@ -126,6 +126,11 @@ def run():
         check("discord_summary needs admin key (403)", st == 403, str(st))
         st, body = req("GET", "/api/status")
         check("status exposes invite field", "invite" in json.loads(body), body[:120])
+        check("status exposes bot_ready flag", "bot_ready" in json.loads(body), body[:120])
+        st, body = req("POST", "/api/discord_interactions", {"type": 1})
+        check("interactions reject unsigned (401)", st == 401, str(st))
+        st, body = req("POST", "/api/register_commands", {"admin_key": "wrong"})
+        check("register_commands needs admin key (403)", st == 403, str(st))
         st, body = req("GET", "/manifest.webmanifest")
         check("manifest served (200)", st == 200 and "{" in body, str(st))
     finally:

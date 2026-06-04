@@ -574,6 +574,92 @@ def build_summary():
     return lines
 
 
+def _active_mode():
+    m = (load_config().get("scoring_mode") or "hybrid")
+    return m if m in ("points", "survival", "hybrid") else "hybrid"
+
+
+def discord_command(name, opts):
+    """Build a read-only reply for a slash command. No admin actions."""
+    d = _load_tracker() or {}
+    mode = _active_mode()
+    label = "survival" if mode == "survival" else "pts"
+    if name == "summary":
+        return "\n".join(build_summary())
+    if name == "leaderboard":
+        board = (d.get("leaderboards") or {}).get(mode) or []
+        if not board:
+            return "No standings yet — the tournament hasn't started."
+        rows = ["**Leaderboard** (%s)" % ("Both" if mode == "hybrid" else mode)]
+        for i, p in enumerate(board[:10]):
+            rows.append("%2d. %s — %s %s" % (i + 1, p.get("name"), p.get(mode, 0), label))
+        return "\n".join(rows)
+    if name == "odds":
+        champ = d.get("champion") or []
+        if not champ or (d.get("stats") or {}).get("matches_played", 0) == 0:
+            return "Win odds appear once games start (pre-tournament odds come from team strength)."
+        rows = ["**Win odds**"]
+        for p in champ[:8]:
+            rows.append("%s — %s%% (%s teams in)" % (p.get("name"), p.get("odds", 0), p.get("alive_teams", 0)))
+        return "\n".join(rows)
+    if name == "fixtures":
+        fx = d.get("fixtures") or []
+        live = [m for m in fx if m.get("status") in ("IN_PLAY", "PAUSED", "LIVE", "SUSPENDED")]
+        upcoming = sorted([m for m in fx if m.get("status") in ("TIMED", "SCHEDULED")],
+                          key=lambda m: m.get("utcDate") or "")[:6]
+        out = []
+        if live:
+            out.append("**Live now**")
+            for m in live:
+                out.append("🔴 %s %s-%s %s" % (m.get("home"), m.get("homeScore", 0), m.get("awayScore", 0), m.get("away")))
+        if upcoming:
+            out.append("**Next up**")
+            for m in upcoming:
+                t = (m.get("utcDate") or "")[5:16].replace("T", " ")
+                out.append("- %s vs %s  %s UTC" % (m.get("home"), m.get("away"), t))
+        return "\n".join(out) if out else "No fixtures available yet."
+    if name == "myteams":
+        who = str(opts.get("player", "")).strip().lower()
+        pl = next((p for p in (d.get("players") or []) if (p.get("name", "").lower() == who)), None)
+        if not pl:
+            names = ", ".join(p.get("name", "") for p in (d.get("players") or []))
+            return "No player called that. Players: %s" % (names or "-")
+        body = ["**%s's teams**" % pl.get("name")]
+        for t in (pl.get("teams") or []):
+            body.append(("✅ " if t.get("status") == "alive" else "❌ ") + str(t.get("name")))
+        return "\n".join(body)
+    return "Unknown command."
+
+
+def register_discord_commands():
+    """Register the slash commands with Discord (guild = instant; global can take ~1h)."""
+    cfg = load_config()
+    app_id = (cfg.get("discord_app_id") or "").strip()
+    token = (cfg.get("discord_bot_token") or "").strip()
+    guild = (cfg.get("discord_guild_id") or "").strip()
+    if not app_id or not token:
+        return False, "Set the Application ID and Bot token first."
+    cmds = [
+        {"name": "summary", "description": "Current sweepstake summary", "type": 1},
+        {"name": "leaderboard", "description": "Top of the table", "type": 1},
+        {"name": "odds", "description": "Who's most likely to win", "type": 1},
+        {"name": "fixtures", "description": "Live and upcoming games", "type": 1},
+        {"name": "myteams", "description": "A player's teams", "type": 1,
+         "options": [{"name": "player", "description": "Player name", "type": 3, "required": True}]},
+    ]
+    base = "https://discord.com/api/v10/applications/%s" % app_id
+    url = (base + "/guilds/%s/commands" % guild) if guild else (base + "/commands")
+    try:
+        req = urllib.request.Request(url, data=json.dumps(cmds).encode(), method="PUT",
+                                     headers={"Content-Type": "application/json",
+                                              "Authorization": "Bot " + token,
+                                              "User-Agent": "WC26-Sweepstake/1.0 (+https://bbmsweepstake.co.uk)"})
+        urllib.request.urlopen(req, timeout=12)
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
 def update_now(cfg):
     """Fetch results (if a token is set) and recompute the tracker."""
     if not os.path.exists("draw_result.json"):
@@ -710,6 +796,7 @@ class Handler(BaseHTTPRequestHandler):
                 "discord": bool(cfg.get("discord_webhook")),
                 "has_invite": bool(cfg.get("discord_invite")),
                 "invite": cfg.get("discord_invite", ""),
+                "bot_ready": bool(cfg.get("discord_pubkey") and cfg.get("discord_app_id")),
                 "site_url": cfg.get("site_url", "")}))
         return self._file(path.lstrip("/"))
 
@@ -724,13 +811,45 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 pass
 
+    def _discord_interactions(self, raw):
+        """Discord slash-command endpoint: verify Ed25519 signature, then reply (read-only)."""
+        pub = (load_config().get("discord_pubkey") or "").strip()
+        sig = self.headers.get("X-Signature-Ed25519", "")
+        ts = self.headers.get("X-Signature-Timestamp", "")
+        if not (pub and sig and ts):
+            return self._send(401, "missing signature", "text/plain")
+        try:
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+            Ed25519PublicKey.from_public_bytes(bytes.fromhex(pub)).verify(bytes.fromhex(sig), ts.encode() + raw)
+        except Exception:
+            return self._send(401, "bad signature", "text/plain")
+        try:
+            body = json.loads(raw or b"{}")
+        except Exception:
+            return self._send(400, "bad json", "text/plain")
+        if body.get("type") == 1:                          # PING -> PONG (endpoint validation)
+            return self._send(200, json.dumps({"type": 1}))
+        if body.get("type") == 2:                          # APPLICATION_COMMAND
+            data = body.get("data") or {}
+            opts = {o.get("name"): o.get("value") for o in (data.get("options") or [])}
+            try:
+                content = discord_command(data.get("name"), opts)
+            except Exception as e:
+                log("discord command error:", e)
+                content = "Something went wrong building that."
+            return self._send(200, json.dumps({"type": 4, "data": {"content": (content or "—")[:1900]}}))
+        return self._send(200, json.dumps({"type": 4, "data": {"content": "Unsupported interaction."}}))
+
     def _do_POST(self):
         path = self.path.split("?")[0]
         length = int(self.headers.get("Content-Length", 0))
         if length > 100_000:
             return self._send(413, json.dumps({"ok": False, "error": "request too large"}))
+        raw = self.rfile.read(length) if length else b""
+        if path == "/api/discord_interactions":            # verified on the RAW bytes, before any parsing
+            return self._discord_interactions(raw)
         try:
-            body = json.loads(self.rfile.read(length) or "{}") if length else {}
+            body = json.loads(raw or b"{}")
         except Exception:
             return self._send(400, json.dumps({"ok": False, "error": "bad JSON"}))
         if not isinstance(body, dict):
@@ -827,6 +946,9 @@ class Handler(BaseHTTPRequestHandler):
             if "site_url" in body:
                 s = str(body["site_url"]).strip().rstrip("/")
                 cfg["site_url"] = s if (s == "" or s.startswith("https://")) else cfg.get("site_url", "")
+            for f in ("discord_app_id", "discord_guild_id", "discord_pubkey", "discord_bot_token"):
+                if f in body:
+                    cfg[f] = str(body[f]).strip()[:120]
             if body.get("vapid_sub"):
                 cfg["vapid_sub"] = str(body["vapid_sub"]).strip()[:120]
             with _lock:
@@ -904,6 +1026,11 @@ class Handler(BaseHTTPRequestHandler):
                 discord_send(line)
                 time.sleep(0.5)             # stay under Discord's webhook burst limit
             return self._send(200, json.dumps({"ok": True}))
+        if path == "/api/register_commands":
+            if not key_ok(body):
+                return self._send(403, json.dumps({"ok": False, "need_key": True}))
+            ok, err = register_discord_commands()
+            return self._send(200 if ok else 400, json.dumps({"ok": ok, "error": err}))
         if path == "/api/discord_summary":
             if not key_ok(body):
                 return self._send(403, json.dumps({"ok": False, "need_key": True}))
