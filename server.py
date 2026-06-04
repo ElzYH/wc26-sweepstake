@@ -211,10 +211,12 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _file(self, name):
-        if name not in STATIC or not os.path.exists(name):
+        generated = {"draw_result.json", "tracker_data.json"}
+        full = name if name in generated else os.path.join(APP_DIR, name)
+        if name not in STATIC or not os.path.exists(full):
             return self._send(404, "not found", "text/plain")
         ctype = "text/html" if name.endswith(".html") else "application/json"
-        with open(name, "rb") as f:
+        with open(full, "rb") as f:
             self._send(200, f.read(), ctype)
 
     def do_GET(self):
