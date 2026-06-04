@@ -939,6 +939,8 @@ function renderAlerts(){
     if(isIOS) h+='<div style="background:#10240f;border:1px solid var(--line);border-radius:12px;padding:12px;font-size:13px;color:var(--ink)">📱 On iPhone/iPad, add this to your <b>Home Screen</b> (Share → Add to Home Screen) and open it from there to get alerts.'+(!STATUS.push_enabled?'<div style="color:var(--muted);font-size:11.5px;margin-top:6px">Push isn\'t switched on by the host yet.</div>':'')+'</div>';
     else h+='<div class="empty">This browser can\'t show notifications. Alerts work on Chrome, Edge, or desktop Safari.</div>';
   }
+  const showPrefs = pushOn || (supported && perm==='granted' && !pushCap);
+  if(showPrefs) h+=prefRows();
   if(STATUS.discord) h+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);color:var(--muted);font-size:12px">💬 Group alerts also post to your Discord channel.</div>';
   h+='<div class="hint" id="alMsg" style="color:var(--muted);font-size:12px;margin-top:8px"></div>';
   body.innerHTML=h;
@@ -976,6 +978,24 @@ function renderAlerts(){
   if(off) off.onclick=()=>{ localStorage.removeItem('wc26_me'); NOTIFYSNAP=null;
     document.getElementById('alMsg').textContent='Alerts off — pick your name again any time to turn them back on.';
     renderAlerts(); };
+  document.querySelectorAll('.alPref').forEach(cb=>cb.onchange=async()=>{
+    const p=getPrefs(); p[cb.dataset.k]=cb.checked; setPrefs(p);
+    if(localStorage.getItem('wc26_push_on')==='1') await pushUpdatePrefs();
+  });
+}
+const EVENT_LABELS=[['goal','Goals ⚽'],['kickoff','Kick-offs 🔵'],['flow','Half-time & 2nd half ⏱️'],['knockout','Knockouts ❌'],['leader','Lead changes 📈'],['winner','Champion 🏆']];
+function getPrefs(){ try{ return JSON.parse(localStorage.getItem('wc26_prefs')||'{}'); }catch(e){ return {}; } }
+function setPrefs(p){ localStorage.setItem('wc26_prefs', JSON.stringify(p)); }
+function prefOn(t){ return getPrefs()[t]!==false; }   // default on
+function prefRows(){
+  const p=getPrefs();
+  return '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)"><div style="font-size:12px;color:var(--muted);margin-bottom:8px">Ping me about</div>'+
+    EVENT_LABELS.map(([k,l])=>`<label style="display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink);padding:5px 0;cursor:pointer"><input type="checkbox" class="alPref" data-k="${k}"${p[k]!==false?' checked':''}> ${l}</label>`).join('')+'</div>';
+}
+async function pushUpdatePrefs(){
+  try{ const reg=await navigator.serviceWorker.ready; const sub=await reg.pushManager.getSubscription();
+    if(sub) await fetch('/api/push_prefs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:sub.endpoint,prefs:getPrefs()})}).catch(()=>{});
+  }catch(e){}
 }
 function urlB64ToUint8(b64){
   const pad='='.repeat((4-b64.length%4)%4);
@@ -993,7 +1013,7 @@ async function pushSubscribe(player){
     let sub=await reg.pushManager.getSubscription();
     if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:urlB64ToUint8(STATUS.vapid_public)});
     const j=await fetch('/api/push_subscribe',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({player:player, subscription:(sub.toJSON?sub.toJSON():sub)})}).then(r=>r.json());
+      body:JSON.stringify({player:player, prefs:getPrefs(), subscription:(sub.toJSON?sub.toJSON():sub)})}).then(r=>r.json());
     if(j&&j.ok){ localStorage.setItem('wc26_push_on','1'); return true; }
     if(m) m.textContent=(j&&j.error)||'Could not subscribe.'; return false;
   }catch(e){ if(m) m.textContent='Could not turn on alerts: '+((e&&e.message)||e); return false; }
@@ -1020,6 +1040,12 @@ function ping(title,body){
     } else { new Notification(title,opts); }
   }catch(e){ try{ new Notification(title,opts); }catch(_){} }
 }
+function pingT(t,title,body){ if(prefOn(t)) ping(title,body); }
+function finalResultName(d){
+  const f=(d.fixtures||[]).find(m=>m.stage==='FINAL'&&m.status==='FINISHED'); if(!f) return null;
+  if(f.homeScore!=null&&f.awayScore!=null&&f.homeScore!==f.awayScore) return f.homeScore>f.awayScore?f.home:f.away;
+  if(f.winner==='HOME_TEAM') return f.home; if(f.winner==='AWAY_TEAM') return f.away; return null;
+}
 function checkNotify(d){
   const me=notifyMe();
   if(localStorage.getItem('wc26_push_on')==='1'){ NOTIFYSNAP=null; return; }  // native push covers this device
@@ -1028,19 +1054,21 @@ function checkNotify(d){
   const fx={}; (d.fixtures||[]).forEach(m=>{ fx[m.home+'|'+m.away]={st:m.status,hs:m.homeScore,as:m.awayScore,h:m.home,a:m.away}; });
   const alive={}; ((d.players||[]).find(p=>p.name===me)||{teams:[]}).teams.forEach(t=>alive[t.name]=(t.status==='alive'));
   const leader=((d.leaderboards||{}).hybrid||[])[0]; const leaderName=leader&&leader.name;
-  const LIVE=['IN_PLAY','PAUSED','LIVE','SUSPENDED'];
-  const snap={fx,alive,leaderName};
+  const champ=finalResultName(d);
+  const LIVE=['IN_PLAY','PAUSED','LIVE','SUSPENDED'], PLAY=['IN_PLAY','LIVE'];
+  const snap={fx,alive,leaderName,champ};
   if(NOTIFYSNAP){
     for(const k in fx){ const n=fx[k], o=NOTIFYSNAP.fx[k]; if(!o) continue;
       const mine = myTeams.has(n.h)?n.h:(myTeams.has(n.a)?n.a:null); if(!mine) continue;
-      if(LIVE.includes(n.st)&&!LIVE.includes(o.st)) ping(n.h+' vs '+n.a, 'Kicked off — your team '+mine+' is playing!');
-      else if(LIVE.includes(n.st)&&n.hs!=null&&o.hs!=null){
-        const mineScored = (mine===n.h&&n.hs>o.hs)||(mine===n.a&&n.as>o.as);
-        if(mineScored) ping(mine+' scored! ⚽', n.h+' '+n.hs+'–'+n.as+' '+n.a);
-      }
+      if(LIVE.includes(n.st)&&!LIVE.includes(o.st)) pingT('kickoff', n.h+' vs '+n.a, 'Kicked off — your team '+mine+' is playing!');
+      else if(n.st==='PAUSED'&&PLAY.includes(o.st)) pingT('flow','Half-time ⏸️', n.h+(n.hs!=null?' '+n.hs+'–'+n.as+' ':' vs ')+n.a);
+      else if(PLAY.includes(n.st)&&o.st==='PAUSED') pingT('flow','Second half ▶️', n.h+' vs '+n.a+' under way');
+      if(n.hs!=null&&o.hs!=null){ const mineScored=(mine===n.h&&n.hs>o.hs)||(mine===n.a&&n.as>o.as);
+        if(mineScored) pingT('goal', mine+' scored! ⚽', n.h+' '+n.hs+'–'+n.as+' '+n.a); }
     }
-    for(const t in alive){ if(NOTIFYSNAP.alive[t]&&!alive[t]) ping(t+' is out ❌', 'Check the leaderboard to see where you stand.'); }
-    if(leaderName && NOTIFYSNAP.leaderName && leaderName!==NOTIFYSNAP.leaderName) ping('New leader 📈', leaderName+' now tops the table.');
+    for(const t in alive){ if(NOTIFYSNAP.alive[t]&&!alive[t]) pingT('knockout', t+' is out ❌', 'Check the leaderboard to see where you stand.'); }
+    if(leaderName && NOTIFYSNAP.leaderName && leaderName!==NOTIFYSNAP.leaderName) pingT('leader','New leader 📈', leaderName+' now tops the table.');
+    if(champ && NOTIFYSNAP.champ!==champ) pingT('winner','🏆 Champions: '+champ, champ+' won the World Cup!');
   }
   NOTIFYSNAP=snap;
 }

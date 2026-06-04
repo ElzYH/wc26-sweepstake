@@ -260,7 +260,8 @@ def discord_send(text):
 
 
 # ---------------- Web Push (Path A) — needs pywebpush; guarded so missing lib is harmless ----------------
-PUSH_FILE = "push_subs.json"          # {player_name: [subscription_obj, ...]}
+PUSH_FILE = "push_subs.json"          # {player: [{"sub": <subscription>, "prefs": {etype: bool}}, ...]}
+EVENT_TYPES = ("goal", "kickoff", "flow", "knockout", "leader", "winner")
 
 
 def ensure_vapid():
@@ -303,6 +304,19 @@ def _save_push(d):
         json.dump(d, f)
 
 
+def _entry_sub(e):
+    return e.get("sub", e) if isinstance(e, dict) else e
+
+
+def _entry_wants(e, etype):
+    prefs = (e.get("prefs") if isinstance(e, dict) else None) or {}
+    return prefs.get(etype, True)         # default: everything on
+
+
+def _entry_endpoint(e):
+    return (_entry_sub(e) or {}).get("endpoint")
+
+
 def _webpush_one(sub, title, body):
     """Send one push. Returns True to keep the subscription, False if it's dead (expired)."""
     cfg = load_config()
@@ -322,15 +336,18 @@ def _webpush_one(sub, title, body):
         return True
 
 
-def push_player(player, title, body):
+def push_player(player, etype, title, body):
     if not push_enabled():
         return
     subs = _load_push()
     lst = subs.get(player, [])
     keep, changed = [], False
-    for s in lst:
-        if _webpush_one(s, title, body):
-            keep.append(s)
+    for e in lst:
+        if not _entry_wants(e, etype):    # this device opted out of this event type
+            keep.append(e)
+            continue
+        if _webpush_one(_entry_sub(e), title, body):
+            keep.append(e)
         else:
             changed = True
     if changed:
@@ -338,22 +355,22 @@ def push_player(player, title, body):
         _save_push(subs)
 
 
-def push_broadcast(title, body):
+def push_broadcast(etype, title, body):
     if not push_enabled():
         return
     for player in list(_load_push().keys()):
-        push_player(player, title, body)
+        push_player(player, etype, title, body)
 
 
 # ---------------- unified dispatch: both channels at once ----------------
-def alert_player(player, title, body, group_line):
+def alert_player(player, etype, title, body, group_line):
     if player and player not in ("—", "-"):
-        push_player(player, title, body)
+        push_player(player, etype, title, body)
     discord_send(group_line)
 
 
-def alert_all(title, body, group_line):
-    push_broadcast(title, body)
+def alert_all(etype, title, body, group_line):
+    push_broadcast(etype, title, body)
     discord_send(group_line)
 
 
@@ -384,6 +401,22 @@ def _fixture_status(td):
 
 
 LIVE_STATUSES = ("IN_PLAY", "PAUSED", "LIVE", "SUSPENDED")
+PLAYING = ("IN_PLAY", "LIVE")
+
+
+def _final_result(d):
+    """Return (champion_team, owner) once the FINAL is finished, else (None, None)."""
+    for m in (d.get("fixtures") or []):
+        if m.get("stage") == "FINAL" and m.get("status") == "FINISHED":
+            hs, as_ = m.get("homeScore"), m.get("awayScore")
+            w = m.get("winner")
+            if hs is not None and as_ is not None and hs != as_:
+                return (m.get("home"), m.get("homeOwner")) if hs > as_ else (m.get("away"), m.get("awayOwner"))
+            if w == "HOME_TEAM":
+                return m.get("home"), m.get("homeOwner")
+            if w == "AWAY_TEAM":
+                return m.get("away"), m.get("awayOwner")
+    return None, None
 
 
 def notify_changes(old):
@@ -393,16 +426,27 @@ def notify_changes(old):
         return                              # first compute / no data: nothing to compare
     if (new.get("stats") or {}).get("matches_played", 0) == 0:
         return
+
+    def match_event(etype, recipients, group_line):
+        # recipients: list of (owner, title, body); one Discord line for the whole match event
+        for ow, ti, bo in recipients:
+            if ow and ow not in ("—", "-"):
+                push_player(ow, etype, ti, bo)
+        discord_send(group_line)
+
+    def own(o):
+        return o if (o and o not in ("—", "-")) else "—"
+
     # overall (Both) leader change -> everyone
     try:
         ol = (old["leaderboards"]["hybrid"][0] or {}).get("name")
         nl = (new["leaderboards"]["hybrid"][0] or {}).get("name")
         if nl and ol and nl != ol:
-            alert_all("New leader 📈", "%s now tops the table." % nl,
+            alert_all("leader", "New leader 📈", "%s now tops the table." % nl,
                       "📈 New leader: **%s** now tops the table." % nl)
     except Exception:
         pass
-    # a player's team kicks off or scores -> that player (push) + the group (Discord)
+    # per-match transitions: kickoff, half-time, second half, goals
     try:
         of, nf = _fixture_status(old), _fixture_status(new)
         for key, nv in nf.items():
@@ -412,21 +456,29 @@ def notify_changes(old):
             was = ov[0] if ov else None
             ho_ok = ho and ho not in ("—", "-")
             ao_ok = ao and ao not in ("—", "-")
-            if st in LIVE_STATUSES and was not in LIVE_STATUSES:        # kickoff
-                if ho_ok:
-                    alert_player(ho, "%s vs %s" % (h, a), "Kicked off — your team %s is playing!" % h,
-                                 "🔵 **%s** (%s) kicked off — %s vs %s" % (h, ho, h, a))
-                if ao_ok:
-                    alert_player(ao, "%s vs %s" % (h, a), "Kicked off — your team %s is playing!" % a,
-                                 "🔵 **%s** (%s) kicked off — %s vs %s" % (a, ao, h, a))
-            elif st in LIVE_STATUSES and ov:                            # goal during play
+            if st in LIVE_STATUSES and was not in LIVE_STATUSES:                      # kickoff
+                match_event("kickoff",
+                            [(ho, "%s vs %s" % (h, a), "Kicked off — your team %s is playing!" % h),
+                             (ao, "%s vs %s" % (h, a), "Kicked off — your team %s is playing!" % a)],
+                            "🔵 Kicked off — **%s** (%s) vs **%s** (%s)" % (h, own(ho), a, own(ao)))
+            elif st == "PAUSED" and was in PLAYING:                                   # half-time
+                sc = "%s %s–%s %s" % (h, nhs, nas, a) if None not in (nhs, nas) else "%s vs %s" % (h, a)
+                match_event("flow",
+                            [(ho, "Half-time ⏸️", sc), (ao, "Half-time ⏸️", sc)],
+                            "⏸️ Half-time — %s" % sc)
+            elif st in PLAYING and was == "PAUSED":                                   # second half
+                match_event("flow",
+                            [(ho, "Second half ▶️", "%s vs %s under way" % (h, a)),
+                             (ao, "Second half ▶️", "%s vs %s under way" % (h, a))],
+                            "▶️ Second half under way — %s vs %s" % (h, a))
+            if ov is not None:                                                        # goals (any time score rises)
                 ohs, oas = ov[3], ov[4]
                 if None not in (nhs, nas, ohs, oas):
                     score = "%s %d–%d %s" % (h, nhs, nas, a)
                     if nhs > ohs and ho_ok:
-                        alert_player(ho, "%s scored! ⚽" % h, score, "⚽ **%s** (%s) scored — %s" % (h, ho, score))
+                        alert_player(ho, "goal", "%s scored! ⚽" % h, score, "⚽ **%s** (%s) scored — %s" % (h, ho, score))
                     if nas > oas and ao_ok:
-                        alert_player(ao, "%s scored! ⚽" % a, score, "⚽ **%s** (%s) scored — %s" % (a, ao, score))
+                        alert_player(ao, "goal", "%s scored! ⚽" % a, score, "⚽ **%s** (%s) scored — %s" % (a, ao, score))
     except Exception:
         pass
     # a player's team is knocked out
@@ -435,8 +487,23 @@ def notify_changes(old):
         for t in oa:
             if oa[t][0] and t in na and not na[t][0]:
                 owner = na[t][1]
-                alert_player(owner, "%s is out ❌" % t, "Check the leaderboard to see where you stand.",
-                             "❌ **%s** (%s) is out." % (t, owner))
+                alert_player(owner, "knockout", "%s is out ❌" % t, "Check the leaderboard to see where you stand.",
+                             "❌ **%s** (%s) is out." % (t, own(owner)))
+    except Exception:
+        pass
+    # champion decided -> everyone, with the winner's standing in the active scoring mode
+    try:
+        oc, nc = _final_result(old), _final_result(new)
+        if nc[0] and nc != oc:
+            team, owner = nc
+            mode = (load_config().get("scoring_mode") or "hybrid")
+            mode = mode if mode in ("points", "survival", "hybrid") else "hybrid"
+            board = (new.get("leaderboards") or {}).get(mode) or []
+            entry = next((p for p in board if p.get("name") == owner), None)
+            tail = (" — %s finishes on %s pts." % (owner, entry[mode])) if (entry and own(owner) != "—") else "."
+            alert_all("winner", "🏆 Champions: %s" % team,
+                      "%s won the World Cup%s" % (team, tail),
+                      "🏆 **%s** (%s) are World Cup champions%s" % (team, own(owner), tail))
     except Exception:
         pass
 
@@ -747,25 +814,47 @@ class Handler(BaseHTTPRequestHandler):
             sub = body.get("subscription")
             if player not in players or not isinstance(sub, dict) or not sub.get("endpoint"):
                 return self._send(400, json.dumps({"ok": False, "error": "bad subscription"}))
+            prefs = body.get("prefs") if isinstance(body.get("prefs"), dict) else {}
+            prefs = {k: bool(prefs.get(k, True)) for k in EVENT_TYPES}
+            ep = sub["endpoint"]
             with _lock:
                 subs = _load_push()
                 lst = subs.setdefault(player, [])
-                if not any(s.get("endpoint") == sub["endpoint"] for s in lst):
-                    lst.append(sub)
-                # one device endpoint belongs to one player: drop it from any other player
-                for other in list(subs.keys()):
+                found = False
+                for e in lst:
+                    if _entry_endpoint(e) == ep:
+                        e["sub"], e["prefs"] = sub, prefs   # upsert (also updates choices)
+                        found = True
+                if not found:
+                    lst.append({"sub": sub, "prefs": prefs})
+                for other in list(subs.keys()):            # an endpoint belongs to one player only
                     if other != player:
-                        subs[other] = [s for s in subs[other] if s.get("endpoint") != sub["endpoint"]]
+                        subs[other] = [e for e in subs[other] if _entry_endpoint(e) != ep]
                 _save_push(subs)
             log("push subscribe:", player)
+            return self._send(200, json.dumps({"ok": True}))
+        if path == "/api/push_prefs":               # OPEN: update which events this device wants
+            ep = str(body.get("endpoint", "")).strip()
+            prefs = body.get("prefs") if isinstance(body.get("prefs"), dict) else {}
+            prefs = {k: bool(prefs.get(k, True)) for k in EVENT_TYPES}
+            if ep:
+                with _lock:
+                    subs = _load_push()
+                    for k in list(subs.keys()):
+                        for e in subs[k]:
+                            if _entry_endpoint(e) == ep:
+                                e["prefs"] = prefs
+                    _save_push(subs)
             return self._send(200, json.dumps({"ok": True}))
         if path == "/api/push_test":               # OPEN: server sends a real push to this player's devices
             player = str(body.get("player", "")).strip()
             if not push_enabled():
                 return self._send(400, json.dumps({"ok": False, "error": "push not enabled"}))
-            if not _load_push().get(player):
+            lst = _load_push().get(player)
+            if not lst:
                 return self._send(400, json.dumps({"ok": False, "error": "no devices subscribed yet"}))
-            push_player(player, "WC26 Sweepstake", "✅ Push alerts are working, %s!" % player)
+            for e in lst:                          # a test ignores per-event choices
+                _webpush_one(_entry_sub(e), "WC26 Sweepstake", "✅ Push alerts are working, %s!" % player)
             return self._send(200, json.dumps({"ok": True}))
         if path == "/api/push_unsubscribe":        # OPEN: remove this device
             ep = str(body.get("endpoint", "")).strip()
@@ -773,7 +862,7 @@ class Handler(BaseHTTPRequestHandler):
                 with _lock:
                     subs = _load_push()
                     for k in list(subs.keys()):
-                        subs[k] = [s for s in subs[k] if s.get("endpoint") != ep]
+                        subs[k] = [e for e in subs[k] if _entry_endpoint(e) != ep]
                     _save_push(subs)
             return self._send(200, json.dumps({"ok": True}))
         if path == "/api/telegram_test":

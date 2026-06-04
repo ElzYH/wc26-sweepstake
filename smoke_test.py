@@ -113,6 +113,8 @@ def run():
         check("push_subscribe rejects unknown player (400)", st == 400, f"{st} {body[:80]}")
         st, body = req("POST", "/api/push_test", {"player": "Erol"})
         check("push_test 400 when push not enabled", st == 400, f"{st} {body[:80]}")
+        st, body = req("POST", "/api/push_prefs", {"endpoint": "x", "prefs": {"goal": False}})
+        check("push_prefs responds ok", st == 200, str(st))
         st, body = req("GET", "/manifest.webmanifest")
         check("manifest served (200)", st == 200 and "{" in body, str(st))
     finally:
