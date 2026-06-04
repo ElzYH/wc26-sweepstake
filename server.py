@@ -535,6 +535,45 @@ def notify_changes(old):
         pass
 
 
+def _owner_of(d, team):
+    for p in (d.get("players") or []):
+        for t in (p.get("teams") or []):
+            if t.get("name") == team:
+                return p.get("name")
+    return "—"
+
+
+def build_summary():
+    """A short digest used by the in-app card and the Discord 'post summary' button."""
+    d = _load_tracker()
+    if not d:
+        return ["No data yet — set up the draw first."]
+    stats = d.get("stats") or {}
+    mp = stats.get("matches_played", 0) or 0
+    if not mp:
+        return ["📊 WC26 Sweepstake", "Tournament hasn't kicked off yet — the summary fills in once games start (11 June)."]
+    mode = (load_config().get("scoring_mode") or "hybrid")
+    mode = mode if mode in ("points", "survival", "hybrid") else "hybrid"
+    label = {"points": "pts", "survival": "survival", "hybrid": "pts"}[mode]
+    lines = ["📊 WC26 Sweepstake — summary"]
+    board = (d.get("leaderboards") or {}).get(mode) or []
+    medals = ["🥇", "🥈", "🥉"]
+    for i, p in enumerate(board[:3]):
+        lines.append("%s %s — %s %s" % (medals[i], p.get("name", "?"), p.get(mode, 0), label))
+    if stats.get("teams_remaining") is not None:
+        lines.append("🛡️ Teams still in: %s" % stats["teams_remaining"])
+    if stats.get("top_team"):
+        lines.append("🔥 Top team: %s (%s) — %s goals" % (stats["top_team"], _owner_of(d, stats["top_team"]), stats.get("top_team_goals", 0)))
+    if stats.get("top_scorer_player"):
+        lines.append("⚽ Most goals: %s (%s)" % (stats["top_scorer_player"], stats.get("top_scorer_player_goals", 0)))
+    lines.append("📅 Played: %s · ⚽ %s goals (%s/game)" % (mp, stats.get("goals", 0), stats.get("goals_per_match", 0)))
+    if (stats.get("teams_remaining") or 0) <= 1:
+        champ = next((t for t in (d.get("teams") or []) if t.get("status") == "alive"), None)
+        if champ:
+            lines.append("🏆 Champions: %s (%s)" % (champ.get("name"), _owner_of(d, champ.get("name"))))
+    return lines
+
+
 def update_now(cfg):
     """Fetch results (if a token is set) and recompute the tracker."""
     if not os.path.exists("draw_result.json"):
@@ -644,6 +683,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/watch":   return self._file("watch.html")
         if path == "/api/live_state": return self._send(200, json.dumps(live_load()))
         if path == "/api/draw_result": return self._file("draw_result.json")
+        if path == "/api/summary":
+            return self._send(200, json.dumps({"ok": True, "lines": build_summary()}))
         if path == "/api/telegram_links":          # OPEN read: players self-subscribe, no admin key
             cfg = load_config()
             players = [(p if isinstance(p, str) else p.get("name", "")) for p in cfg.get("players", [])]
@@ -668,6 +709,7 @@ class Handler(BaseHTTPRequestHandler):
                 "vapid_public": (cfg.get("vapid_public") if push_enabled() else None),
                 "discord": bool(cfg.get("discord_webhook")),
                 "has_invite": bool(cfg.get("discord_invite")),
+                "invite": cfg.get("discord_invite", ""),
                 "site_url": cfg.get("site_url", "")}))
         return self._file(path.lstrip("/"))
 
@@ -848,6 +890,26 @@ class Handler(BaseHTTPRequestHandler):
             if not (load_config().get("discord_webhook") or "").startswith("https://"):
                 return self._send(400, json.dumps({"ok": False, "error": "Add a Discord webhook URL first."}))
             discord_send("✅ WC26 test — Discord alerts are working.")
+            return self._send(200, json.dumps({"ok": True}))
+        if path == "/api/discord_demo":
+            if not key_ok(body):
+                return self._send(403, json.dumps({"ok": False, "need_key": True}))
+            if not (load_config().get("discord_webhook") or "").startswith("https://"):
+                return self._send(400, json.dumps({"ok": False, "error": "Add a Discord webhook URL first."}))
+            for line in ["🔵 Kicked off — **Brazil** (demo) vs **Spain**",
+                         "⚽ **Brazil** (demo) scored — Brazil 1–0 Spain",
+                         "⚽ **Brazil** (demo) scored — Brazil 2–0 Spain",
+                         "❌ **Spain** (demo) is out.",
+                         "🏆 Demo over — that's what live alerts look like."]:
+                discord_send(line)
+                time.sleep(0.5)             # stay under Discord's webhook burst limit
+            return self._send(200, json.dumps({"ok": True}))
+        if path == "/api/discord_summary":
+            if not key_ok(body):
+                return self._send(403, json.dumps({"ok": False, "need_key": True}))
+            if not (load_config().get("discord_webhook") or "").startswith("https://"):
+                return self._send(400, json.dumps({"ok": False, "error": "Add a Discord webhook URL first."}))
+            discord_send("\n".join(build_summary()))
             return self._send(200, json.dumps({"ok": True}))
         if path == "/api/push_subscribe":          # OPEN: a player subscribes this device to push
             cfg = load_config()

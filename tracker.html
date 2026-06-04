@@ -261,6 +261,7 @@
         <p style="margin:0 0 8px;color:var(--muted);font-size:12.5px">• <b>Discord (group)</b> — paste a channel webhook and every kickoff / goal / knockout / lead change posts there. Most reliable on phones.</p>
         <input id="setDiscord" type="text" placeholder="https://discord.com/api/webhooks/…">
         <div class="row2" style="margin-top:6px"><button id="setSaveDiscord">Save webhook</button><button id="setTestDiscord" class="mini">Send Discord test</button></div>
+        <div class="row2" style="margin-top:6px"><button id="setDemoDiscord" class="mini">Demo a game in Discord</button><button id="setSummaryDiscord" class="mini">Post summary to Discord</button></div>
         <div class="hint" id="setDiscordMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
         <p style="margin:12px 0 6px;color:var(--muted);font-size:12.5px">• <b>Invite link</b> — paste your Discord server invite. Anyone using the site gets a “Join the group chat” button. To keep randoms out, lock it down in Discord itself (set the invite’s max-uses / expiry, or use “Invite Only”).</p>
         <input id="setInvite" type="text" placeholder="https://discord.gg/… (server invite)">
@@ -362,6 +363,21 @@ const SAMPLE = {"updated_at":"pre-tournament","competition":"WC","default_mode":
 let MODE="hybrid";
 const FLAGS={"France": "🇫🇷", "Spain": "🇪🇸", "Argentina": "🇦🇷", "Brazil": "🇧🇷", "Portugal": "🇵🇹", "Germany": "🇩🇪", "Netherlands": "🇳🇱", "Morocco": "🇲🇦", "Belgium": "🇧🇪", "Croatia": "🇭🇷", "Colombia": "🇨🇴", "USA": "🇺🇸", "Senegal": "🇸🇳", "Mexico": "🇲🇽", "Uruguay": "🇺🇾", "Japan": "🇯🇵", "Switzerland": "🇨🇭", "Turkey": "🇹🇷", "Ecuador": "🇪🇨", "Iran": "🇮🇷", "Norway": "🇳🇴", "Austria": "🇦🇹", "Korea Republic": "🇰🇷", "Australia": "🇦🇺", "Egypt": "🇪🇬", "Algeria": "🇩🇿", "Canada": "🇨🇦", "Ivory Coast": "🇨🇮", "Sweden": "🇸🇪", "Panama": "🇵🇦", "Paraguay": "🇵🇾", "Czech Republic": "🇨🇿", "Tunisia": "🇹🇳", "DR Congo": "🇨🇩", "Uzbekistan": "🇺🇿", "Qatar": "🇶🇦", "Iraq": "🇮🇶", "South Africa": "🇿🇦", "Saudi Arabia": "🇸🇦", "Bosnia & Herzegovina": "🇧🇦", "Jordan": "🇯🇴", "Cape Verde": "🇨🇻", "Ghana": "🇬🇭", "Curacao": "🇨🇼", "Haiti": "🇭🇹", "New Zealand": "🇳🇿", "Bosnia-Herzegovina": "🇧🇦", "Bosnia and Herzegovina": "🇧🇦", "Cote d'Ivoire": "🇨🇮", "Côte d'Ivoire": "🇨🇮", "South Korea": "🇰🇷", "United States": "🇺🇸", "Czechia": "🇨🇿", "Curaçao": "🇨🇼", "Cape Verde Islands": "🇨🇻", "Türkiye": "🇹🇷", "Turkiye": "🇹🇷", "Congo DR": "🇨🇩", "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "Scotland": "🏴󠁧󠁢󠁳󠁣󠁴󠁿"};
 function flag(n){const f=FLAGS[n];return f?f+" ":"";}
+function esc(s){return String(s==null?'':s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));}
+function ownerOf(d,team){ for(const p of (d.players||[])){ for(const t of (p.teams||[])){ if(t.name===team) return p.name; } } return '—'; }
+function summaryLines(d){
+  const st=d.stats||{}, mp=st.matches_played||0;
+  if(!mp) return ["Tournament hasn't kicked off yet — this fills in once games start (11 June)."];
+  const mode=(STATUS.scoring_mode||'hybrid'); const m=['points','survival','hybrid'].includes(mode)?mode:'hybrid';
+  const label=m==='survival'?'survival':'pts';
+  const board=(d.leaderboards||{})[m]||[]; const medals=['🥇','🥈','🥉']; const out=[];
+  board.slice(0,3).forEach((p,i)=>out.push(medals[i]+' '+p.name+' — '+(p[m]??0)+' '+label));
+  if(st.teams_remaining!=null) out.push('🛡️ Teams still in: '+st.teams_remaining);
+  if(st.top_team) out.push('🔥 Top team: '+st.top_team+' ('+ownerOf(d,st.top_team)+') — '+(st.top_team_goals||0)+' goals');
+  if(st.top_scorer_player) out.push('⚽ Most goals: '+st.top_scorer_player+' ('+(st.top_scorer_player_goals||0)+')');
+  out.push('📅 Played: '+mp+' · ⚽ '+(st.goals||0)+' goals ('+(st.goals_per_match||0)+'/game)');
+  return out;
+}
 let COMP={};
 let LBMODE=null;
 const TIER={1:cv('--t1'),2:cv('--t2'),3:cv('--t3'),4:cv('--t4')};
@@ -572,6 +588,12 @@ function renderOverview(d){
         ${multi?'<button class="warrow" id="winNext">›</button>':'<span></span>'}</div>
       ${s.team?`<div class="wbteam">${flag(s.team.t)}${s.team.t}</div><div class="wbsub">World Cup champion${s.team.o&&s.team.o!=='—'?' · owned by <b>'+s.team.o+'</b>':''}</div>`:''}
       <div class="wbwin">${s.player}<span style="color:var(--gold)"> · ${s.score}</span></div>${dots}</div>`;
+  }
+  // SUMMARY digest (mirrors the Discord 'post summary')
+  {
+    const sl=summaryLines(d);
+    html+='<div class="ovsec"><div class="ovh">📋 Summary</div><div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;line-height:1.7;font-size:13.5px">'
+      +sl.map(l=>'<div>'+esc(l)+'</div>').join('')+'</div></div>';
   }
   // LIVE NOW
   html+='<div class="ovsec"><div class="ovh">🔴 Live now</div>';
@@ -927,6 +949,16 @@ document.getElementById('setTestDiscord').onclick=async()=>{
     else m.textContent=j.error||'Could not send.';
   }catch(e){ m.textContent='Could not reach the server.'; }
 };
+async function discordAction(url, sending, ok){
+  const m=document.getElementById('setDiscordMsg'); m.textContent=sending;
+  try{ const j=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:ADMINKEY})}).then(r=>r.json());
+    if(j.ok) m.textContent=ok;
+    else if(j.need_key){ m.textContent='Session expired — reopen Settings and unlock again.'; ADMINKEY=''; }
+    else m.textContent=j.error||'Could not send.';
+  }catch(e){ m.textContent='Could not reach the server.'; }
+}
+document.getElementById('setDemoDiscord').onclick=()=>discordAction('/api/discord_demo','Posting demo…','Demo posted — check Discord (takes a few seconds).');
+document.getElementById('setSummaryDiscord').onclick=()=>discordAction('/api/discord_summary','Posting summary…','Summary posted to Discord.');
 function closeAlerts(){ document.getElementById('alertsModal').style.display='none'; }
 document.getElementById('alertsClose').onclick=closeAlerts;
 document.getElementById('alertsModal').onclick=e=>{ if(e.target.id==='alertsModal') closeAlerts(); };
@@ -974,7 +1006,7 @@ function renderAlerts(){
   if(STATUS.discord||STATUS.has_invite){
     h+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">';
     if(STATUS.discord) h+='<div style="color:var(--muted);font-size:12px;margin-bottom:8px">💬 Group alerts also post to the Discord channel.</div>';
-    if(STATUS.has_invite) h+='<button class="mini" id="alJoin">💬 Join the group chat</button><div class="hint" id="alJoinMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>';
+    if(STATUS.invite) h+='<a class="mini" id="alJoin" href="'+STATUS.invite+'" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none">💬 Join the group chat</a>';
     h+='</div>';
   }
   h+='<details style="margin-top:14px"><summary style="cursor:pointer;color:var(--t2);font-size:12.5px">How do I get alerts on my phone?</summary>'
@@ -984,12 +1016,7 @@ function renderAlerts(){
     +'<b>Or just join the Discord</b> with the button above — no install, works on any phone.</div></details>';
   h+='<div class="hint" id="alMsg" style="color:var(--muted);font-size:12px;margin-top:8px"></div>';
   body.innerHTML=h;
-  const join=document.getElementById('alJoin');
-  if(join) join.onclick=async()=>{ const jm=document.getElementById('alJoinMsg'); jm.textContent='Opening…';
-    try{ const j=await fetch('/api/discord_invite',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(r=>r.json());
-      if(j.ok&&j.invite){ jm.innerHTML='Opening Discord… if it doesn\'t open, <a href="'+j.invite+'" target="_blank" rel="noopener" style="color:var(--t2)">tap here</a>.'; window.open(j.invite,'_blank','noopener'); }
-      else jm.textContent=j.error||'No invite set yet.';
-    }catch(e){ jm.textContent='Could not reach the server.'; } };
+  const join=document.getElementById('alJoin');  // now a direct <a> link; no JS needed
   const sel=document.getElementById('alMe');
   if(sel) sel.onchange=async()=>{ localStorage.setItem('wc26_me',sel.value); NOTIFYSNAP=null;
     if(localStorage.getItem('wc26_push_on')==='1' && sel.value){ await pushSubscribe(sel.value); } renderAlerts(); };
