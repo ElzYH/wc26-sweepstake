@@ -116,7 +116,11 @@
   .badges{display:flex;gap:8px;flex-wrap:wrap}
   .badge{font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#0a1f15;border:1px solid var(--line);color:var(--muted)}
   .badge b{color:var(--ink);font-weight:700}.badge.live{border-color:var(--gold);color:var(--gold)}
-  .ctrls{margin-left:auto;display:flex;gap:8px}
+  .ctrls{margin-left:auto;display:flex;gap:8px;position:relative}
+  .menu{display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:30;flex-direction:column;gap:5px;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px;min-width:200px;box-shadow:0 14px 34px #0009}
+  .menu.open{display:flex}
+  .menu .mini{width:100%;text-align:left}
   .mini{font-family:'Sora';font-weight:700;font-size:12px;padding:7px 13px;border-radius:999px;cursor:pointer;background:#10301f;border:1px solid var(--line);color:var(--ink)}
   .mini:hover{background:#143a26}
   .panel{background:linear-gradient(180deg,var(--panel),#0a1e15);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-top:12px}
@@ -137,7 +141,23 @@
   .wp i{display:block}
   .wppct{display:flex;font-size:11px;color:var(--muted);margin:2px 4px 0}
   .wppct span{overflow:hidden;white-space:nowrap}
-  .winrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
+  .winrow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+  .wcard{background:#0a1f15;border:1px solid var(--line);border-radius:14px;padding:14px 10px;text-align:center}
+  .wcard .l{color:var(--muted);font-size:10px;letter-spacing:.06em;text-transform:uppercase;line-height:1.25}
+  .wcard .nm{font-family:'Anton';font-weight:400;font-size:21px;color:var(--ink);margin-top:7px;line-height:1}
+  .wcard .sc{font-family:'Sora';font-weight:700;font-size:12px;color:var(--gold);margin-top:4px}
+  .ovsec{margin-bottom:22px}
+  .ovh{font-family:'Anton';font-weight:400;font-size:18px;letter-spacing:.04em;text-transform:uppercase;margin:0 0 10px;color:var(--ink)}
+  .livegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:12px}
+  .livecard{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--live);border-radius:14px;
+    padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--live)}
+  .livedot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--live);margin-right:6px;animation:pulse 1.4s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .lmatch{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin-top:8px;
+    color:var(--ink);font-weight:600;font-size:14px;letter-spacing:0}
+  .lmatch small{display:block;color:var(--gold);font-size:10.5px;font-weight:600}
+  .lmatch .lr{text-align:right}
+  .lsc{font-family:'Anton';font-weight:400;font-size:22px;text-align:center;color:var(--gold)}
   .simh:hover{text-decoration:underline}
   @media(max-width:560px){
     body{padding:18px 13px 60px}
@@ -150,6 +170,14 @@
     .simwrap, #simBody{overflow-x:auto;-webkit-overflow-scrolling:touch}
     #simBody table{min-width:380px}
     .row{grid-template-columns:34px 1fr auto;gap:10px}
+    .statgrid{grid-template-columns:1fr 1fr;gap:8px}
+    .statcard{padding:10px 11px}
+    .statcard .v{font-size:19px}
+    .winrow{gap:7px}
+    .wcard{padding:12px 5px}
+    .wcard .nm{font-size:16px}
+    .wcard .l{font-size:9px}
+    .lmatch{font-size:13px}
   }
 </style>
 </head>
@@ -164,9 +192,12 @@
   <div class="subbar">
     <div class="badges" id="badges"></div>
     <div class="ctrls">
-      <button class="mini" id="refreshBtn">↻ Refresh now</button>
-      <button class="mini" id="helpBtn">What am I looking at?</button>
-      <button class="mini" id="setBtn">⚙ Settings</button>
+      <button class="mini" id="menuBtn">⋯ Menu</button>
+      <div class="menu" id="menuDrop">
+        <button class="mini" id="refreshBtn">↻ Refresh now</button>
+        <button class="mini" id="helpBtn">What am I looking at?</button>
+        <button class="mini" id="setBtn">⚙ Settings</button>
+      </div>
     </div>
   </div>
   <div class="panel" id="helpPanel" style="display:none">
@@ -222,7 +253,8 @@
   </div>
 
   <div class="tabs">
-    <div class="tab on" data-s="lb">Leaderboard</div>
+    <div class="tab on" data-s="overview">Overview</div>
+    <div class="tab" data-s="lb">Leaderboard</div>
     <div class="tab" data-s="players">Teams by player</div>
     <div class="tab" data-s="groups">Groups</div>
     <div class="tab" data-s="bracket">Bracket</div>
@@ -230,7 +262,9 @@
     <div class="tab" data-s="odds">Odds &amp; stats</div>
   </div>
 
-  <section class="on" id="lb">
+  <section class="on" id="overview"><div id="ovBody"></div></section>
+
+  <section id="lb">
     <div class="winrow" id="winrow"></div>
     <div class="modesel" id="modesel">
       <button data-m="points">Points</button>
@@ -286,7 +320,7 @@ async function load(){
        if(r.ok){ DATA=await r.json(); ok=!!(DATA&&DATA.players&&DATA.players.length); } }
   catch(e){ ok=false; }
   const gate=document.getElementById('gate'), tabs=document.querySelector('.tabs');
-  const secs=['lb','players','groups','bracket','fixtures','odds'];
+  const secs=['overview','lb','players','groups','bracket','fixtures','odds'];
   if(!ok){ gate.style.display='block'; tabs.style.display='none';
            secs.forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';}); return; }
   gate.style.display='none'; tabs.style.display='';
@@ -298,6 +332,7 @@ function render(d){
   document.getElementById('updated').textContent='Updated: '+fmtUpdated(d.updated_at);
   COMP={}; (d.groups||[]).forEach(g=>(g.table||[]).forEach(r=>COMP[r.team]=r.composite||0));
   renderWinners(d);
+  renderOverview(d);
   // leaderboard for the active mode
   MODE=d.default_mode||'hybrid';
   const lbm=LBMODE||MODE;
@@ -428,13 +463,40 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('section').forEach(x=>x.classList.remove('on'));
   t.classList.add('on');document.getElementById(t.dataset.s).classList.add('on');
 });
+(function(){ const mb=document.getElementById('menuBtn'), md=document.getElementById('menuDrop');
+  mb.onclick=e=>{ e.stopPropagation(); md.classList.toggle('open'); };
+  md.addEventListener('click',()=>md.classList.remove('open'));
+  document.addEventListener('click',e=>{ if(e.target!==mb && !md.contains(e.target)) md.classList.remove('open'); });
+})();
 document.querySelectorAll('#modesel button').forEach(b=>b.onclick=()=>{LBMODE=b.dataset.m;render(DATA);});
 
 function renderWinners(d){
   const lb=d.leaderboards||{}, done=(d.stats&&d.stats.teams_remaining<=1&&d.stats.matches_played>0);
   const cell=(label,mode,unit)=>{const w=(lb[mode]||[])[0];
-    return `<div class="statcard"><div class="l">${label} ${done?'WINNER 🏆':'LEADER'}</div><div class="v">${w?w.name:'—'} <small>${w?w.score+' '+unit:''}</small></div></div>`;};
+    return `<div class="wcard"><div class="l">${label}<br>${done?'WINNER 🏆':'LEADER'}</div><div class="nm">${w?w.name:'—'}</div><div class="sc">${w?w.score+' '+unit:''}</div></div>`;};
   document.getElementById('winrow').innerHTML=cell('POINTS','points','pts')+cell('SURVIVAL','survival','in')+cell('BOTH','hybrid','total');
+}
+function renderOverview(d){
+  const fx=d.fixtures||[], st=d.stats||{}, lb=d.leaderboards||{}, champ=d.champion||[];
+  const live=fx.filter(m=>['IN_PLAY','PAUSED','LIVE','SUSPENDED'].includes(m.status));
+  const own=o=>(o&&o!=='—'&&o!=='-')?`<small>${o}</small>`:'';
+  let html='<div class="ovsec"><div class="ovh">🔴 Live now</div>';
+  if(live.length){
+    html+='<div class="livegrid">'+live.map(m=>`<div class="livecard"><span class="livedot"></span>LIVE${m.stage&&m.stage!=='GROUP_STAGE'?' · '+(STAGE_LABEL[m.stage]||m.stage):''}
+      <div class="lmatch"><span>${flag(m.home)}${m.home}${own(m.homeOwner)}</span><span class="lsc">${m.homeScore??0}–${m.awayScore??0}</span><span class="lr">${flag(m.away)}${m.away}${own(m.awayOwner)}</span></div></div>`).join('')+'</div>';
+  } else {
+    html+='<div class="empty">No games in play right now — live scores appear here the moment a match kicks off.</div>';
+  }
+  html+='</div>';
+  const leader=(lb.hybrid||[])[0], cf=champ[0];
+  html+='<div class="ovsec"><div class="ovh">Season so far</div><div class="statgrid">'
+    +`<div class="statcard"><div class="l">CURRENT LEADER · BOTH</div><div class="v">${leader?leader.name:'—'} <small>${leader?leader.score+' total':''}</small></div></div>`
+    +`<div class="statcard"><div class="l">CHAMPION FRONTRUNNER</div><div class="v">${cf?cf.name:'—'} <small>${cf?cf.odds+'%':''}</small></div><div class="l">most likely to own the winner</div></div>`
+    +`<div class="statcard"><div class="l">TEAMS REMAINING</div><div class="v">${st.teams_remaining??'—'}<small> /48</small></div></div>`
+    +`<div class="statcard"><div class="l">MATCHES PLAYED</div><div class="v">${st.matches_played??0}</div></div>`
+    +`<div class="statcard"><div class="l">GOALS</div><div class="v">${st.goals??0}<small> · ${st.goals_per_match||0}/match</small></div></div>`
+    +'</div></div>';
+  document.getElementById('ovBody').innerHTML=html;
 }
 function renderOdds(d){
   const champ=d.champion||[], st=d.stats||{}, str=d.strength||[];
