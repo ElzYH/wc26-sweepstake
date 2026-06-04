@@ -45,6 +45,12 @@
   .chip .dot{width:9px;height:9px;border-radius:50%;flex:none}
   .chip .grp{margin-left:auto;color:var(--muted);font-size:10.5px;font-weight:700;letter-spacing:.06em}
   .empty{color:var(--muted);font-size:13px}
+  .orderlist{display:flex;flex-direction:column;gap:9px;max-width:460px}
+  .orow{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:13px 16px;font-size:17px;font-weight:700}
+  .orow.new{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset;animation:pop .5s ease}
+  .orow .onum{font-family:'Anton';font-weight:400;color:var(--gold);font-size:20px;min-width:26px}
+  .orow .oname{font-family:'Anton';font-weight:400;letter-spacing:.02em}
   @media(max-width:560px){ body{padding:18px 14px 50px} .grid{grid-template-columns:1fr} }
 </style>
 </head>
@@ -60,12 +66,26 @@
 <script>
 const $=id=>document.getElementById(id);
 const TIER={1:'#ffc83d',2:'#3dd9c9',3:'#5b8def',4:'#8a93a6'};
-let lastN=-1;
+let lastN=-1, lastOrderN=-1;
 function render(st){
+  const phase=st.phase||'idle';
   const picks=st.picks||[];
   let order=(st.order&&st.order.length)?st.order.slice():[];
+  const tag=$('tag'), status=$('status'), grid=$('grid');
+  // ---- order phase: deciding who picks when ----
+  if(phase==='order' && !st.done){
+    tag.textContent='Pick order'; tag.classList.remove('wait');
+    status.textContent='Deciding the pick order…';
+    grid.innerHTML='<div class="orderlist">'+(order.length?order.map((p,i)=>
+      `<div class="orow${(i===order.length-1 && order.length>lastOrderN && lastOrderN>=0)?' new':''}"><span class="onum">${i+1}</span><span class="oname">${p}</span></div>`).join('')
+      :'<span class="empty">waiting for the first pick…</span>')+'</div>';
+    if(order.length>lastOrderN && lastOrderN>=0){ const rev=$('reveal');
+      rev.innerHTML=`PICK #${order.length}<span class="arrow">▶</span><span class="who">${order[order.length-1]}</span>`; rev.classList.add('show'); }
+    lastOrderN=order.length; lastN=-1;
+    return;
+  }
+  // ---- teams / done / idle ----
   if(!order.length){ picks.forEach(p=>{ if(p.player&&!order.includes(p.player)) order.push(p.player); }); }
-  const tag=$('tag'), status=$('status');
   if(st.done){ tag.textContent='Complete'; tag.classList.remove('wait');
     status.innerHTML='Draw complete — <a href="/tracker">see the live tracker →</a>'; }
   else if(st.active||picks.length){ tag.textContent='Live'; tag.classList.remove('wait');
@@ -73,7 +93,7 @@ function render(st){
   else { tag.textContent='Waiting'; tag.classList.add('wait');
     status.textContent='Waiting for the host to start the draw…'; }
   const newest=(picks.length>lastN && lastN>=0)?picks.length-1:-1;
-  $('grid').innerHTML=order.map(p=>{
+  grid.innerHTML=order.map(p=>{
     const mine=[]; picks.forEach((x,i)=>{ if(x.player===p) mine.push({...x,i}); });
     const chips=mine.map(t=>`<div class="chip${t.i===newest?' new':''}"><span class="dot" style="background:${TIER[t.tier]||'#8a93a6'}"></span>${t.team||''}<span class="grp">GRP ${t.group||'?'}</span></div>`).join('');
     const n=mine.length;

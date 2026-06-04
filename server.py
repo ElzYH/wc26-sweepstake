@@ -27,10 +27,10 @@ def log(*a):
 
 _hits = defaultdict(list)
 _rl_lock = threading.Lock()
-def rate_ok(ip, limit, window=60):
+def rate_ok(key, limit, window=60):     # key is (ip, class) so endpoints don't share a bucket
     now = time.time()
     with _rl_lock:
-        q = _hits[ip]
+        q = _hits[key]
         while q and q[0] < now - window:
             q.pop(0)
         if len(q) >= limit:
@@ -45,7 +45,7 @@ import scoring as scoring_mod
 CONFIG = os.environ.get("WC26_CONFIG", "config.json")
 PORT = int(os.environ.get("PORT", "8000"))
 HOST = os.environ.get("HOST", "0.0.0.0")   # set HOST=127.0.0.1 when behind a reverse proxy
-STATIC = {"tracker.html", "wheel.html", "setup.html", "me.html",
+STATIC = {"tracker.html", "wheel.html", "setup.html", "me.html", "watch.html",
           "teams.json", "tracker_data.json", "draw_result.json"}
 _lock = threading.Lock()
 
@@ -87,9 +87,26 @@ def backup_data():
 
 def reset_draw():
     backup_draw()                       # keep a copy before wiping, so a re-draw is recoverable
-    for f in ("draw_result.json", "tracker_data.json", "results.json"):
+    for f in ("draw_result.json", "tracker_data.json", "results.json", LIVE_FILE):
         if os.path.exists(f):
             os.remove(f)
+
+
+LIVE_FILE = "live_draw.json"
+
+
+def live_load():
+    try:
+        with open(LIVE_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {"phase": "idle", "active": False, "done": False, "order": [], "picks": [], "updated": None}
+
+
+def live_save(state):
+    state["updated"] = time.time()
+    with open(LIVE_FILE, "w") as f:
+        json.dump(state, f)
 
 
 def build_draw_result(payload):
@@ -240,6 +257,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/tracker": return self._file("tracker.html")
         if path == "/wheel":   return self._file("wheel.html")
         if path == "/me":      return self._file("me.html")
+        if path == "/watch":   return self._file("watch.html")
+        if path == "/api/live_state": return self._send(200, json.dumps(live_load()))
         if path == "/api/draw_result": return self._file("draw_result.json")
         if path == "/api/status":
             cfg = load_config()
@@ -277,10 +296,15 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(body, dict):
             return self._send(400, json.dumps({"ok": False, "error": "bad request"}))
         ip = self.client_address[0]
-        strict = path in ("/api/setup", "/api/settings", "/api/redraw", "/api/save_draw", "/api/export", "/api/import")
-        if not rate_ok(ip, 10 if strict else 60):
+        if path == "/api/live_pick":
+            klass, limit = "live", 300          # turbo fires ~1/team in a burst; its own bucket
+        elif path in ("/api/setup", "/api/settings", "/api/redraw", "/api/save_draw", "/api/export", "/api/import"):
+            klass, limit = "strict", 10
+        else:
+            klass, limit = "norm", 60
+        if not rate_ok((ip, klass), limit):
             return self._send(429, json.dumps({"ok": False, "error": "too many requests — slow down"}))
-        if path not in ("/api/poll", "/api/status"):
+        if path not in ("/api/poll", "/api/status", "/api/live_pick"):
             log("POST", path, "from", ip)
         if path == "/api/setup":
             players = [str(p).strip()[:40] for p in body.get("players", []) if str(p).strip()]
@@ -394,6 +418,30 @@ class Handler(BaseHTTPRequestHandler):
             with _lock:
                 ok, err = update_now(cfg)
             return self._send(200 if ok else 500, json.dumps({"ok": ok, "error": err}))
+        if path == "/api/live_pick":
+            if not key_ok(body):
+                return self._send(403, json.dumps({"ok": False, "need_key": True}))
+            act = body.get("action")
+            with _lock:
+                st = live_load()
+                if act == "order_start":
+                    st = {"phase": "order", "active": True, "done": False, "order": [], "picks": [], "updated": None}
+                elif act == "order_pick":
+                    st["phase"] = "order"; st["active"] = True; st["done"] = False
+                    pl = body.get("player")
+                    if pl and pl not in st.get("order", []):
+                        st.setdefault("order", []).append(pl)
+                elif act == "reset":
+                    st = {"phase": "teams", "active": True, "done": False, "order": body.get("order", []),
+                          "picks": [], "updated": None}
+                elif act == "pick":
+                    st["phase"] = "teams"; st["active"] = True; st["done"] = False
+                    st.setdefault("picks", []).append({"player": body.get("player"), "team": body.get("team"),
+                                        "tier": body.get("tier"), "group": body.get("group")})
+                elif act == "done":
+                    st["done"] = True; st["active"] = False; st["phase"] = "done"
+                live_save(st)
+            return self._send(200, json.dumps({"ok": True}))
         if path == "/api/redraw":
             if draw_locked() and not key_ok(body):
                 return self._send(403, json.dumps({"ok": False, "need_key": True,

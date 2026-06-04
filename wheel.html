@@ -281,21 +281,27 @@ function pressEnd(){ if(!holding)return; holding=false; if(holdRAF)cancelAnimati
 function startOrder(){ phase='order';order=[];turnIdx=0;rotation=0;drawn=new Set();
   assignments={};players.forEach(p=>assignments[p]=[]);
   cvEl.style.transition='none';cvEl.style.transform='rotate(0deg)';
-  buildBoards(players); renderTeams(); redraw(); syncUI(); }
+  buildBoards(players); renderTeams(); liveSend({action:'order_start'}); redraw(); syncUI(); }
 function landOrder(p){ order.push(p);
   const rev=$('reveal');rev.innerHTML=`PICK #${order.length}<span class="arrow">▶</span><span class="who">${p}</span>`;rev.classList.add('show');
+  liveSend({action:'order_pick',player:p});
   redraw(); syncUI();
   if(order.length>=players.length){ setTimeout(startTeams, auto?gap():750); }
   else if(auto){ setTimeout(()=>{if(auto)beginSpin(rand(3,6),AUTO_DUR[speed]);},gap()); } }
+function liveSend(payload){ if(!isServer())return;
+  payload.admin_key=localStorage.getItem('wc26_admin_key')||'';
+  try{ fetch('/api/live_pick',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(()=>{}); }catch(e){} }
 function startTeams(){ phase='teams';turnIdx=0;rotation=0;
   if(mode==='fair')computeFair();
   buildBoards(order);                       // reorder boards to the pick order
   cvEl.style.transition='none';cvEl.style.transform='rotate(0deg)';$('reveal').classList.remove('show');
   auto=false;                 // pause here: don't auto-roll from the order draw into the team draw
+  liveSend({action:'reset',order:order.slice()});
   redraw(); syncUI(); }
 function landTeam(pick){
   const owner=order[turnIdx%order.length];
   drawn.add(pick.name);assignments[owner].push(pick);addChip(owner,pick);
+  liveSend({action:'pick',player:owner,team:pick.name,tier:pick.tier,group:pick.group});
   const rev=$('reveal');rev.innerHTML=`${pick.name}<span class="arrow">▶</span><span class="who">${owner}</span>`;rev.classList.add('show');
   turnIdx++; markTeam(pick.name,owner); drawTeamWheel(); syncUI();
   if(turnIdx>=inPlay){ finish(); return; }
@@ -319,6 +325,7 @@ function updateTeamSub(){ $('teamsub').textContent=`${drawn.size} drawn · ${tea
 
 /* ---------- finish + lock ---------- */
 async function finish(){ phase='done'; auto=false;
+  liveSend({action:'done'});
   const leftovers=wheelOrder.filter(t=>!drawn.has(t.name)), bonus=leftover==='pool'?leftovers:[];
   bonus.forEach(t=>{const el=$('rc_'+cssId(t.name));if(el)el.querySelector('.own').textContent='· bonus pool';});
   syncUI();
