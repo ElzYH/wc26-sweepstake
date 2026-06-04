@@ -259,7 +259,9 @@ def discord_send(text):
         payload = {"content": text[:1900]}
     try:
         data = json.dumps(payload).encode()
-        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+        req = urllib.request.Request(url, data=data, headers={
+            "Content-Type": "application/json",
+            "User-Agent": "WC26-Sweepstake/1.0 (+https://bbmsweepstake.co.uk)"})
         urllib.request.urlopen(req, timeout=8)
     except Exception as e:
         log("discord send failed:", e)
