@@ -667,7 +667,7 @@ class Handler(BaseHTTPRequestHandler):
                 "push_enabled": push_enabled(),
                 "vapid_public": (cfg.get("vapid_public") if push_enabled() else None),
                 "discord": bool(cfg.get("discord_webhook")),
-                "has_invite": bool(cfg.get("discord_invite") and cfg.get("join_code")),
+                "has_invite": bool(cfg.get("discord_invite")),
                 "site_url": cfg.get("site_url", "")}))
         return self._file(path.lstrip("/"))
 
@@ -835,16 +835,11 @@ class Handler(BaseHTTPRequestHandler):
                 backup_data()
             log("data imported:", len(cfg.get("players", [])), "players, ok", ok, err or "")
             return self._send(200 if ok else 500, json.dumps({"ok": ok, "error": err}))
-        if path == "/api/discord_invite":          # OPEN but code-gated: reveal invite only on correct code
-            import hmac
-            cfg = load_config()
-            invite, code = cfg.get("discord_invite") or "", cfg.get("join_code") or ""
-            if not invite or not code:
+        if path == "/api/discord_invite":          # OPEN: anyone on the site can get the invite link
+            invite = (load_config().get("discord_invite") or "").strip()
+            if not invite:
                 return self._send(404, json.dumps({"ok": False, "error": "no invite set"}))
-            given = str(body.get("code", ""))
-            if given and hmac.compare_digest(given, code):
-                return self._send(200, json.dumps({"ok": True, "invite": invite}))
-            return self._send(200, json.dumps({"ok": False, "error": "wrong code"}))
+            return self._send(200, json.dumps({"ok": True, "invite": invite}))
         if path == "/api/check_key":
             return self._send(200, json.dumps({"ok": key_ok(body)}))
         if path == "/api/discord_test":
