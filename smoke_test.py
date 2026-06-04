@@ -106,7 +106,8 @@ def run():
         j = json.loads(body)
         check("status exposes push_enabled flag", "push_enabled" in j, body[:160])
         check("status exposes discord flag", "discord" in j, body[:160])
-        check("push disabled w/o pywebpush (vapid_public null)", j.get("vapid_public") in (None, ""), str(j.get("vapid_public")))
+        check("push flags consistent (enabled iff vapid_public set)",
+              bool(j.get("push_enabled")) == bool(j.get("vapid_public")), body[:160])
         st, body = req("POST", "/api/discord_test", {"admin_key": "wrong"})
         check("discord_test needs admin key (403)", st == 403, str(st))
         st, body = req("POST", "/api/push_subscribe", {"player": "Nobody", "subscription": {"endpoint": "x"}})

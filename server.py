@@ -248,11 +248,17 @@ def bot_username():
 
 # ---------------- Discord webhook (Path B) — pure stdlib, group channel ----------------
 def discord_send(text):
-    url = (load_config().get("discord_webhook") or "").strip()
+    cfg = load_config()
+    url = (cfg.get("discord_webhook") or "").strip()
     if not url.startswith("https://"):
         return
+    site = (cfg.get("site_url") or "").strip()
+    if site.startswith("https://"):
+        payload = {"embeds": [{"description": "%s\n[📊 Open the tracker](%s)" % (text[:1800], site), "color": 0x2ecc71}]}
+    else:
+        payload = {"content": text[:1900]}
     try:
-        data = json.dumps({"content": text[:1900]}).encode()
+        data = json.dumps(payload).encode()
         req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
         urllib.request.urlopen(req, timeout=8)
     except Exception as e:
@@ -317,12 +323,31 @@ def _entry_endpoint(e):
     return (_entry_sub(e) or {}).get("endpoint")
 
 
+_VAPID_CACHE = {"pem": None, "obj": None}
+
+
+def _vapid_key():
+    """Return a py_vapid key object built from our stored PEM.
+
+    pywebpush mis-parses a PEM *string*, so we load it with cryptography and hand
+    over a Vapid object, which it accepts directly.
+    """
+    pem = load_config().get("vapid_private")
+    if not pem:
+        return None
+    if _VAPID_CACHE["pem"] != pem or _VAPID_CACHE["obj"] is None:
+        from py_vapid import Vapid01
+        key = serialization.load_pem_private_key(pem.encode() if isinstance(pem, str) else pem, password=None)
+        _VAPID_CACHE["pem"], _VAPID_CACHE["obj"] = pem, Vapid01(private_key=key)
+    return _VAPID_CACHE["obj"]
+
+
 def _webpush_one(sub, title, body):
     """Send one push. Returns True to keep the subscription, False if it's dead (expired)."""
     cfg = load_config()
     try:
         webpush(subscription_info=sub, data=json.dumps({"title": title, "body": body}),
-                vapid_private_key=cfg.get("vapid_private"),
+                vapid_private_key=_vapid_key(),
                 vapid_claims={"sub": cfg.get("vapid_sub", "mailto:admin@bbmsweepstake.co.uk")})
         return True
     except WebPushException as e:
@@ -640,7 +665,8 @@ class Handler(BaseHTTPRequestHandler):
                 "push_enabled": push_enabled(),
                 "vapid_public": (cfg.get("vapid_public") if push_enabled() else None),
                 "discord": bool(cfg.get("discord_webhook")),
-                "has_invite": bool(cfg.get("discord_invite") and cfg.get("join_code"))}))
+                "has_invite": bool(cfg.get("discord_invite") and cfg.get("join_code")),
+                "site_url": cfg.get("site_url", "")}))
         return self._file(path.lstrip("/"))
 
     def do_POST(self):
@@ -754,6 +780,9 @@ class Handler(BaseHTTPRequestHandler):
                 cfg["discord_invite"] = inv if (inv == "" or inv.startswith("https://")) else cfg.get("discord_invite", "")
             if "join_code" in body:
                 cfg["join_code"] = str(body["join_code"]).strip()[:60]
+            if "site_url" in body:
+                s = str(body["site_url"]).strip().rstrip("/")
+                cfg["site_url"] = s if (s == "" or s.startswith("https://")) else cfg.get("site_url", "")
             if body.get("vapid_sub"):
                 cfg["vapid_sub"] = str(body["vapid_sub"]).strip()[:120]
             with _lock:

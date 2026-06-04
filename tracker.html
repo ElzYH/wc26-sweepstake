@@ -267,6 +267,10 @@
         <input id="setJoinCode" type="text" placeholder="join code (share this privately, e.g. NORTHBANK)" style="margin-top:6px">
         <div class="row2" style="margin-top:6px"><button id="setSaveInvite">Save invite + code</button></div>
         <div class="hint" id="setInviteMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
+        <p style="margin:12px 0 6px;color:var(--muted);font-size:12.5px">• <b>Tracker link</b> — your site address, added as a clickable “Open the tracker” link on every Discord alert.</p>
+        <input id="setSite" type="text" placeholder="https://bbmsweepstake.co.uk">
+        <div class="row2" style="margin-top:6px"><button id="setSaveSite">Save link</button></div>
+        <div class="hint" id="setSiteMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
       </div>
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
         <p style="margin:0 0 8px"><b>Backup &amp; restore.</b> Download your draw + results so nothing is ever lost — and restore it on this or a fresh server.</p>
@@ -849,6 +853,7 @@ async function refreshStatus(){
   const dw=document.getElementById('setDiscord'); if(dw && STATUS.discord) dw.placeholder='webhook saved ✅ (paste to replace, or clear to remove)';
   if(STATUS.has_invite){ const iv=document.getElementById('setInvite'), jc=document.getElementById('setJoinCode');
     if(iv) iv.placeholder='invite saved ✅ (paste to replace)'; if(jc) jc.placeholder='code saved ✅ (type to replace)'; }
+  const su=document.getElementById('setSite'); if(su && STATUS.site_url) su.value=STATUS.site_url;
 }
 document.getElementById('helpBtn').onclick=()=>{const p=document.getElementById('helpPanel');p.style.display=p.style.display==='none'?'block':'none';};
 document.getElementById('refreshBtn').onclick=async()=>{
@@ -896,6 +901,16 @@ document.getElementById('setSaveDiscord').onclick=async()=>{
     else m.textContent=j.error||'Could not save.';
   }catch(e){ m.textContent='Could not reach the server.'; }
 };
+document.getElementById('setSaveSite').onclick=async()=>{
+  const m=document.getElementById('setSiteMsg'); const s=document.getElementById('setSite').value.trim();
+  if(s && !s.startsWith('https://')){ m.textContent='Must start with https:// .'; return; }
+  m.textContent='Saving…';
+  try{ const j=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({site_url:s,admin_key:ADMINKEY})}).then(r=>r.json());
+    if(j.ok){ m.textContent='Saved — Discord alerts now link to the tracker.'; refreshStatus(); }
+    else if(j.need_key){ m.textContent='Session expired — reopen Settings and unlock again.'; ADMINKEY=''; }
+    else m.textContent=j.error||'Could not save.';
+  }catch(e){ m.textContent='Could not reach the server.'; }
+};
 document.getElementById('setSaveInvite').onclick=async()=>{
   const m=document.getElementById('setInviteMsg'); const inv=document.getElementById('setInvite').value.trim(); const code=document.getElementById('setJoinCode').value.trim();
   if(inv && !inv.startsWith('https://')){ m.textContent='Invite must start with https:// .'; return; }
@@ -937,7 +952,7 @@ function renderAlerts(){
       h+='<div style="background:#10240f;border:1px solid var(--line);border-radius:12px;padding:12px;font-size:13px;color:var(--ink)">📱 <b>On iPhone/iPad:</b> tap the <b>Share</b> icon, choose <b>Add to Home Screen</b>, then open the app from your Home Screen and come back here to switch on alerts.<div style="color:var(--muted);font-size:11.5px;margin-top:6px">Apple only allows alerts for web apps added to the Home Screen.</div></div>';
     } else if(pushOn){
       h+='<div style="color:var(--t2);font-size:13px">✅ Alerts are on for this device — they arrive even when the app is closed'+(me?', <b>'+me+'</b>':'')+'.</div>';
-      h+='<div class="row2" style="margin-top:10px"><button class="mini" id="alPushTest">Send a test</button><button class="mini" id="alPushOff">🔕 Turn off on this device</button></div>';
+      h+='<div class="row2" style="margin-top:10px"><button class="mini" id="alPushTest">Send a test</button><button class="mini" id="alDemo">Demo a live game</button><button class="mini" id="alPushOff">🔕 Turn off on this device</button></div>';
     } else {
       h+='<button id="alPushOn">Turn on alerts on this device</button>';
       h+='<div style="color:var(--muted);font-size:11.5px;margin-top:6px">Works even when the app is closed.</div>';
