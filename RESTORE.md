@@ -78,13 +78,52 @@ sudo grep -o '"admin_key": *"[^"]*"' /opt/wc26/sites/$INST/config.json
 ```
 Then open `/setup`, enter that key, and run the new draw.
 
-## Provision a NEW instance (e.g. start brothers/extra)
+## Provision a NEW instance / subdomain from scratch
+Run a whole separate sweepstake on its own subdomain (e.g. `brothers.bbmsweepstake.co.uk`).
+Pick a short instance name and a free port (mandem=8001, brothers=8002, family=8003, extra=8004 — use the next free number for new ones, e.g. 8005).
 ```bash
-INST=brothers   # already has env + dir from initial setup; for a brand-new name, create /etc/wc26/$INST.env and the dir first
-sudo ln -sf /opt/wc26/repo/teams.json /opt/wc26/sites/$INST/teams.json   # REQUIRED, or the draw crashes
+INST=brothers; PORT=8002        # <-- change these two
+
+# 1) data dir + env file
+sudo mkdir -p /opt/wc26/sites/$INST/backups
+sudo tee /etc/wc26/$INST.env >/dev/null <<EOF
+WC26_CONFIG=/opt/wc26/sites/$INST/config.json
+WC26_DATA=/opt/wc26/sites/$INST
+PORT=$PORT
+HOST=127.0.0.1
+FOOTBALL_DATA_TOKEN=
+EOF
+
+# 2) teams.json symlink (MANDATORY — draw crashes without it)
+sudo ln -sf /opt/wc26/repo/teams.json /opt/wc26/sites/$INST/teams.json
+sudo chown -R wc26:wc26 /opt/wc26/sites/$INST
+sudo chown -h wc26:wc26 /opt/wc26/sites/$INST/teams.json
+
+# 3) start the service
+sudo systemctl enable --now wc26@$INST
+systemctl is-active wc26@$INST
+
+# 4) grab the auto-generated admin key for this instance
+sudo grep -o '"admin_key": *"[^"]*"' /opt/wc26/sites/$INST/config.json
+```
+**5) DNS:** in Squarespace DNS add an **A record**: host `brothers` → the reserved IP `145.241.215.63`.
+
+**6) Caddy:** add a block to `/etc/caddy/Caddyfile` (Caddy auto-issues HTTPS):
+```
+brothers.bbmsweepstake.co.uk {
+    reverse_proxy 127.0.0.1:8002
+}
+```
+then `sudo systemctl reload caddy`.
+
+**7)** Open `https://brothers.bbmsweepstake.co.uk/setup`, enter the admin key from step 4, add the players, and run the draw. Each subdomain is fully independent — its own players, draw, token, admin key, Discord webhook/bot, and push subscribers.
+
+### Re-provision an instance that already has an env + dir
+```bash
+INST=brothers
+sudo ln -sf /opt/wc26/repo/teams.json /opt/wc26/sites/$INST/teams.json   # REQUIRED
 sudo chown -h wc26:wc26 /opt/wc26/sites/$INST/teams.json
 sudo systemctl enable --now wc26@$INST
-# add a Caddy block for $INST.bbmsweepstake.co.uk + a DNS A record, then: sudo systemctl reload caddy
 ```
 **The teams.json symlink is mandatory for every instance** — without it the draw save crashes (the server runs from the data dir and can't find the shipped teams.json).
 
@@ -106,3 +145,56 @@ sudo journalctl -u wc26@mandem -f          # live tail (setup saves, draw locks,
 systemctl is-active wc26@mandem caddy      # quick up/down check
 sudo systemctl list-timers wc26-backup.timer   # confirm hourly backup is scheduled
 ```
+
+## Features & integrations (config keys)
+All of these live in `sites/<inst>/config.json` (mode 600). **A re-run of `/setup` preserves every one of them** — Setup only rewrites the player/draw fields, so the Discord webhook, bot, push keys and tracker link survive. Setup does reset the draw itself.
+
+| Key | What it does |
+|---|---|
+| `admin_key` | unlocks Setup / Settings / draw lock / bot registration |
+| `token` / `FOOTBALL_DATA_TOKEN` | football-data.org API token for live scores |
+| `poll_minutes` | how often to fetch scores. **On the €12 live plan set this to 1.** |
+| `discord_webhook` | channel webhook — every kickoff/goal/knockout/lead change/champion posts here |
+| `discord_invite` | invite link shown behind the in-app "Join the Discord" button |
+| `site_url` | the public tracker URL, embedded in Discord posts |
+| `vapid_private` / `vapid_public` | auto-generated Web Push keys (native phone notifications) |
+| `discord_app_id` | bot Application ID (public) |
+| `discord_pubkey` | bot Public Key (public) — verifies incoming slash commands |
+| `discord_guild_id` | server ID for instant command registration (optional) |
+| `discord_bot_token` | **secret** — never paste in chat/logs; used only to register commands |
+
+### Notifications
+- **Two channels:** Discord webhook (works for everyone in the channel) and native **Web Push** (per phone).
+- Web Push needs `pywebpush` on the box: `sudo pip3 install pywebpush --break-system-packages`. The log prints `Web Push: ENABLED` when it's working.
+- **iPhone:** native push only works if the user **Adds the site to their Home Screen** (Share → Add to Home Screen) and opens it from that icon — Safari tabs can't receive push. The in-app 🔔 modal explains this.
+- Discord webhook posts **must** send a custom `User-Agent` header (Cloudflare 403s the default Python one) — already handled in `discord_send`.
+
+### Discord bot (read-only slash commands)
+- Commands: `/help /summary /leaderboard /groups /odds /stats /fixtures /myteams <player> /players /team <name>`. All read-only; nothing can change the draw from Discord.
+- **Interactions endpoint** (set in the Discord Developer Portal → your app → General → Interactions Endpoint URL):
+  `https://<subdomain>.bbmsweepstake.co.uk/api/discord_interactions`
+- Register/refresh commands after setting App ID + Bot token in Settings → **Register commands** (or `POST /api/register_commands` with the admin key). Guild registration is instant; global can take ~1h.
+
+### Server-side auto-draw
+- On `/wheel`, **Run draw on the server** computes + reveals the draw on the server and writes the live state, so it keeps going even if the host closes the tab. Everyone follows on `/watch`; it locks the draw + recomputes when done.
+- A redraw/reset bumps an internal generation counter so any running reveal stops cleanly.
+
+### Live (paid) tier — what €12 gives
+- **Live (real-time) scores** (free tier delays them) + **20 calls/min** (free = 10). Set `poll_minutes = 1`.
+- The live **match minute** now shows in the Overview "LIVE" cards and `/fixtures`.
+- **Goal scorers / goal minute are NOT in the €12 tier** — they need the €29 deep-data pack. Not enabled.
+
+## Pre-kickoff dry-run (do this before 11 June)
+1. **Reset** the instance (Reset section above) or just `/setup` a throwaway set of players.
+2. **Draw:** open `/wheel`, unlock, hit **Run draw on the server** → confirm it reveals on `/watch` and locks.
+3. **Tracker:** `/tracker` shows groups with owners, the 📋 summary, and (pre-tournament) 0-0-0 tables.
+4. **Alerts:** on a phone, add to Home Screen, open it, 🔔 → pick your name → enable. Tap **Send test** → confirm it arrives. Post a Discord **Demo a live game** from Settings → confirm it lands in the channel.
+5. **Bot:** in Discord type `/summary`, `/groups`, `/fixtures` → confirm replies.
+6. **Clean up:** Reset the instance so it's empty for the real players, then re-run Setup for real.
+
+## Local pre-deploy gate
+On the Mac, from the repo root, before every push:
+```bash
+bash check.sh && git push
+```
+`check.sh` runs Python syntax, inline-JS `node --check`, CSS brace balance, the scoring unit tests, the **bot command tests** (`test_bot.py`), and the live smoke/security tests. If it doesn't say "ALL CHECKS PASSED", don't deploy.

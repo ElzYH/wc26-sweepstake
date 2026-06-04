@@ -80,9 +80,11 @@
   /* fixtures */
   .fx{display:flex;flex-direction:column;gap:8px}
   .day{font-family:'Anton';font-weight:400;color:var(--muted);letter-spacing:.06em;margin:14px 0 4px;font-size:14px;text-transform:uppercase}
-  .match{display:grid;grid-template-columns:78px 1fr 70px 1fr;align-items:center;gap:10px;
+  .match{display:grid;grid-template-columns:1fr 70px 1fr;align-items:center;gap:10px;
     background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);
     border-radius:12px;padding:10px 14px}
+  .mstage{text-align:center;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:0 0 4px}
+  .mmid{text-align:center}
   .match .t{font-size:14px}.match .t .o{display:block;color:var(--gold);font-size:10.5px}
   .match .away{text-align:right}.match .away .o{text-align:right}
   .match .sc{text-align:center;font-family:'Anton';font-size:20px}
@@ -186,7 +188,7 @@
     .tabs .tab{padding:7px 12px;font-size:13px}
     th,td{padding:6px 7px;font-size:11.5px}
     caption{font-size:15px;padding:10px 12px 5px}
-    .match{grid-template-columns:52px 1fr 44px 1fr;gap:7px;padding:9px 11px}
+    .match{grid-template-columns:1fr 44px 1fr;gap:7px;padding:9px 11px}
     .match .t{font-size:12.5px} .match .sc{font-size:17px} .match .time{font-size:11px}
     .simwrap, #simBody{overflow-x:auto;-webkit-overflow-scrolling:touch}
     #simBody table{min-width:380px}
@@ -540,11 +542,10 @@ function matchRow(m){
   const score=(done||live)?`${m.homeScore??0}–${m.awayScore??0}`:'v';
   const mid=live?`<span class="live">● LIVE</span>`:(done?`<div class="sc">${score}</div>`:`<div class="time">${fmtTime(m.utcDate)}</div>`);
   const grp=(m.group||'').replace('GROUP_','').trim();
-  const left=m.stage!=='GROUP_STAGE'?`<div class="stagetag">${STAGE_LABEL[m.stage]||m.stage}</div>`:(grp?`<div class="stagetag">Group ${grp}</div>`:'');
-  return `<div><div class="match">
-    <div>${left}</div>
+  const left=m.stage!=='GROUP_STAGE'?`${STAGE_LABEL[m.stage]||m.stage}`:(grp?`Group ${grp}`:'');
+  return `<div>${left?`<div class="mstage">${left}</div>`:''}<div class="match">
     <div class="t home">${flag(m.home)}${m.home||'TBD'}<span class="o">${m.homeOwner||''}</span></div>
-    <div>${live?`<div class="sc">${score}</div>`+mid:mid}</div>
+    <div class="mmid">${live?`<div class="sc">${score}</div>`+mid:mid}</div>
     <div class="t away">${flag(m.away)}${m.away||'TBD'}<span class="o">${m.awayOwner||''}</span></div>
   </div>${wpBar3(m,live)}</div>`;
 }

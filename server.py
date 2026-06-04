@@ -594,9 +594,13 @@ def discord_command(name, opts):
         return ("**WC26 bot commands**\n"
                 "/leaderboard - top of the table\n"
                 "/summary - current standings digest\n"
+                "/groups - all 12 group tables with owners\n"
                 "/odds - who's most likely to win\n"
+                "/stats - fun stats (top team, favourite, dark horse…)\n"
                 "/fixtures - live and upcoming games\n"
                 "/myteams <player> - that player's teams\n"
+                "/players - everyone's team counts\n"
+                "/team <name> - look up one team (owner, group, points)\n"
                 "/help - this list")
     if name == "summary":
         return "\n".join(build_summary())
@@ -643,6 +647,62 @@ def discord_command(name, opts):
         for t in (pl.get("teams") or []):
             body.append(("✅ " if t.get("status") == "alive" else "❌ ") + str(t.get("name")))
         return "\n".join(body)
+    if name == "groups":
+        groups = d.get("groups") or []
+        if not groups:
+            return "No group tables yet."
+        out = ["**Groups**"]
+        for g in groups:
+            out.append("__Group %s__" % g.get("group"))
+            for r in g.get("table", []):
+                out.append("%d. %s — %s pts (%s)" % (r.get("position", 0), r.get("team"),
+                                                     r.get("points", 0), r.get("owner", "—")))
+        txt = "\n".join(out)
+        return txt[:1900] + ("\n…(open the tracker for the full tables)" if len(txt) > 1900 else "")
+    if name == "stats":
+        s = d.get("stats") or {}
+        if not s:
+            return "No stats yet — they fill in once games are played."
+        out = ["**Fun stats**", "Teams still in: %s" % s.get("teams_remaining", "—")]
+        if s.get("top_team"):
+            out.append("🔥 Top team: %s (%s) — %s goals" % (s["top_team"], _owner_of(d, s["top_team"]) or "—",
+                                                            s.get("top_team_goals", 0)))
+        if s.get("top_scorer_player"):
+            out.append("⚽ Most goals: %s — %s" % (s["top_scorer_player"], s.get("top_scorer_player_goals", 0)))
+        if s.get("favourite_team"):
+            out.append("⭐ Favourite: %s (%s) — %s%% to win" % (s["favourite_team"], s.get("favourite_owner", "—"),
+                                                               s.get("favourite_odds", 0)))
+        if s.get("dark_horse"):
+            out.append("🐎 Dark horse: %s (%s) — %s%%" % (s["dark_horse"], s.get("dark_horse_owner", "—"),
+                                                          s.get("dark_horse_odds", 0)))
+        if s.get("most_favourites_player"):
+            out.append("👑 Most top-tier teams: %s (%s)" % (s["most_favourites_player"], s.get("most_favourites", 0)))
+        out.append("📅 Played: %s · ⚽ %s goals (%s/game)" % (s.get("matches_played", 0), s.get("goals", 0),
+                                                            s.get("goals_per_match", 0)))
+        return "\n".join(out)
+    if name == "players":
+        pls = d.get("players") or []
+        if not pls:
+            return "No players yet — run the draw first."
+        out = ["**Players**"]
+        for p in sorted(pls, key=lambda p: -(p.get(mode, 0))):
+            out.append("%s — %s %s · %s/%s teams in" % (p.get("name"), p.get(mode, 0), label,
+                                                        p.get("alive_teams", 0), p.get("total_teams", 0)))
+        return "\n".join(out)
+    if name == "team":
+        q = str(opts.get("name", "")).strip().lower()
+        if not q:
+            return "Give a team name, e.g. /team Brazil."
+        for p in (d.get("players") or []):
+            for t in (p.get("teams") or []):
+                if str(t.get("name", "")).lower() == q:
+                    alive = t.get("status") == "alive"
+                    return ("**%s** — owned by %s\n"
+                            "Group %s · Tier %s · %s pts · record %s\n"
+                            "%s") % (t.get("name"), p.get("name"), t.get("group", "?"),
+                                     t.get("tier", "?"), t.get("points", 0), t.get("record", "0-0-0"),
+                                     "✅ still in" if alive else "❌ knocked out")
+        return "No team called that in the draw. Try /groups to see the names."
     return "Unknown command."
 
 
@@ -658,10 +718,15 @@ def register_discord_commands():
         {"name": "help", "description": "List the available commands", "type": 1},
         {"name": "summary", "description": "Current sweepstake summary", "type": 1},
         {"name": "leaderboard", "description": "Top of the table", "type": 1},
+        {"name": "groups", "description": "All 12 group tables with owners", "type": 1},
         {"name": "odds", "description": "Who's most likely to win", "type": 1},
+        {"name": "stats", "description": "Fun stats: top team, favourite, dark horse", "type": 1},
         {"name": "fixtures", "description": "Live and upcoming games", "type": 1},
         {"name": "myteams", "description": "A player's teams", "type": 1,
          "options": [{"name": "player", "description": "Player name", "type": 3, "required": True}]},
+        {"name": "players", "description": "Every player and how many teams are still in", "type": 1},
+        {"name": "team", "description": "Look up a team's owner, group and points", "type": 1,
+         "options": [{"name": "name", "description": "Team name, e.g. Brazil", "type": 3, "required": True}]},
     ]
     base = "https://discord.com/api/v10/applications/%s" % app_id
     url = (base + "/guilds/%s/commands" % guild) if guild else (base + "/commands")
