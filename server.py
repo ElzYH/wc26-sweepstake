@@ -73,6 +73,9 @@ def backup_draw():
         try:
             os.makedirs("backups/draws", exist_ok=True)
             shutil.copy2("draw_result.json", f"backups/draws/draw-{time.strftime('%Y%m%d-%H%M%S')}.json")
+            snaps = sorted(f for f in os.listdir("backups/draws") if f.startswith("draw-"))
+            for old in snaps[:-20]:                 # keep only the 20 most recent draw snapshots
+                os.remove(os.path.join("backups/draws", old))
         except OSError:
             pass
 
@@ -334,8 +337,13 @@ def update_now(cfg):
         scoring_mod.compute(out="tracker_data.json", default_mode=cfg.get("scoring_mode", "hybrid"))
         cfg["last_update"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         save_config(cfg)
-        notify_changes(old_snapshot)        # append history + Telegram pings
+        notify_changes(old_snapshot)        # personalised alerts (if any subscribers)
         backup_data()
+        try:
+            td = _load_tracker() or {}
+            log("recomputed:", (td.get("stats") or {}).get("matches_played", 0), "matches played")
+        except Exception:
+            pass
         return True, None
     except Exception as e:
         if os.path.exists("results.tmp.json"):
@@ -407,7 +415,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/draw_result": return self._file("draw_result.json")
         if path == "/api/telegram_links":          # OPEN read: players self-subscribe, no admin key
             cfg = load_config()
-            players = [p["name"] for p in cfg.get("players", [])]
+            players = [(p if isinstance(p, str) else p.get("name", "")) for p in cfg.get("players", [])]
             subs = _load_subs()
             return self._send(200, json.dumps({"ok": True,
                 "configured": bool(_tg_token()), "bot_username": bot_username(),
@@ -461,11 +469,16 @@ class Handler(BaseHTTPRequestHandler):
         if path not in ("/api/poll", "/api/status", "/api/live_pick"):
             log("POST", path, "from", ip)
         if path == "/api/setup":
-            players = [str(p).strip()[:40] for p in body.get("players", []) if str(p).strip()]
+            def _clean_name(x):
+                s = "".join(c for c in str(x) if c.isprintable() and c not in "<>")
+                return s.strip()[:40]
+            players = [_clean_name(p) for p in body.get("players", []) if _clean_name(p)]
             if len(players) < 2:
                 return self._send(400, json.dumps({"ok": False, "error": "need at least 2 players"}))
             if len(players) > 32:
                 return self._send(400, json.dumps({"ok": False, "error": "max 32 players"}))
+            if len(set(players)) != len(players):
+                return self._send(400, json.dumps({"ok": False, "error": "player names must be unique"}))
             cfg = load_config()
             cfg.update({
                 "players": players,
@@ -528,6 +541,8 @@ class Handler(BaseHTTPRequestHandler):
             with _lock:
                 save_config(cfg)
                 ok, err = update_now(cfg)
+            log("settings updated: comp", cfg.get("competition"), "poll", cfg.get("poll_minutes"),
+                "token" if cfg.get("token") else "no-token")
             return self._send(200 if ok else 500, json.dumps({"ok": ok, "error": err}))
         if path == "/api/export":
             if draw_locked() and not key_ok(body):
@@ -569,6 +584,7 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception as e:
                     ok, err = False, str(e)
                 backup_data()
+            log("data imported:", len(cfg.get("players", [])), "players, ok", ok, err or "")
             return self._send(200 if ok else 500, json.dumps({"ok": ok, "error": err}))
         if path == "/api/check_key":
             return self._send(200, json.dumps({"ok": key_ok(body)}))
@@ -579,7 +595,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, json.dumps({"ok": True}))
         if path == "/api/telegram_subscribe":      # OPEN: link the chat that sent /start <code>
             cfg = load_config()
-            players = [p["name"] for p in cfg.get("players", [])]
+            players = [(p if isinstance(p, str) else p.get("name", "")) for p in cfg.get("players", [])]
             code = str(body.get("code", "")).strip()
             if not code.startswith("p") or not code[1:].isdigit() or int(code[1:]) >= len(players):
                 return self._send(400, json.dumps({"ok": False, "error": "bad code"}))
@@ -651,6 +667,7 @@ class Handler(BaseHTTPRequestHandler):
                     "error": "Enter the admin key to reset the locked draw."}))
             with _lock:
                 reset_draw()
+            log("draw reset (redraw)")
             return self._send(200, json.dumps({"ok": True}))
         return self._send(404, json.dumps({"ok": False, "error": "unknown route"}))
 

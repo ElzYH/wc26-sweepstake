@@ -608,7 +608,7 @@ function winOddsRows(d,mode){
   if(done){
     const lbk = mode==='pts'?'points':(mode==='both'?'hybrid':'survival');
     const rows=(d.leaderboards||{})[lbk]||[]; const max=Math.max(1,...rows.map(r=>r.score||0));
-    return '<div style="color:var(--muted);font-size:12.5px;margin:0 0 8px">Tournament over — this is the <b>final result</b>, not a forecast.</div>'
+    return '<div style="color:var(--muted);font-size:12.5px;margin:0 0 8px">Tournament over — this is the <b>final result</b>.</div>'
       +rows.map((r,i)=>`<div class="oddrow"><div class="nm">${i===0?'🏆 ':''}${r.name}</div><div class="oddbar"><i style="width:${Math.round(100*(r.score||0)/max)}%;${i===0?'':'opacity:.55'}"></i></div><div class="pct" style="color:${i===0?'var(--gold)':'var(--ink)'}">${r.score}</div></div>`).join('');
   }
   if(mode==='surv' || mode==='survival'){
@@ -661,9 +661,38 @@ function renderOdds(d){
 // ---- points / position line chart over time ----
 let CHARTMETRIC='pts';
 const PCOL=['#ffc83d','#3dd9c9','#5b8def','#ff7ac8','#7ee787','#ff9f5b','#b58cff','#ff5a5a','#5ad1ff','#ffd86b'];
+// replay finished fixtures in date order -> per-player points/survival after each match (mirrors the server scoring)
+function buildHistory(d){
+  const SC=(d.scoring&&d.scoring.points)||{}, SV=(d.scoring&&d.scoring.survival)||{};
+  const pg=SC.per_goal??1, pw=SC.win??3, pdr=SC.draw??1, pc=SC.clean_sheet??1, SB=SC.stage_bonus||{};
+  const owner={}; (d.players||[]).forEach(p=>(p.teams||[]).forEach(t=>owner[t.name]=p.name));
+  const players=(d.players||[]).map(p=>p.name);
+  if(!players.length) return [];
+  const fin=(d.fixtures||[]).filter(m=>m.status==='FINISHED'&&m.homeScore!=null&&m.awayScore!=null)
+    .slice().sort((a,b)=>String(a.utcDate||'').localeCompare(String(b.utcDate||'')));
+  const base={}, reached={}, hist=[];
+  fin.forEach((m,i)=>{
+    [[m.home,m.homeScore,m.awayScore],[m.away,m.awayScore,m.homeScore]].forEach(([tm,sc,co])=>{
+      if(!(tm in owner)) return;
+      base[tm]=(base[tm]||0)+sc*pg;
+      if(co===0) base[tm]+=pc;
+      if(sc>co) base[tm]+=pw; else if(sc===co) base[tm]+=pdr;
+    });
+    if(m.stage&&m.stage!=='GROUP_STAGE'){
+      [m.home,m.away].forEach(tm=>{ if(tm in owner)(reached[tm]=reached[tm]||new Set()).add(m.stage); });
+      if(m.stage==='FINAL'){ const w=m.winner==='HOME'?m.home:(m.winner==='AWAY'?m.away:null); if(w&&owner[w])(reached[w]=reached[w]||new Set()).add('WINNER'); }
+    }
+    const P={},S={}; players.forEach(p=>{P[p]=0;S[p]=0;});
+    for(const tm in owner){ let bonus=0,surv=0; const rs=reached[tm];
+      if(rs) rs.forEach(s=>{ bonus=Math.max(bonus,SB[s]||0); surv=Math.max(surv,SV[s]||0); });
+      P[owner[tm]]+=(base[tm]||0)+bonus; S[owner[tm]]+=surv; }
+    hist.push({m:i+1, p:Object.fromEntries(players.map(p=>[p,{pts:P[p],srv:S[p],hyb:P[p]+S[p]}]))});
+  });
+  return hist;
+}
 function renderChart(d){
   const el=document.getElementById('chartBody'); if(!el) return;
-  const hist=(d.history||[]).filter(h=>h&&h.p);
+  const hist=buildHistory(d).filter(h=>h&&h.p);
   if(hist.length<2){ el.innerHTML='<div class="empty">Fills in as matches are played — one point per match. Come back once the tournament is under way.</div>'; return; }
   const names=Object.keys(hist[hist.length-1].p);
   const n=hist.length, pos=(CHARTMETRIC==='pos');
@@ -843,14 +872,14 @@ function renderAlerts(){
   const body=document.getElementById('alertsBody');
   const supported=('Notification' in window);
   const perm=supported?Notification.permission:'unsupported';
-  const players=(STATUS.players||[]).map(p=>p.name);
+  const players=(STATUS.players||[]).map(p=>typeof p==='string'?p:(p&&p.name)).filter(Boolean);
   if(!supported){ body.innerHTML='<div class="empty">This browser can\'t show notifications. Try Chrome, Edge, or Safari.</div>'; return; }
   if(!players.length){ body.innerHTML='<div class="empty">Set up the players first (Setup), then come back.</div>'; return; }
   const me=notifyMe();
   let h='<div style="color:var(--ink);opacity:.85;font-size:13px;margin:0 0 12px">Pick your name and allow notifications. You\'ll get pinged about your teams whenever this tracker is open in a tab.</div>';
   h+='<label style="font-size:12px;color:var(--muted)">I am</label><select id="alMe" style="width:100%;margin:4px 0 12px;padding:10px;border-radius:10px;background:#08180f;color:var(--ink);border:1px solid var(--line);font-family:Sora">'
     +'<option value="">— choose your name —</option>'+players.map(p=>`<option value="${p}"${p===me?' selected':''}>${p}</option>`).join('')+'</select>';
-  if(perm==='granted') h+='<div style="color:var(--t2);font-size:13px">✅ Notifications are on.'+(me?' You\'re set as <b>'+me+'</b>.':' Now pick your name above.')+'</div><div class="row2" style="margin-top:10px"><button class="mini" id="alTest">Send me a test</button></div>';
+  if(perm==='granted') h+='<div style="color:var(--t2);font-size:13px">✅ Notifications are on.'+(me?' You\'re set as <b>'+me+'</b>.':' Now pick your name above.')+'</div><div class="row2" style="margin-top:10px"><button class="mini" id="alTest">Send me a test</button><button class="mini" id="alDemo">Demo a live game</button></div>';
   else if(perm==='denied') h+='<div style="color:var(--t4);font-size:13px">Notifications are blocked for this site. Turn them back on in your browser\'s site settings, then reopen this.</div>';
   else h+='<button id="alEnable">Allow notifications</button>';
   h+='<div class="hint" id="alMsg" style="color:var(--muted);font-size:12px;margin-top:8px"></div>';
@@ -862,6 +891,18 @@ function renderAlerts(){
   const tb=document.getElementById('alTest');
   if(tb) tb.onclick=()=>{ if(!notifyMe()){document.getElementById('alMsg').textContent='Pick your name first.';return;}
     try{ new Notification('WC26 Sweepstake',{body:'✅ Alerts are working, '+notifyMe()+'!'}); }catch(e){} };
+  const db=document.getElementById('alDemo');
+  if(db) db.onclick=()=>{ const who=notifyMe();
+    if(!who){document.getElementById('alMsg').textContent='Pick your name first.';return;}
+    document.getElementById('alMsg').textContent='Playing a ~11-second demo of a live game…';
+    const seq=[
+      [0,    '⚽ Your team is playing','Brazil kick off now — vs Spain.'],
+      [3000, '⚽ Brazil scored!','Brazil 1–0 Spain'],
+      [6000, '⚽ Brazil scored!','Brazil 2–0 Spain'],
+      [9000, '❌ Spain is out','Check the leaderboard to see where you stand.'],
+      [11000,'📈 New leader', who+' now tops the table.']
+    ];
+    seq.forEach(s=>setTimeout(()=>ping(s[1],s[2]),s[0])); };
 }
 document.getElementById('alertsBtn').onclick=()=>{ document.getElementById('alertsModal').style.display='block'; renderAlerts(); };
 // fire notifications by diffing each refresh for the chosen player's teams
