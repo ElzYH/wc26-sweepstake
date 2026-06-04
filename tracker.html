@@ -46,7 +46,7 @@
   .pscore span{font-family:'Sora';font-size:12px;color:var(--muted);letter-spacing:.1em}
 
   /* player cards */
-  .pcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px}
+  .pcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(290px,100%),1fr));gap:14px}
   .pcard{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);
     border-radius:16px;padding:14px 16px}
   .pcard h3{font-family:'Anton';font-weight:400;font-size:20px;display:flex;justify-content:space-between;align-items:baseline}
@@ -61,7 +61,7 @@
   .trow .stg{color:var(--muted);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase}
 
   /* groups */
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(330px,100%),1fr));gap:14px}
   table{width:100%;border-collapse:collapse;background:linear-gradient(180deg,var(--panel),var(--panel2));
     border:1px solid var(--line);border-radius:14px;overflow:hidden}
   caption{font-family:'Anton';font-weight:400;text-align:left;padding:12px 14px 6px;font-size:17px;letter-spacing:.04em}
@@ -84,7 +84,7 @@
   .live{color:var(--live);font-weight:700;font-size:11px;letter-spacing:.08em}
   .stagetag{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
   .empty{color:var(--muted);padding:30px;text-align:center}
-  .modesel{display:flex;gap:8px;margin-bottom:14px}
+  .modesel{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
   .modecap{color:var(--muted);font-size:12.5px;line-height:1.5;margin:-6px 0 14px;padding:9px 12px;background:#08180f;border:1px solid var(--line);border-radius:9px}
   .modecap b{color:var(--ink)}
   #modesel{display:flex}
@@ -92,7 +92,7 @@
     background:#10301f;border:1px solid var(--line);color:var(--ink)}
   .modesel button.on{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205;border-color:var(--gold)}
   .lbunit{font-family:'Sora';font-size:12px;color:var(--muted);letter-spacing:.1em;margin-left:4px}
-  .bracket{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+  .bracket{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(240px,100%),1fr));gap:12px}
   .bcard{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:12px;overflow:hidden}
   .brow{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border-bottom:1px solid #11301f;font-size:14px}
   .brow:last-of-type{border-bottom:0}
@@ -139,6 +139,18 @@
   .wppct span{overflow:hidden;white-space:nowrap}
   .winrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
   .simh:hover{text-decoration:underline}
+  @media(max-width:560px){
+    body{padding:18px 13px 60px}
+    .tabs{gap:6px;margin:16px 0 14px}
+    .tabs .tab{padding:7px 12px;font-size:13px}
+    th,td{padding:6px 7px;font-size:11.5px}
+    caption{font-size:15px;padding:10px 12px 5px}
+    .match{grid-template-columns:52px 1fr 44px 1fr;gap:7px;padding:9px 11px}
+    .match .t{font-size:12.5px} .match .sc{font-size:17px} .match .time{font-size:11px}
+    .simwrap, #simBody{overflow-x:auto;-webkit-overflow-scrolling:touch}
+    #simBody table{min-width:380px}
+    .row{grid-template-columns:34px 1fr auto;gap:10px}
+  }
 </style>
 </head>
 <body>
