@@ -38,8 +38,9 @@ def rate_ok(ip, limit, window=60):
 import draw as draw_mod
 import scoring as scoring_mod
 
-CONFIG = "config.json"
+CONFIG = os.environ.get("WC26_CONFIG", "config.json")
 PORT = int(os.environ.get("PORT", "8000"))
+HOST = os.environ.get("HOST", "0.0.0.0")   # set HOST=127.0.0.1 when behind a reverse proxy
 STATIC = {"tracker.html", "wheel.html", "setup.html", "me.html",
           "teams.json", "tracker_data.json", "draw_result.json"}
 _lock = threading.Lock()
@@ -387,6 +388,6 @@ if __name__ == "__main__":
         print("[warn] running as root is risky — create a normal user to run this server.")
     _key = ensure_admin_key()
     threading.Thread(target=poller, daemon=True).start()
-    print(f"Sweepstake server on http://0.0.0.0:{PORT}  (Ctrl-C to stop)")
+    print(f"Sweepstake server on http://{HOST}:{PORT}  (Ctrl-C to stop)")
     print(f"Admin key (needed only to overwrite a finished draw): {_key}")
-    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+    ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
