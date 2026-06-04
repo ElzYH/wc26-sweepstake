@@ -897,11 +897,11 @@ function renderAlerts(){
     if(!who){document.getElementById('alMsg').textContent='Pick your name first.';return;}
     document.getElementById('alMsg').textContent='Playing a ~11-second demo of a live game…';
     const seq=[
-      [0,    '⚽ Your team is playing','Brazil kick off now — vs Spain.'],
-      [3000, '⚽ Brazil scored!','Brazil 1–0 Spain'],
-      [6000, '⚽ Brazil scored!','Brazil 2–0 Spain'],
-      [9000, '❌ Spain is out','Check the leaderboard to see where you stand.'],
-      [11000,'📈 New leader', who+' now tops the table.']
+      [0,    'Brazil vs Spain','Kicked off — your team Brazil is playing!'],
+      [3000, 'Brazil scored! ⚽','Brazil 1–0 Spain'],
+      [6000, 'Brazil scored! ⚽','Brazil 2–0 Spain'],
+      [9000, 'Spain is out ❌','Check the leaderboard to see where you stand.'],
+      [11000,'New leader 📈', who+' now tops the table.']
     ];
     seq.forEach(s=>setTimeout(()=>ping(s[1],s[2]),s[0])); };
   const off=document.getElementById('alOff');
@@ -912,7 +912,16 @@ function renderAlerts(){
 document.getElementById('alertsBtn').onclick=()=>{ document.getElementById('alertsModal').style.display='block'; renderAlerts(); };
 // fire notifications by diffing each refresh for the chosen player's teams
 let NOTIFYSNAP=null;
-function ping(title,body){ try{ if(('Notification'in window)&&Notification.permission==='granted') new Notification(title,{body}); }catch(e){} }
+function ping(title,body){
+  if(!('Notification'in window)||Notification.permission!=='granted')return;
+  const opts={body:body,tag:'wc26-'+Date.now(),renotify:true};
+  try{
+    if(navigator.serviceWorker&&navigator.serviceWorker.ready){
+      navigator.serviceWorker.ready.then(reg=>reg.showNotification(title,opts))
+        .catch(()=>{ try{ new Notification(title,opts); }catch(e){} });
+    } else { new Notification(title,opts); }
+  }catch(e){ try{ new Notification(title,opts); }catch(_){} }
+}
 function checkNotify(d){
   const me=notifyMe();
   if(!me || !('Notification'in window) || Notification.permission!=='granted'){ NOTIFYSNAP=null; return; }
@@ -925,15 +934,14 @@ function checkNotify(d){
   if(NOTIFYSNAP){
     for(const k in fx){ const n=fx[k], o=NOTIFYSNAP.fx[k]; if(!o) continue;
       const mine = myTeams.has(n.h)?n.h:(myTeams.has(n.a)?n.a:null); if(!mine) continue;
-      const opp = mine===n.h?n.a:n.h;
-      if(LIVE.includes(n.st)&&!LIVE.includes(o.st)) ping('⚽ Your team is playing', mine+' kick off now — vs '+opp+'.');
+      if(LIVE.includes(n.st)&&!LIVE.includes(o.st)) ping(n.h+' vs '+n.a, 'Kicked off — your team '+mine+' is playing!');
       else if(LIVE.includes(n.st)&&n.hs!=null&&o.hs!=null){
         const mineScored = (mine===n.h&&n.hs>o.hs)||(mine===n.a&&n.as>o.as);
-        if(mineScored) ping('⚽ '+mine+' scored!', n.h+' '+n.hs+'–'+n.as+' '+n.a);
+        if(mineScored) ping(mine+' scored! ⚽', n.h+' '+n.hs+'–'+n.as+' '+n.a);
       }
     }
-    for(const t in alive){ if(NOTIFYSNAP.alive[t]&&!alive[t]) ping('❌ '+t+' is out', 'Check the leaderboard to see where you stand.'); }
-    if(leaderName && NOTIFYSNAP.leaderName && leaderName!==NOTIFYSNAP.leaderName) ping('📈 New leader', leaderName+' now tops the table.');
+    for(const t in alive){ if(NOTIFYSNAP.alive[t]&&!alive[t]) ping(t+' is out ❌', 'Check the leaderboard to see where you stand.'); }
+    if(leaderName && NOTIFYSNAP.leaderName && leaderName!==NOTIFYSNAP.leaderName) ping('New leader 📈', leaderName+' now tops the table.');
   }
   NOTIFYSNAP=snap;
 }
@@ -970,6 +978,7 @@ document.getElementById('setImportFile').onchange=async(ev)=>{
   }catch(e){ bm.textContent='That file is not a valid backup.'; }
   ev.target.value='';
 };
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(function(){}); }
 load();
 setInterval(load,60000);                       // auto-refresh every 60s
 document.getElementById('auto').innerHTML='<span class="dot-live"></span>auto-refresh on';

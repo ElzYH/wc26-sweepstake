@@ -48,7 +48,7 @@ CONFIG = os.environ.get("WC26_CONFIG", "config.json")
 PORT = int(os.environ.get("PORT", "8000"))
 HOST = os.environ.get("HOST", "0.0.0.0")   # set HOST=127.0.0.1 when behind a reverse proxy
 STATIC = {"tracker.html", "wheel.html", "setup.html", "me.html", "watch.html",
-          "teams.json", "tracker_data.json", "draw_result.json"}
+          "teams.json", "tracker_data.json", "draw_result.json", "sw.js"}
 _lock = threading.Lock()
 
 
@@ -389,7 +389,7 @@ class Handler(BaseHTTPRequestHandler):
         full = name if name in generated else os.path.join(APP_DIR, name)
         if name not in STATIC or not os.path.exists(full):
             return self._send(404, "not found", "text/plain")
-        ctype = "text/html" if name.endswith(".html") else "application/json"
+        ctype = "text/html" if name.endswith(".html") else ("text/javascript" if name.endswith(".js") else "application/json")
         with open(full, "rb") as f:
             self._send(200, f.read(), ctype)
 
