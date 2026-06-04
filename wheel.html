@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>World Cup 2026 Sweepstake — The Draw</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#04140d;--panel:#0d2419;--line:#1f4733;--ink:#eafff4;--muted:#7fae97;--gold:#ffc83d;--gold2:#ffe39a;
+    --t1:#ffc83d;--t2:#3dd9c9;--t3:#5b8def;--t4:#8a93a6}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Sora',system-ui,sans-serif;color:var(--ink);min-height:100vh;
+    background:radial-gradient(1200px 600px at 70% -10%,#11543a55,transparent 60%),
+      radial-gradient(900px 500px at -10% 110%,#0b3a2755,transparent 60%),var(--bg);padding:26px 22px 60px}
+  .wrap{max-width:1180px;margin:0 auto}
+  .topnav{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+  .topnav .brand{font-family:'Anton';font-size:20px;color:var(--gold);text-decoration:none;letter-spacing:.02em}
+  .topnav .navlinks{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  .topnav .navlinks a{color:var(--muted);text-decoration:none;font-weight:600;font-size:13px;padding:7px 13px;border-radius:999px}
+  .topnav .navlinks a:hover{color:var(--ink)} .topnav .navlinks a.on{background:#11301f;color:var(--gold)}
+  header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  h1{font-family:'Anton';font-weight:400;letter-spacing:.02em;font-size:clamp(26px,4.6vw,46px);line-height:.95;text-transform:uppercase}
+  h1 .y{color:var(--gold)}
+  .phasetag{font-family:'Sora';font-weight:700;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#1a1205;background:linear-gradient(180deg,var(--gold2),var(--gold));padding:5px 12px;border-radius:999px}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:12px;margin-top:10px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}.legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+  .turnstrip{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:8px}
+  .turnchip{font-size:12.5px;font-weight:700;padding:6px 13px;border-radius:999px;background:#0a1f15;border:1px solid var(--line);color:var(--muted)}
+  .turnchip.set{color:var(--ink)} .turnchip.cur{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205;border-color:var(--gold)}
+  .turn{text-align:center;font-family:'Anton';font-weight:400;letter-spacing:.02em;text-transform:uppercase;font-size:clamp(17px,2.6vw,24px);margin-top:6px;color:var(--ink)}
+  .turn .who{color:var(--gold)}
+  .stage{display:grid;grid-template-columns:minmax(0,460px) 1fr;gap:30px;margin-top:18px}
+  @media(max-width:860px){.stage{grid-template-columns:1fr}}
+  .wheelbox{display:flex;flex-direction:column;align-items:center;gap:14px}
+  .dial{position:relative;width:min(440px,88vw);aspect-ratio:1}
+  canvas{width:100%;height:100%;border-radius:50%;box-shadow:0 0 0 10px #03100a,0 0 0 12px var(--line),0 30px 70px #000a;cursor:grab;touch-action:none}
+  canvas:active{cursor:grabbing}
+  .hub{position:absolute;inset:0;margin:auto;width:62px;height:62px;border-radius:50%;pointer-events:none;
+    background:radial-gradient(circle at 35% 30%,var(--gold2),var(--gold) 60%,#a67a07);
+    display:grid;place-items:center;font-size:24px;box-shadow:0 6px 18px #000a,inset 0 -3px 8px #0006}
+  .pointer{position:absolute;top:-6px;left:50%;transform:translateX(-50%);width:0;height:0;pointer-events:none;
+    border-left:17px solid transparent;border-right:17px solid transparent;border-top:30px solid var(--gold);
+    filter:drop-shadow(0 4px 4px #000a);z-index:3}
+  .hint2{color:var(--muted);font-size:12px;text-align:center}
+  .reveal{min-height:42px;display:flex;align-items:center;justify-content:center;gap:14px;text-align:center;
+    font-family:'Anton';text-transform:uppercase;letter-spacing:.02em;font-size:clamp(20px,3.4vw,32px);opacity:0;transition:opacity .2s}
+  .reveal.show{opacity:1} .reveal .arrow{color:var(--muted);font-size:.7em} .reveal .who{color:var(--gold)}
+  .speed{display:flex;gap:6px}
+  .speed button{font-family:'Sora';font-weight:700;font-size:12px;padding:7px 14px;border-radius:999px;cursor:pointer;background:#10301f;border:1px solid var(--line);color:var(--ink)}
+  .speed button.on{background:#11301f;border-color:var(--gold);color:var(--gold)}
+  .controls{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  button.act{font-family:'Sora';font-weight:700;border:0;cursor:pointer;border-radius:999px;padding:13px 26px;font-size:15px;transition:transform .1s,filter .2s}
+  button.act:active{transform:translateY(1px)} button.act:disabled{opacity:.4;cursor:not-allowed}
+  .spin{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205;box-shadow:0 8px 22px #ffc83d33}
+  .spin:hover:not(:disabled){filter:brightness(1.06)}
+  .ghost{background:#10301f;color:var(--ink);border:1px solid var(--line)} .ghost:hover:not(:disabled){background:#143a26}
+  .progress{color:var(--muted);font-size:13px;letter-spacing:.14em;text-transform:uppercase}
+  .saved{display:none;text-align:center;background:#0a1f15;border:1px solid var(--gold);border-radius:14px;padding:14px 18px;max-width:420px}
+  .saved a{display:inline-block;margin-top:10px;font-weight:700;background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205;text-decoration:none;padding:11px 22px;border-radius:999px}
+  .saved.err{border-color:var(--t4)} .saved .note{color:var(--muted);font-size:13px;margin-top:6px}
+  .boards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;align-content:start}
+  .card{background:linear-gradient(180deg,var(--panel),#0a1e15);border:1px solid var(--line);border-radius:16px;padding:14px 14px 12px;min-height:110px;transition:border-color .2s,box-shadow .2s}
+  .card.active{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset,0 10px 30px #ffc83d18}
+  .card h3{font-family:'Anton';font-weight:400;font-size:21px;display:flex;justify-content:space-between;align-items:baseline}
+  .card h3 .pts{font-family:'Sora';font-size:12px;color:var(--gold)}
+  .chips{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+  .chip{display:flex;align-items:center;gap:8px;font-size:13.5px;padding:6px 9px;border-radius:9px;background:#0a1f15;border:1px solid #143726;animation:pop .3s ease both}
+  .chip .dot{width:9px;height:9px;border-radius:50%;flex:none}.chip .grp{margin-left:auto;color:var(--muted);font-size:11px}
+  @keyframes pop{from{opacity:0;transform:translateY(6px) scale(.96)}to{opacity:1;transform:none}}
+  .teampanel{margin-top:24px;border-top:1px solid var(--line);padding-top:16px}
+  .teampanel h4{font-family:'Anton';font-weight:400;letter-spacing:.04em;color:var(--ink);text-transform:uppercase;font-size:15px;margin-bottom:12px;display:flex;gap:10px;align-items:baseline}
+  .teampanel h4 span{font-family:'Sora';font-size:12px;color:var(--muted)}
+  .rchips{display:flex;flex-wrap:wrap;gap:7px}
+  .rchip{display:inline-flex;align-items:center;gap:7px;font-size:13px;padding:6px 11px;border-radius:999px;background:#0a1f15;border:1px solid #143726;transition:opacity .3s}
+  .rchip .dot{width:9px;height:9px;border-radius:50%}
+  .rchip.gone{opacity:.45} .rchip.gone .own{color:var(--gold);font-weight:700}
+  .rchip .own{margin-left:2px;color:var(--muted);font-size:11px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="topnav"><a class="brand" href="/tracker">⚽ WC26 Sweepstake</a><div class="navlinks"><a href="/setup">Setup</a><a href="/wheel" class="on">Reveal</a><a href="/tracker">Tracker</a><a href="/me">My teams</a></div></nav>
+  <header><h1>World Cup <span class="y">2026</span> Draw</h1><span class="phasetag" id="phasetag">Pick order</span></header>
+  <div class="legend">
+    <span><i style="background:var(--t1)"></i>Favourites</span><span><i style="background:var(--t2)"></i>Contenders</span>
+    <span><i style="background:var(--t3)"></i>Dark horses</span><span><i style="background:var(--t4)"></i>Outsiders</span>
+    <span style="margin-left:auto" id="modenote"></span>
+  </div>
+  <div class="turnstrip" id="turnstrip"></div>
+  <div class="turn" id="turn">Loading…</div>
+
+  <div class="stage">
+    <div class="wheelbox">
+      <div class="dial"><div class="pointer"></div><canvas id="wheel" width="900" height="900"></canvas><div class="hub">🏆</div></div>
+      <div class="hint2">Press &amp; hold the wheel to spin, release to drop — or tap Spin</div>
+      <div class="reveal" id="reveal"></div>
+      <div class="speed" id="speed">
+        <button data-s="normal" class="on">Normal</button><button data-s="fast">Fast</button><button data-s="turbo">Turbo</button>
+      </div>
+      <div class="controls">
+        <button class="act spin" id="spinBtn">Spin</button>
+        <button class="act ghost" id="autoBtn">Auto-play</button>
+        <button class="act ghost" id="resetBtn">Restart</button>
+      </div>
+      <div class="progress" id="progress"></div>
+      <div class="saved" id="saved"></div>
+    </div>
+    <div class="boards" id="boards"></div>
+  </div>
+
+  <div class="teampanel"><h4>Teams <span id="teamsub"></span></h4><div class="rchips" id="teamchips"></div></div>
+</div>
+
+<script>
+window.onerror=function(msg,src,line){var t=document.getElementById('turn');if(t){t.style.color='#ff8a8a';t.textContent='Error (line '+line+'): '+msg;}return false;};
+const SAMPLE={teams:[
+  {name:"France",tier:1,group:"I",composite:95},{name:"Spain",tier:1,group:"H",composite:92},{name:"Brazil",tier:1,group:"C",composite:90},
+  {name:"England",tier:1,group:"L",composite:88},{name:"Argentina",tier:1,group:"J",composite:86},{name:"Portugal",tier:1,group:"K",composite:84},
+  {name:"Morocco",tier:2,group:"C",composite:60},{name:"USA",tier:2,group:"D",composite:58},{name:"Germany",tier:2,group:"E",composite:57},
+  {name:"Croatia",tier:2,group:"L",composite:55},{name:"Japan",tier:2,group:"F",composite:53},{name:"Mexico",tier:2,group:"A",composite:52},
+  {name:"Norway",tier:3,group:"I",composite:38},{name:"Ecuador",tier:3,group:"E",composite:36},{name:"Turkey",tier:3,group:"D",composite:35},
+  {name:"Iran",tier:3,group:"G",composite:33},{name:"Scotland",tier:3,group:"C",composite:31},{name:"Austria",tier:3,group:"J",composite:30},
+  {name:"Ghana",tier:4,group:"L",composite:20},{name:"Haiti",tier:4,group:"C",composite:14},{name:"Qatar",tier:4,group:"B",composite:18},
+  {name:"Panama",tier:4,group:"L",composite:16},{name:"Jordan",tier:4,group:"J",composite:12},{name:"Curacao",tier:4,group:"E",composite:10}
+],players:["Erol","James"],leftover:"pool",draw_mode:"weighted",max_per_player:null};
+
+const WEIGHT={1:8,2:4,3:2,4:1};
+const TIER={1:cv('--t1'),2:cv('--t2'),3:cv('--t3'),4:cv('--t4')};
+const PCOL=['#ffc83d','#3dd9c9','#5b8def','#e08a5b','#b48bff','#7fae97'];
+const AUTO_DUR={normal:2.2,fast:1.0,turbo:0};
+function cv(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+function isServer(){return location.protocol!=='file:';}
+const $=id=>document.getElementById(id);
+const cssId=s=>s.replace(/[^a-zA-Z0-9]/g,'_');
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+
+let teams=[],players=[],leftover='pool',mode='weighted',maxPer=null;
+let wheelOrder=[],teamLayout=new Map(),perPlayer=0,inPlay=0,fairAssign={};
+let phase='order',order=[],turnIdx=0,rotation=0,spinning=false,auto=false,speed='normal';
+let drawn=new Set(),assignments={};
+const cvEl=$('wheel'),ctx=cvEl.getContext('2d'),R=cvEl.width/2;
+
+async function init(){
+  let st={}, offline=false;
+  try{
+    const [tj,s]=await Promise.all([fetch('teams.json').then(r=>r.json()),fetch('/api/status').then(r=>r.json())]);
+    teams=tj.teams.map(t=>({name:t.name,tier:t.tier,group:t.group,composite:t.composite}));
+    st=s; players=(s.players&&s.players.length)?s.players:SAMPLE.players;
+    leftover=s.leftover||'pool'; mode=s.draw_mode||'weighted'; maxPer=s.max_per_player||null;
+  }catch(e){ offline=true; teams=SAMPLE.teams;players=SAMPLE.players;leftover='pool';mode='weighted';maxPer=null; }
+  buildTeamState();
+  $('modenote').textContent = (mode==='fair'?'Fair draw · balanced spread':(mode==='random'?'Random draw · every team equally likely':'Weighted draw · bigger slice = better odds')) + ` · ${perPlayer} per player`;
+  if(st.drawn){
+    let saved=null; try{ saved=await fetch('/api/draw_result?'+Date.now()).then(r=>r.json()); }catch(e){}
+    if(saved&&saved.players){ showLocked(saved); return; }
+  }
+  if(!offline && !(st.players&&st.players.length)){ showNeedSetup(); return; }   // server is up but no players configured — don't run a sample draw
+  startOrder();
+}
+function showNeedSetup(){
+  phase='need';
+  const box=$('saved'); box.style.display='block';
+  box.innerHTML='\u2699\ufe0f <b>No draw set up yet.</b> Add players and choose the modes first.<br><a href="/setup">Go to Setup \u2192</a>';
+  $('spinBtn').disabled=true; $('autoBtn').disabled=true; $('modenote').textContent='Waiting for setup';
+  $('phasetag').textContent='No setup yet'; $('turn').textContent='Add players in Setup to begin';
+}
+
+function buildTeamState(){
+  const n=players.length, base=Math.floor(teams.length/n);
+  perPlayer = maxPer ? Math.min(maxPer,base) : base;
+  inPlay = perPlayer*n;
+  wheelOrder = teams.slice().sort((a,b)=> a.tier-b.tier || a.name.localeCompare(b.name));
+}
+function remainingTeams(){ return wheelOrder.filter(t=>!drawn.has(t.name)); }
+function teamSlices(list){ const wt=t=>(mode==='weighted'?WEIGHT[t.tier]:1); const tot=list.reduce((s,t)=>s+wt(t),0)||1; let a=-90; const m=new Map();
+  for(const t of list){ const span=wt(t)/tot*360; m.set(t.name,{a0:a,span,center:a+span/2}); a+=span; } return m; }
+
+/* fair = balanced snake over the strongest inPlay teams */
+function computeFair(){
+  const n=order.length, pool=teams.slice().sort((x,y)=> y.composite-x.composite).slice(0,inPlay);
+  fairAssign={}; order.forEach(p=>fairAssign[p]=[]);
+  for(let pot=0;pot<perPlayer;pot++){
+    const slice=pool.slice(pot*n,pot*n+n), seq= pot%2? order.slice().reverse() : order;
+    seq.forEach((p,i)=> fairAssign[p].push(slice[i]));
+  }
+}
+function pickWeighted(arr){ const tot=arr.reduce((s,t)=>s+WEIGHT[t.tier],0); let r=Math.random()*tot;
+  for(const t of arr){ r-=WEIGHT[t.tier]; if(r<=0)return t; } return arr[arr.length-1]; }
+
+/* ---------- canvas ---------- */
+function applyRot(){ cvEl.style.transition='none'; cvEl.style.transform=`rotate(${rotation}deg)`; }
+function drawTeamWheel(list){
+  list = list || remainingTeams();
+  const lay=teamSlices(list); ctx.clearRect(0,0,cvEl.width,cvEl.height);
+  for(const t of list){
+    const L=lay.get(t.name),a0=L.a0*Math.PI/180,a1=(L.a0+L.span)*Math.PI/180;
+    ctx.beginPath();ctx.moveTo(R,R);ctx.arc(R,R,R-6,a0,a1);ctx.closePath();
+    ctx.fillStyle=TIER[t.tier];ctx.fill();ctx.strokeStyle='#03100a';ctx.lineWidth=2;ctx.stroke();
+    if(L.span>=5.5){
+      ctx.save();ctx.translate(R,R);ctx.rotate((L.a0+L.span/2)*Math.PI/180);
+      ctx.textAlign='right';ctx.fillStyle=(t.tier<=2)?'#0a1205':'#04140d';
+      ctx.font='700 '+Math.min(22,Math.max(12,L.span*0.9))+'px Sora,sans-serif';
+      const nm=t.name.length>13?t.name.slice(0,12)+'…':t.name; ctx.fillText(nm.toUpperCase(),R-22,5);ctx.restore();
+    }
+  }
+}
+function drawOrderWheel(){
+  const rem=players.filter(p=>!order.includes(p)); ctx.clearRect(0,0,cvEl.width,cvEl.height);
+  let a=-90;const span=360/rem.length;
+  rem.forEach(p=>{ const a0=a*Math.PI/180,a1=(a+span)*Math.PI/180;
+    ctx.beginPath();ctx.moveTo(R,R);ctx.arc(R,R,R-6,a0,a1);ctx.closePath();
+    ctx.fillStyle=PCOL[players.indexOf(p)%PCOL.length];ctx.fill();ctx.strokeStyle='#03100a';ctx.lineWidth=3;ctx.stroke();
+    ctx.save();ctx.translate(R,R);ctx.rotate((a+span/2)*Math.PI/180);ctx.textAlign='right';ctx.fillStyle='#04140d';
+    ctx.font='700 '+Math.min(34,Math.max(16,span*0.4))+'px Sora,sans-serif';ctx.fillText(p.toUpperCase(),R-26,7);ctx.restore();a+=span; });
+}
+function redraw(){ phase==='order'?drawOrderWheel():drawTeamWheel(); }
+
+/* ---------- spin engine (hold to spin, release to drop) ---------- */
+function canSpin(){ return (phase==='order'&&order.length<players.length)||(phase==='teams'&&turnIdx<inPlay); }
+function currentPlan(){
+  if(phase==='order'){
+    const rem=players.filter(p=>!order.includes(p)),i=Math.floor(Math.random()*rem.length),span=360/rem.length;
+    return {center:-90+span*i+span/2,span,land:()=>landOrder(rem[i])};
+  }
+  const remaining=remainingTeams();
+  let pick = mode==='fair' ? fairAssign[order[turnIdx%order.length]][Math.floor(turnIdx/order.length)]
+           : (mode==='random' ? remaining[Math.floor(Math.random()*remaining.length)] : pickWeighted(remaining));
+  const L=teamSlices(remaining).get(pick.name); return {center:L.center,span:L.span,land:()=>landTeam(pick)};
+}
+function settle(plan,turns,dur,cb){
+  spinning=true; syncUI();
+  const want=-90-plan.center-(Math.random()-0.5)*plan.span*0.5, start=rotation;
+  const target=start+((want-(start%360))%360+360)%360+turns*360;
+  if(dur<=0){ rotation=target;applyRot();spinning=false;cb(); return; }
+  const t0=performance.now();
+  (function anim(now){ const p=Math.min(1,(now-t0)/(dur*1000)),e=1-Math.pow(1-p,3);
+    rotation=start+(target-start)*e;applyRot();
+    if(p<1)requestAnimationFrame(anim); else{rotation=target;spinning=false;cb();} })(performance.now());
+}
+function beginSpin(turns,dur,plan){ if(spinning||!canSpin())return; if(!plan)plan=currentPlan();
+  $('reveal').classList.remove('show'); settle(plan,turns,dur,plan.land); }
+
+/* press & hold */
+let holding=false,holdRAF=null,holdStart=0,holdPlan=null;
+function holdStep(){ rotation+=18; applyRot(); holdRAF=requestAnimationFrame(holdStep); }
+function pressStart(e){ if(spinning||auto||!canSpin())return; e.preventDefault();
+  holding=true; holdPlan=currentPlan(); holdStart=performance.now(); $('reveal').classList.remove('show');
+  holdRAF=requestAnimationFrame(holdStep); }
+function pressEnd(){ if(!holding)return; holding=false; if(holdRAF)cancelAnimationFrame(holdRAF);
+  const held=performance.now()-holdStart, turns=clamp(3+held/350,3,9), dur= speed==='turbo'?0:clamp(0.8+turns*0.22,1,3.2);
+  settle(holdPlan,turns,dur,holdPlan.land); }
+
+/* ---------- phases ---------- */
+function startOrder(){ phase='order';order=[];turnIdx=0;rotation=0;drawn=new Set();
+  assignments={};players.forEach(p=>assignments[p]=[]);
+  cvEl.style.transition='none';cvEl.style.transform='rotate(0deg)';
+  buildBoards(players); renderTeams(); redraw(); syncUI(); }
+function landOrder(p){ order.push(p);
+  const rev=$('reveal');rev.innerHTML=`PICK #${order.length}<span class="arrow">▶</span><span class="who">${p}</span>`;rev.classList.add('show');
+  redraw(); syncUI();
+  if(order.length>=players.length){ setTimeout(startTeams, auto?gap():750); }
+  else if(auto){ setTimeout(()=>{if(auto)beginSpin(rand(3,6),AUTO_DUR[speed]);},gap()); } }
+function startTeams(){ phase='teams';turnIdx=0;rotation=0;
+  if(mode==='fair')computeFair();
+  buildBoards(order);                       // reorder boards to the pick order
+  cvEl.style.transition='none';cvEl.style.transform='rotate(0deg)';$('reveal').classList.remove('show');
+  auto=false;                 // pause here: don't auto-roll from the order draw into the team draw
+  redraw(); syncUI(); }
+function landTeam(pick){
+  const owner=order[turnIdx%order.length];
+  drawn.add(pick.name);assignments[owner].push(pick);addChip(owner,pick);
+  const rev=$('reveal');rev.innerHTML=`${pick.name}<span class="arrow">▶</span><span class="who">${owner}</span>`;rev.classList.add('show');
+  turnIdx++; markTeam(pick.name,owner); drawTeamWheel(); syncUI();
+  if(turnIdx>=inPlay){ finish(); return; }
+  if(auto) setTimeout(()=>{if(auto)beginSpin(rand(3,6),AUTO_DUR[speed]);},gap()); }
+function gap(){ return speed==='turbo'?0:(speed==='fast'?220:600); }
+function rand(a,b){ return a+Math.floor(Math.random()*(b-a+1)); }
+
+/* ---------- boards + teams panel ---------- */
+function buildBoards(seq){ const b=$('boards');b.innerHTML='';
+  seq.forEach(p=>{ const c=document.createElement('div');c.className='card';c.id='card_'+cssId(p);
+    c.innerHTML=`<h3>${p}<span class="pts" id="cnt_${cssId(p)}">0 teams</span></h3><div class="chips" id="chips_${cssId(p)}"></div>`;
+    b.appendChild(c); }); }
+function addChip(p,t){ const wrap=$('chips_'+cssId(p)),el=document.createElement('div');el.className='chip';
+  el.innerHTML=`<span class="dot" style="background:${TIER[t.tier]}"></span>${t.name}<span class="grp">GRP ${t.group}</span>`;
+  wrap.appendChild(el);const n=wrap.children.length;$('cnt_'+cssId(p)).textContent=n+(n===1?' team':' teams'); }
+function renderTeams(){ $('teamchips').innerHTML=wheelOrder.map(t=>
+    `<span class="rchip" id="rc_${cssId(t.name)}"><span class="dot" style="background:${TIER[t.tier]}"></span>${t.name}<span class="own"></span></span>`).join('');
+  updateTeamSub(); }
+function markTeam(name,owner){ const el=$('rc_'+cssId(name)); if(el){el.classList.add('gone');el.querySelector('.own').textContent='→ '+owner;} updateTeamSub(); }
+function updateTeamSub(){ $('teamsub').textContent=`${drawn.size} drawn · ${teams.length-drawn.size} left`; }
+
+/* ---------- finish + lock ---------- */
+async function finish(){ phase='done'; auto=false;
+  const leftovers=wheelOrder.filter(t=>!drawn.has(t.name)), bonus=leftover==='pool'?leftovers:[];
+  bonus.forEach(t=>{const el=$('rc_'+cssId(t.name));if(el)el.querySelector('.own').textContent='· bonus pool';});
+  syncUI();
+  const payload={mode:'weighted-clockwork',leftover,players:order.map(p=>({name:p,teams:assignments[p].map(t=>t.name)})),bonus_pool:bonus.map(t=>t.name)};
+  const box=$('saved');box.style.display='block';
+  if(!isServer()){ box.classList.add('err');box.innerHTML='<b>Preview only</b><div class="note">Open from the running server to save the draw.</div>';return; }
+  box.innerHTML='<b>Saving…</b>';
+  try{ const j=await fetch('/api/save_draw',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(r=>r.json());
+    if(j.ok) box.innerHTML='🏆 <b>Draw locked &amp; saved.</b> The tracker is now unlocked.<br><a href="/tracker">Go to the live tracker →</a><div class="note">To run a new draw, open Setup and enter the admin key from the terminal.</div>';
+    else{ box.classList.add('err');box.innerHTML='<b>Could not save</b><div class="note">'+(j.error||'error')+'</div>'; }
+  }catch(e){ box.classList.add('err');box.innerHTML='<b>Could not reach the server</b><div class="note">'+e+'</div>'; } }
+function showLocked(saved){ phase='done'; order=saved.players.map(p=>p.name);
+  assignments={};order.forEach(p=>assignments[p]=[]); buildBoards(order); renderTeams();
+  saved.players.forEach(p=>p.teams.forEach(t=>{assignments[p.name].push(t);drawn.add(t.name);addChip(p.name,t);markTeam(t.name,p.name);}));
+  (saved.bonus_pool||[]).forEach(t=>{const el=$('rc_'+cssId(t.name));if(el)el.querySelector('.own').textContent='· bonus pool';});
+  drawTeamWheel(wheelOrder); syncUI();
+  const box=$('saved');box.style.display='block';
+  box.innerHTML='🏆 <b>This draw is locked.</b> Every team already has an owner.<br><a href="/tracker">Go to the live tracker →</a><div class="note">To run a new draw, open Setup and enter the admin key shown in the server terminal.</div>'; }
+
+/* ---------- UI ---------- */
+function syncUI(){
+  const spinBtn=$('spinBtn'),autoBtn=$('autoBtn'),resetBtn=$('resetBtn'),strip=$('turnstrip'),turn=$('turn');
+  if(phase==='order'){ $('phasetag').textContent='Step 1 · Pick order';
+    strip.innerHTML=players.map(p=>{const i=order.indexOf(p);return `<span class="turnchip ${i>=0?'set':''}">${i>=0?(i+1)+'. ':''}${p}</span>`;}).join('');
+    const left=players.length-order.length;
+    turn.innerHTML=left>0?`Spin to set who picks when · <span class="who">${left}</span> to place`:'Order set — starting…';
+    spinBtn.textContent='Spin for order';spinBtn.disabled=spinning||auto||left===0;autoBtn.textContent=auto?'⏸ Stop auto':'Auto-play';autoBtn.style.display='';resetBtn.style.display='';
+    $('progress').textContent=`order: ${order.length}/${players.length} set`;
+  } else if(phase==='teams'){ $('phasetag').textContent='Step 2 · Team draw';
+    const cur=turnIdx<inPlay?order[turnIdx%order.length]:null;
+    strip.innerHTML=order.map((p,i)=>`<span class="turnchip set ${p===cur?'cur':''}">${i+1}. ${p}</span>`).join('');
+    order.forEach(p=>{const c=$('card_'+cssId(p));if(c)c.classList.toggle('active',p===cur);});
+    turn.innerHTML=cur?`Round ${Math.floor(turnIdx/order.length)+1} · <span class="who">${cur}</span> to pick`:'All teams drawn';
+    spinBtn.textContent='Spin';spinBtn.disabled=spinning||auto||turnIdx>=inPlay;autoBtn.textContent=auto?'⏸ Stop auto':'Auto-play';autoBtn.style.display='';resetBtn.style.display='';
+    $('progress').textContent=`${drawn.size} of ${inPlay} teams drawn`;
+  } else { $('phasetag').textContent='Draw complete';
+    strip.innerHTML=(order.length?order:players).map((p,i)=>`<span class="turnchip set">${order.length?(i+1)+'. ':''}${p}</span>`).join('');
+    order.forEach(p=>{const c=$('card_'+cssId(p));if(c)c.classList.remove('active');});
+    turn.textContent='Draw complete 🏆';
+    spinBtn.textContent='Locked';spinBtn.disabled=true;autoBtn.disabled=true;resetBtn.style.display='none';$('progress').textContent='';
+  }
+}
+
+/* ---------- controls ---------- */
+cvEl.addEventListener('pointerdown',pressStart);
+window.addEventListener('pointerup',pressEnd);
+cvEl.addEventListener('pointerleave',()=>{ if(holding)pressEnd(); });
+$('spinBtn').onclick=()=>{ if(!holding) beginSpin(rand(3,7), AUTO_DUR[speed]); };
+$('autoBtn').onclick=()=>{ auto=!auto; syncUI(); if(auto&&!spinning) beginSpin(rand(3,6),AUTO_DUR[speed]); };
+$('resetBtn').onclick=()=>{ auto=false;spinning=false;holding=false;if(holdRAF)cancelAnimationFrame(holdRAF);
+  $('saved').style.display='none';$('saved').className='saved';$('reveal').classList.remove('show');startOrder(); };
+document.querySelectorAll('#speed button').forEach(b=>b.onclick=()=>{ speed=b.dataset.s;
+  document.querySelectorAll('#speed button').forEach(x=>x.classList.toggle('on',x===b)); });
+
+init().catch(e=>{var t=document.getElementById('turn');if(t){t.style.color='#ff8a8a';t.textContent='Init error: '+(e&&e.message||e);}});
+
+window.addEventListener('pageshow',function(e){ if(e.persisted) location.reload(); });
+</script>
+</body>
+</html>

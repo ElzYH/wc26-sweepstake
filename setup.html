@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sweepstake — Setup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#04140d;--panel:#0d2419;--line:#1f4733;--ink:#eafff4;--muted:#7fae97;--gold:#ffc83d;--gold2:#ffe39a}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Sora',system-ui,sans-serif;color:var(--ink);min-height:100vh;
+    background:radial-gradient(1000px 520px at 70% -10%,#11543a55,transparent 60%),var(--bg);padding:30px 20px 70px}
+  .wrap{max-width:640px;margin:0 auto}
+  h1{font-family:'Anton';font-weight:400;text-transform:uppercase;letter-spacing:.02em;font-size:clamp(28px,5vw,46px)}
+  h1 .y{color:var(--gold)} .sub{color:var(--muted);margin:6px 0 26px;font-size:14px}
+  .card{background:linear-gradient(180deg,var(--panel),#0a1e15);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:16px}
+  label{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+  input[type=text],input[type=password],input[type=number]{width:100%;background:#08180f;border:1px solid var(--line);
+    color:var(--ink);border-radius:10px;padding:11px 12px;font-family:'Sora';font-size:15px;margin-bottom:8px}
+  .prow{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+  .prow input{flex:1;margin-bottom:0}
+  .rm{flex:none;width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:16px;cursor:pointer;line-height:1;transition:.15s}
+  .rm:hover{background:#2a1414;color:#ff9b9b;border-color:#ff9b9b}
+  .opts{display:flex;gap:10px;flex-wrap:wrap}
+  .opt{flex:1;min-width:130px;background:#08180f;border:1px solid var(--line);border-radius:10px;padding:11px 12px;cursor:pointer;font-size:14px}
+  .opt.on{border-color:var(--gold);background:#11301f;color:var(--gold)}
+  .opt small{display:block;color:var(--muted);font-size:11px;margin-top:3px}
+  .opt.on small{color:#d8b85a}
+  button{font-family:'Sora';font-weight:700;border:0;cursor:pointer;border-radius:999px;padding:13px 24px;font-size:15px}
+  .add{background:#10301f;color:var(--ink);border:1px solid var(--line)}
+  .go{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205;width:100%;padding:15px;font-size:17px;margin-top:6px}
+  .hint{color:var(--muted);font-size:12px;margin-top:6px}
+  .links a{display:inline-block;margin-right:12px;color:var(--gold);font-weight:700;text-decoration:none}
+  .done{display:none;text-align:center}
+  fieldset{border:0}
+
+  .topnav{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+  .topnav .brand{font-family:'Anton';font-size:20px;color:var(--gold);text-decoration:none;letter-spacing:.02em}
+  .topnav .navlinks{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  .topnav .navlinks a{color:var(--muted);text-decoration:none;font-weight:600;font-size:13px;padding:7px 13px;border-radius:999px}
+  .topnav .navlinks a:hover{color:var(--ink)}
+  .topnav .navlinks a.on{background:#11301f;color:var(--gold)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="topnav"><a class="brand" href="/tracker">⚽ WC26 Sweepstake</a><div class="navlinks"><a href="setup.html" class="on">Setup</a><a href="/wheel">Reveal</a><a href="tracker.html">Tracker</a><a href="me.html">My teams</a></div></nav>
+    <h1>Sweepstake <span class="y">Setup</span></h1>
+  <div class="sub">Add players, choose how the draw and scoring work, then run it.</div>
+
+  <div id="lockGate" class="card" style="display:none;text-align:center">
+    <h1 style="font-size:24px;margin-bottom:6px">🔒 This box has a locked draw</h1>
+    <p class="sub">Changing setup wipes the current draw and tracker. Enter the admin key to continue.</p>
+    <input type="text" id="adminKey" placeholder="admin key — shown in the server terminal" style="max-width:340px;margin:12px auto">
+    <div><button class="go" id="unlockBtn" type="button" style="max-width:260px">Unlock setup</button></div>
+    <div class="hint" id="gateMsg"></div>
+  </div>
+
+  <div id="form" style="display:none">
+    <div class="card">
+      <label>Players</label>
+      <div class="players" id="players">
+        <div class="prow"><input type="text" placeholder="Player 1"><button type="button" class="rm" aria-label="remove">×</button></div>
+        <div class="prow"><input type="text" placeholder="Player 2"><button type="button" class="rm" aria-label="remove">×</button></div>
+      </div>
+      <button class="add" id="addP" type="button">+ Add player</button>
+    </div>
+
+    <div class="card">
+      <label>Draw style</label>
+      <div class="opts" data-group="draw_mode">
+        <div class="opt" data-v="fair">Fair<small>balanced — one team from each strength band</small></div>
+        <div class="opt on" data-v="weighted">Weighted<small>any team, favourites likelier</small></div>
+        <div class="opt" data-v="random">Random<small>every team equally likely</small></div>
+      </div>
+      <div class="hint">Players still take turns in clockwork order; this sets how each pick is chosen. Fair is pre-balanced; Weighted makes favourites likelier; Random gives every team an equal chance.</div>
+    </div>
+
+    <div class="card">
+      <label>Teams per player</label>
+      <div class="opts" data-group="max_per_player">
+        <div class="opt on" data-v="">All<small>split all 48</small></div>
+        <div class="opt" data-v="1">1</div>
+        <div class="opt" data-v="2">2</div>
+        <div class="opt" data-v="3">3</div>
+        <div class="opt" data-v="5">5</div>
+        <div class="opt" data-v="10">10</div>
+      </div>
+      <input type="number" id="customPer" min="1" max="48" placeholder="…or type any number" style="margin-top:8px;width:180px">
+      <div class="hint">Cap how many teams each player gets — pick a preset or type any number. Teams beyond the cap follow the leftover rule below.</div>
+    </div>
+
+    <div class="card">
+      <label>Leftover teams (when 48 doesn't divide evenly)</label>
+      <div class="opts" data-group="leftover">
+        <div class="opt on" data-v="pool">Bonus pool</div>
+        <div class="opt" data-v="drop">Drop</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <label>Scoring mode (this is the only board shown on the tracker)</label>
+      <div class="opts" data-group="scoring_mode">
+        <div class="opt" data-v="points">Points<small>goals / wins</small></div>
+        <div class="opt" data-v="survival">Survival<small>last team standing</small></div>
+        <div class="opt on" data-v="hybrid">Both<small>points + survival</small></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <label>football-data.org API token (optional now — needed for live scores)</label>
+      <input type="password" id="token" placeholder="paste token, or leave blank and add later">
+      <div class="opts" style="margin-top:6px">
+        <div style="flex:1"><label>Refresh every (min)</label><input type="number" id="poll" value="10" min="1"></div>
+        <div style="flex:1"><label>Competition</label><input type="text" id="comp" value="WC"></div>
+      </div>
+      <div class="hint">Free key: football-data.org → register → "My Account". WC = World Cup, EC = Euros.</div>
+    </div>
+
+    <button class="go" id="go" type="button">Save & start the draw 🎲</button>
+    <div class="hint" id="msg"></div>
+  </div>
+
+  <div class="card done" id="done">
+    <h1 style="font-size:30px">Draw complete 🏆</h1>
+    <p class="sub">Your teams are dealt. Open the reveal, then track it live.</p>
+    <p class="links"><a href="/wheel">▶ Spin the reveal</a><a href="/tracker">📊 Live tracker</a></p>
+  </div>
+</div>
+
+<script>
+const sel={draw_mode:"weighted",max_per_player:"",leftover:"pool",scoring_mode:"hybrid"};
+document.querySelectorAll('.opts[data-group]').forEach(g=>{
+  g.querySelectorAll('.opt').forEach(o=>o.onclick=()=>{
+    g.querySelectorAll('.opt').forEach(x=>x.classList.remove('on'));
+    o.classList.add('on'); sel[g.dataset.group]=o.dataset.v;
+  });
+});
+const customPer=document.getElementById('customPer');
+customPer.oninput=()=>{ const v=customPer.value.trim();
+  document.querySelectorAll('.opts[data-group="max_per_player"] .opt').forEach(x=>x.classList.remove('on'));
+  if(v){ sel.max_per_player=v; }
+  else { sel.max_per_player=''; document.querySelector('.opts[data-group="max_per_player"] .opt[data-v=""]').classList.add('on'); } };
+document.querySelectorAll('.opts[data-group="max_per_player"] .opt').forEach(o=>o.addEventListener('click',()=>{ customPer.value=''; }));
+function renumber(){[...document.querySelectorAll('#players .prow input')].forEach((inp,i)=>inp.placeholder='Player '+(i+1));}
+document.getElementById('addP').onclick=()=>{
+  const row=document.createElement('div');row.className='prow';
+  row.innerHTML='<input type="text"><button type="button" class="rm" aria-label="remove">×</button>';
+  document.getElementById('players').appendChild(row);renumber();
+};
+document.getElementById('players').addEventListener('click',e=>{
+  if(!e.target.classList.contains('rm'))return;
+  const rows=document.querySelectorAll('#players .prow');
+  if(rows.length<=1){document.getElementById('msg').textContent='You need at least 2 players.';return;}
+  e.target.closest('.prow').remove();renumber();
+});
+document.getElementById('go').onclick=async()=>{
+  const players=[...document.querySelectorAll('#players input')].map(i=>i.value.trim()).filter(Boolean);
+  const msg=document.getElementById('msg');
+  if(players.length<2){msg.textContent='Add at least 2 players.';return;}
+  msg.textContent='Saving…';
+  const payload={players,...sel,token:document.getElementById('token').value,
+    admin_key:document.getElementById('adminKey').value.trim(),
+    poll_minutes:+document.getElementById('poll').value, competition:document.getElementById('comp').value.trim()||'WC'};
+  try{
+    const r=await fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const j=await r.json();
+    if(j.ok){window.location.href='/wheel';}
+    else if(j.need_key){ document.getElementById('lockGate').style.display='block'; document.getElementById('form').style.display='none';
+      document.getElementById('adminKey').focus(); msg.textContent=j.error; }
+    else{msg.textContent=j.error||'Something went wrong.';}
+  }catch(e){msg.textContent='Could not reach the server.';}
+};
+const formEl=document.getElementById('form'), gateEl=document.getElementById('lockGate');
+fetch('/api/status').then(r=>r.json()).then(s=>{
+  if(s&&s.drawn){ gateEl.style.display='block'; formEl.style.display='none'; }
+  else formEl.style.display='block';
+}).catch(()=>{ formEl.style.display='block'; });
+document.getElementById('unlockBtn').onclick=async()=>{
+  const key=document.getElementById('adminKey').value.trim(), gm=document.getElementById('gateMsg');
+  if(!key){ gm.textContent='Enter the key from the server terminal.'; return; }
+  gm.textContent='Checking…';
+  try{ const j=await fetch('/api/check_key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:key})}).then(r=>r.json());
+    if(j.ok){ gateEl.style.display='none'; formEl.style.display='block'; }
+    else gm.textContent='Wrong key — check the terminal where the server is running.';
+  }catch(e){ gm.textContent='Could not reach the server.'; }
+};
+
+window.addEventListener('pageshow',function(e){ if(e.persisted) location.reload(); });
+</script>
+</body>
+</html>

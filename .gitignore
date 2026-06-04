@@ -1,0 +1,11 @@
+config.json
+results.json
+results.tmp.json
+draw.html
+draw_result.json
+tracker_data.json
+__pycache__/
+*.pyc
+backups/
+.DS_Store
+.idea/

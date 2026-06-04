@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>World Cup 2026 Sweepstake — Live Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#04140d;--panel:#0d2419;--panel2:#0a1e15;--line:#1f4733;
+    --ink:#eafff4;--muted:#7fae97;--gold:#ffc83d;--gold2:#ffe39a;
+    --t1:#ffc83d;--t2:#3dd9c9;--t3:#5b8def;--t4:#8a93a6;--live:#ff5a5a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Sora',system-ui,sans-serif;color:var(--ink);min-height:100vh;
+    background:radial-gradient(1100px 560px at 75% -10%,#11543a55,transparent 60%),var(--bg);
+    padding:26px 20px 70px}
+  .wrap{max-width:1100px;margin:0 auto}
+  header{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  h1{font-family:'Anton';font-weight:400;text-transform:uppercase;letter-spacing:.02em;
+    font-size:clamp(26px,4.4vw,46px);line-height:.95}
+  h1 .y{color:var(--gold)}
+  .meta{margin-left:auto;text-align:right;color:var(--muted);font-size:12px;letter-spacing:.1em}
+  .dot-live{display:inline-block;width:8px;height:8px;border-radius:50%;background:#39d98a;margin-right:6px;
+    animation:pulse 1.6s infinite}
+  @keyframes pulse{50%{opacity:.3}}
+  .tabs{display:flex;gap:8px;margin:22px 0 18px;flex-wrap:wrap}
+  .tab{font-family:'Sora';font-weight:700;font-size:14px;padding:9px 18px;border-radius:999px;cursor:pointer;
+    background:#10301f;border:1px solid var(--line);color:var(--ink)}
+  .tab.on{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205;border-color:var(--gold)}
+  section{display:none}section.on{display:block}
+
+  /* leaderboard */
+  .lb{display:flex;flex-direction:column;gap:10px}
+  .row{display:grid;grid-template-columns:46px 1fr auto;align-items:center;gap:14px;
+    background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);
+    border-radius:14px;padding:14px 18px}
+  .row.lead{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
+  .rank{font-family:'Anton';font-size:26px;color:var(--muted)}
+  .row.lead .rank{color:var(--gold)}
+  .pname{font-family:'Anton';font-size:22px;letter-spacing:.01em}
+  .palive{color:var(--muted);font-size:12px;letter-spacing:.06em}
+  .pscore{font-family:'Anton';font-size:30px;color:var(--gold)}
+  .pscore span{font-family:'Sora';font-size:12px;color:var(--muted);letter-spacing:.1em}
+
+  /* player cards */
+  .pcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px}
+  .pcard{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);
+    border-radius:16px;padding:14px 16px}
+  .pcard h3{font-family:'Anton';font-weight:400;font-size:20px;display:flex;justify-content:space-between;align-items:baseline}
+  .pcard h3 .pts{font-family:'Sora';color:var(--gold);font-size:13px}
+  .tl{display:flex;flex-direction:column;gap:5px;margin-top:10px}
+  .trow{display:grid;grid-template-columns:10px 1fr auto auto;align-items:center;gap:9px;font-size:13.5px;
+    padding:5px 0;border-bottom:1px dashed #143726}
+  .trow:last-child{border-bottom:0}
+  .trow .dot{width:10px;height:10px;border-radius:50%}
+  .trow.out{opacity:.42;text-decoration:line-through}
+  .trow .tp{color:var(--gold);font-variant-numeric:tabular-nums;min-width:34px;text-align:right}
+  .trow .stg{color:var(--muted);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase}
+
+  /* groups */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
+  table{width:100%;border-collapse:collapse;background:linear-gradient(180deg,var(--panel),var(--panel2));
+    border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  caption{font-family:'Anton';font-weight:400;text-align:left;padding:12px 14px 6px;font-size:17px;letter-spacing:.04em}
+  th,td{text-align:left;padding:7px 10px;font-size:12.5px;border-top:1px solid #11301f}
+  th{color:var(--muted);font-weight:600;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase}
+  td.n{font-variant-numeric:tabular-nums;text-align:center}
+  .owner{color:var(--gold);font-size:11px}
+  .qual{box-shadow:inset 3px 0 0 var(--t2)}
+
+  /* fixtures */
+  .fx{display:flex;flex-direction:column;gap:8px}
+  .day{font-family:'Anton';font-weight:400;color:var(--muted);letter-spacing:.06em;margin:14px 0 4px;font-size:14px;text-transform:uppercase}
+  .match{display:grid;grid-template-columns:78px 1fr 70px 1fr;align-items:center;gap:10px;
+    background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);
+    border-radius:12px;padding:10px 14px}
+  .match .t{font-size:14px}.match .t .o{display:block;color:var(--gold);font-size:10.5px}
+  .match .away{text-align:right}.match .away .o{text-align:right}
+  .match .sc{text-align:center;font-family:'Anton';font-size:20px}
+  .match .time{color:var(--muted);font-size:12px;text-align:center;font-variant-numeric:tabular-nums}
+  .live{color:var(--live);font-weight:700;font-size:11px;letter-spacing:.08em}
+  .stagetag{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .empty{color:var(--muted);padding:30px;text-align:center}
+  .modesel{display:flex;gap:8px;margin-bottom:14px}
+  #modesel{display:flex}
+  .modesel button{font-family:'Sora';font-weight:700;font-size:13px;padding:8px 16px;border-radius:999px;cursor:pointer;
+    background:#10301f;border:1px solid var(--line);color:var(--ink)}
+  .modesel button.on{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205;border-color:var(--gold)}
+  .lbunit{font-family:'Sora';font-size:12px;color:var(--muted);letter-spacing:.1em;margin-left:4px}
+  .bracket{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+  .bcard{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .brow{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border-bottom:1px solid #11301f;font-size:14px}
+  .brow:last-of-type{border-bottom:0}
+  .brow .bteam small{display:block;color:var(--gold);font-size:10.5px}
+  .brow.win{background:#11301f}.brow.win .bteam{font-weight:700}.brow.win .bsc{color:var(--gold)}
+  .brow.lose{opacity:.45}
+  .bsc{font-family:'Anton';font-size:20px;min-width:24px;text-align:right}
+  .btime{padding:6px 14px;color:var(--muted);font-size:11px;text-align:center}
+  .blive{padding:5px 14px;text-align:center;font-size:10.5px;font-weight:700;letter-spacing:.1em;color:var(--live)}
+  .blive .pd{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--live);margin-right:5px;animation:pulse 1.4s infinite}
+  #koRounds button.live{position:relative}
+  #koRounds button.live::after{content:"";position:absolute;top:6px;right:8px;width:6px;height:6px;border-radius:50%;background:var(--live);animation:pulse 1.4s infinite}
+
+  .topnav{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+  .topnav .brand{font-family:'Anton';font-size:20px;color:var(--gold);text-decoration:none;letter-spacing:.02em}
+  .topnav .navlinks{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  .topnav .navlinks a{color:var(--muted);text-decoration:none;font-weight:600;font-size:13px;padding:7px 13px;border-radius:999px}
+  .topnav .navlinks a:hover{color:var(--ink)}
+  .topnav .navlinks a.on{background:#11301f;color:var(--gold)}
+  .subbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 0}
+  .badges{display:flex;gap:8px;flex-wrap:wrap}
+  .badge{font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#0a1f15;border:1px solid var(--line);color:var(--muted)}
+  .badge b{color:var(--ink);font-weight:700}.badge.live{border-color:var(--gold);color:var(--gold)}
+  .ctrls{margin-left:auto;display:flex;gap:8px}
+  .mini{font-family:'Sora';font-weight:700;font-size:12px;padding:7px 13px;border-radius:999px;cursor:pointer;background:#10301f;border:1px solid var(--line);color:var(--ink)}
+  .mini:hover{background:#143a26}
+  .panel{background:linear-gradient(180deg,var(--panel),#0a1e15);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-top:12px}
+  .panel h4{font-family:'Anton';font-weight:400;color:var(--gold);text-transform:uppercase;font-size:16px;margin-bottom:8px}
+  .panel p,.panel li{color:var(--muted);font-size:13.5px;line-height:1.6}.panel ul{margin:6px 0 0 18px}.panel b{color:var(--ink)}
+  .panel input{width:100%;margin:6px 0;padding:9px 11px;border-radius:8px;background:#08180f;border:1px solid var(--line);color:var(--ink);font-family:'Sora'}
+  .panel .row2{display:flex;gap:8px}.panel .row2 input{width:50%}
+  .panel button{font-family:'Sora';font-weight:700;background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205;border:0;border-radius:999px;padding:10px 20px;cursor:pointer;margin-top:6px}
+  .statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
+  .statcard{background:#0a1f15;border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .statcard .l{color:var(--muted);font-size:12px;letter-spacing:.06em}
+  .statcard .v{font-family:'Anton';font-weight:400;font-size:24px;color:var(--ink);margin-top:2px}.statcard .v small{font-family:'Sora';font-size:13px;color:var(--gold)}
+  .oddrow{display:flex;align-items:center;gap:12px;padding:8px 0}
+  .oddrow .nm{width:96px;font-weight:600}.oddbar{flex:1;height:18px;background:#0a1f15;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+  .oddbar i{display:block;height:100%;background:linear-gradient(90deg,var(--t2),var(--gold))}
+  .oddrow .pct{width:56px;text-align:right;font-weight:700;color:var(--gold)}
+  .wp{display:flex;height:6px;border-radius:4px;overflow:hidden;margin:3px 2px 0;background:#0a1f15}
+  .wp i{display:block}
+  .wppct{display:flex;font-size:11px;color:var(--muted);margin:2px 4px 0}
+  .wppct span{overflow:hidden;white-space:nowrap}
+  .winrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
+  .simh:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="topnav"><a class="brand" href="/tracker">⚽ WC26 Sweepstake</a><div class="navlinks"><a href="setup.html">Setup</a><a href="/wheel">Reveal</a><a href="tracker.html" class="on">Tracker</a><a href="me.html">My teams</a></div></nav>
+    <header>
+    <h1>World Cup <span class="y">2026</span> — Tracker</h1>
+    <div class="meta"><div id="updated">—</div><div id="auto"></div></div>
+  </header>
+
+  <div class="subbar">
+    <div class="badges" id="badges"></div>
+    <div class="ctrls">
+      <button class="mini" id="helpBtn">What am I looking at?</button>
+      <button class="mini" id="setBtn">⚙ Settings</button>
+    </div>
+  </div>
+  <div class="panel" id="helpPanel" style="display:none">
+    <h4>What am I looking at?</h4>
+    <ul>
+      <li><b>Leaderboard</b> — ranks players by the scoring mode chosen at setup.</li>
+      <li><b>Teams by player</b> — each player's squad, with the points each team has earned.</li>
+      <li><b>Groups</b> — the 12 World Cup group tables, with each team's owner.</li>
+      <li><b>Bracket</b> — the knockout rounds, once the group stage ends.</li>
+      <li><b>Fixtures &amp; times</b> — the schedule with kickoff times in your timezone.</li>
+      <li><b>Odds &amp; stats</b> — each player's live chance of owning the eventual champion, plus fun numbers.</li>
+    </ul>
+    <p style="margin-top:8px"><b>A team row in Teams by player:</b> the number on the right is the points that team has earned you; the small "G" tag is its group (GK = Group K); a struck-through name means it has been knocked out.</p>
+    <p><b>Group tables:</b> PLD = played, GD = goal difference, PTS = points. The top two of each group (highlighted) qualify automatically.</p>
+    <p><b>Leaderboard:</b> "5/5 in" = how many of your teams are still alive. "0-0-0" = a team's wins-draws-losses.</p>
+    <p><b>Scoring modes:</b> Points = goals, wins, clean sheets and knockout bonuses. Survival = how many of your teams are still in. Both = the two added together.</p>
+    <p><b>How "Both" picks a winner:</b> one winner only — the player with the highest Points + Survival total combined. A single ranking, not two prizes.</p>
+    <p><b>Fixtures:</b> the bar under each match is the win chance — home / draw / away — from team strength, shifting toward the leader once a game is in-play.</p>
+    <p><b>Odds &amp; stats:</b> the win bars are your live chance of owning the champion (from bookmaker prices, updating as teams go out). The simulator there estimates your odds of winning on Points, Survival or Both.</p>
+  </div>
+  <div class="panel" id="setPanel" style="display:none">
+    <h4>Settings — add live scores later</h4>
+    <div id="setGate">
+      <p>🔒 A draw is locked. Enter the admin key (shown in the server terminal) to change settings.</p>
+      <input id="setGateKey" type="text" placeholder="admin key">
+      <button id="setUnlock">Unlock settings</button>
+      <div class="hint" id="setGateMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
+    </div>
+    <div id="setFields" style="display:none">
+      <p>Paste a football-data.org token to turn on live scores. This does <b>not</b> touch the draw.</p>
+      <input id="setToken" type="password" placeholder="football-data.org API token">
+      <div class="row2"><input id="setPoll" type="number" min="1" placeholder="refresh mins (e.g. 10)"><input id="setComp" type="text" placeholder="competition (WC)"></div>
+      <button id="setSave">Save settings</button>
+      <div class="hint" id="setMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
+      <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
+        <p style="margin:0 0 8px"><b>Backup &amp; restore.</b> Download your draw + results so nothing is ever lost — and restore it on this or a fresh server.</p>
+        <div class="row2"><button id="setExport">⬇ Download backup</button><button id="setImportBtn">⬆ Restore from file</button></div>
+        <input id="setImportFile" type="file" accept="application/json,.json" style="display:none">
+        <div class="hint" id="setBakMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="gate" style="display:none;text-align:center;padding:50px 20px;border:1px dashed var(--line);border-radius:18px;margin-top:10px">
+    <div style="font-family:'Anton';font-size:30px;color:var(--gold);text-transform:uppercase">The draw hasn't run yet</div>
+    <p style="color:var(--muted);max-width:460px;margin:14px auto 22px">Spin the wheel to hand out the teams. The tracker, groups and bracket unlock the moment every team has an owner.</p>
+    <a href="/wheel" style="display:inline-block;font-family:'Sora';font-weight:700;background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205;text-decoration:none;padding:13px 26px;border-radius:999px">Go to the draw →</a>
+  </div>
+
+  <div class="tabs">
+    <div class="tab on" data-s="lb">Leaderboard</div>
+    <div class="tab" data-s="players">Teams by player</div>
+    <div class="tab" data-s="groups">Groups</div>
+    <div class="tab" data-s="bracket">Bracket</div>
+    <div class="tab" data-s="fixtures">Fixtures &amp; times</div>
+    <div class="tab" data-s="odds">Odds &amp; stats</div>
+  </div>
+
+  <section class="on" id="lb">
+    <div class="winrow" id="winrow"></div>
+    <div class="modesel" id="modesel">
+      <button data-m="points">Points</button>
+      <button data-m="survival">Survival</button>
+      <button data-m="hybrid">Both</button>
+    </div>
+    <div class="lb" id="lbBody"></div>
+  </section>
+  <section id="players"><div class="hint" style="color:var(--muted);font-size:12.5px;margin:0 0 10px">The number on the right of each team is the <b style="color:var(--ink)">points it has earned</b> that player. The G-tag is its group.</div><div class="pcards" id="playersBody"></div></section>
+  <section id="groups"><div class="grid" id="groupsBody"></div></section>
+  <section id="bracket"><div class="modesel" id="koRounds"></div><div id="bracketBody"></div></section>
+  <section id="fixtures"><div class="fx" id="fixturesBody"></div></section>
+  <section id="odds">
+    <div class="statgrid" id="statsBody"></div>
+    <div id="oddsBody"></div>
+    <h4 style="font-family:'Anton';font-weight:400;color:var(--gold);text-transform:uppercase;font-size:15px;margin:22px 0 8px">Squad strength</h4>
+    <div style="color:var(--muted);font-size:12.5px;margin-bottom:8px">Total team rating per player (FIFA ranking + bookmaker odds blend). Higher = stronger squad on paper. ★ = number of tier-1 favourites in that squad.</div>
+    <div id="strengthBody"></div>
+    <div class="panel" style="margin-top:20px">
+      <h4>Win odds by scoring mode (simulated)</h4>
+      <p>The bars above are your <b>Survival</b> odds (owning the eventual winner). To estimate <b>Points</b> and <b>Both</b>, this runs thousands of full tournaments from team strength and counts how often each player tops that leaderboard. <b>Both</b> = highest Points + Survival combined, so you need a squad that piles up points <i>and</i> goes deep.</p>
+      <button id="simBtn">Run 2,000 simulations</button>
+      <div class="hint" id="simNote" style="margin-top:6px"></div>
+      <div id="simBody" style="margin-top:10px"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+const SAMPLE = {"updated_at":"pre-tournament","competition":"WC","default_mode":"hybrid",
+ "leaderboards":{"points":[{"name":"Erol","score":0,"alive_teams":9,"total_teams":9}],
+   "survival":[{"name":"Erol","score":0,"alive_teams":9,"total_teams":9}],
+   "hybrid":[{"name":"Erol","score":0,"alive_teams":9,"total_teams":9}]},
+ "players":[{"name":"Erol","points":0,"survival":0,"teams":[{"name":"France","tier":1,"group":"I","points":0,"survival":0,"status":"alive","stage":"GROUP_STAGE","record":"0-0-0"}]}],
+ "groups":[],"fixtures":[]};
+let MODE="hybrid";
+const FLAGS={"France": "🇫🇷", "Spain": "🇪🇸", "Argentina": "🇦🇷", "Brazil": "🇧🇷", "Portugal": "🇵🇹", "Germany": "🇩🇪", "Netherlands": "🇳🇱", "Morocco": "🇲🇦", "Belgium": "🇧🇪", "Croatia": "🇭🇷", "Colombia": "🇨🇴", "USA": "🇺🇸", "Senegal": "🇸🇳", "Mexico": "🇲🇽", "Uruguay": "🇺🇾", "Japan": "🇯🇵", "Switzerland": "🇨🇭", "Turkey": "🇹🇷", "Ecuador": "🇪🇨", "Iran": "🇮🇷", "Norway": "🇳🇴", "Austria": "🇦🇹", "Korea Republic": "🇰🇷", "Australia": "🇦🇺", "Egypt": "🇪🇬", "Algeria": "🇩🇿", "Canada": "🇨🇦", "Ivory Coast": "🇨🇮", "Sweden": "🇸🇪", "Panama": "🇵🇦", "Paraguay": "🇵🇾", "Czech Republic": "🇨🇿", "Tunisia": "🇹🇳", "DR Congo": "🇨🇩", "Uzbekistan": "🇺🇿", "Qatar": "🇶🇦", "Iraq": "🇮🇶", "South Africa": "🇿🇦", "Saudi Arabia": "🇸🇦", "Bosnia & Herzegovina": "🇧🇦", "Jordan": "🇯🇴", "Cape Verde": "🇨🇻", "Ghana": "🇬🇭", "Curacao": "🇨🇼", "Haiti": "🇭🇹", "New Zealand": "🇳🇿", "Bosnia-Herzegovina": "🇧🇦", "Bosnia and Herzegovina": "🇧🇦", "Cote d'Ivoire": "🇨🇮", "Côte d'Ivoire": "🇨🇮", "South Korea": "🇰🇷", "United States": "🇺🇸", "Czechia": "🇨🇿", "Curaçao": "🇨🇼", "Cape Verde Islands": "🇨🇻", "Türkiye": "🇹🇷", "Turkiye": "🇹🇷", "Congo DR": "🇨🇩", "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "Scotland": "🏴󠁧󠁢󠁳󠁣󠁴󠁿"};
+function flag(n){const f=FLAGS[n];return f?f+" ":"";}
+let COMP={};
+let LBMODE=null;
+const TIER={1:cv('--t1'),2:cv('--t2'),3:cv('--t3'),4:cv('--t4')};
+function cv(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+const STAGE_LABEL={GROUP_STAGE:"Group",LAST_32:"R32",LAST_16:"R16",QUARTER_FINALS:"QF",SEMI_FINALS:"SF",THIRD_PLACE:"3rd",FINAL:"Final"};
+const KO_STAGES=["LAST_32","LAST_16","QUARTER_FINALS","SEMI_FINALS","THIRD_PLACE","FINAL"];
+let KOROUND=null, KO_USER_SET=false;
+
+let DATA=SAMPLE;
+async function load(){
+  let ok=false;
+  try{ const r=await fetch('tracker_data.json?'+Date.now());
+       if(r.ok){ DATA=await r.json(); ok=!!(DATA&&DATA.players&&DATA.players.length); } }
+  catch(e){ ok=false; }
+  const gate=document.getElementById('gate'), tabs=document.querySelector('.tabs');
+  const secs=['lb','players','groups','bracket','fixtures','odds'];
+  if(!ok){ gate.style.display='block'; tabs.style.display='none';
+           secs.forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';}); return; }
+  gate.style.display='none'; tabs.style.display='';
+  secs.forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='';});
+  render(DATA); refreshStatus();
+}
+
+function render(d){
+  document.getElementById('updated').textContent='Updated: '+fmtUpdated(d.updated_at);
+  COMP={}; (d.groups||[]).forEach(g=>(g.table||[]).forEach(r=>COMP[r.team]=r.composite||0));
+  renderWinners(d);
+  // leaderboard for the active mode
+  MODE=d.default_mode||'hybrid';
+  const lbm=LBMODE||MODE;
+  document.querySelectorAll('#modesel button').forEach(b=>b.classList.toggle('on',b.dataset.m===lbm));
+  const board=(d.leaderboards&&d.leaderboards[lbm])||[];
+  const unit=lbm==='survival'?'STILL IN':(lbm==='hybrid'?'TOTAL':'PTS');
+  document.getElementById('lbBody').innerHTML=board.map((p,i)=>`
+    <div class="row ${i===0&&p.score>0?'lead':''}">
+      <div class="rank">${i+1}</div>
+      <div><div class="pname">${p.name}</div><div class="palive">${p.alive_teams}/${p.total_teams} teams still in</div></div>
+      <div class="pscore">${p.score}<span> ${unit}</span></div>
+    </div>`).join('');
+  // player cards
+  document.getElementById('playersBody').innerHTML=d.players.map(p=>`
+    <div class="pcard"><h3>${p.name}<span class="pts">${p.points} pts · ${p.alive_teams}/${p.total_teams} in</span></h3>
+      <div class="tl">${p.teams.map(t=>`
+        <div class="trow ${t.status==='out'?'out':''}">
+          <span class="dot" style="background:${TIER[t.tier]}"></span>
+          <span>${flag(t.name)}${t.name}<span class="stg"> · ${t.record} · ${STAGE_LABEL[t.stage]||t.stage}</span></span>
+          <span class="stg">G${t.group}</span>
+          <span class="tp" title="points ${t.name} has earned ${p.name}">${t.points}</span>
+        </div>`).join('')}</div>
+    </div>`).join('');
+  // groups
+  const gb=document.getElementById('groupsBody');
+  gb.innerHTML = d.groups.length? d.groups.map(g=>`
+    <table><caption>${/^group/i.test(g.group)?g.group:"Group "+g.group}</caption>
+      <tr><th>#</th><th>Team</th><th>Owner</th><th>Pld</th><th>GD</th><th>Pts</th></tr>
+      ${g.table.map(r=>`<tr class="${r.position<=2?'qual':''}">
+        <td class="n">${r.position}</td><td>${flag(r.team)}${r.team}</td><td class="owner">${r.owner}</td>
+        <td class="n">${r.playedGames}</td><td class="n">${r.goalDifference>0?'+':''}${r.goalDifference}</td>
+        <td class="n"><b>${r.points}</b></td></tr>`).join('')}
+    </table>`).join('') : '<div class="empty">Group tables appear once the group stage kicks off (11 June).</div>';
+  // fixtures grouped by day
+  const fb=document.getElementById('fixturesBody');
+  if(!d.fixtures.length){fb.innerHTML='<div class="empty">Fixtures load from the API once results.json is populated.</div>';}
+  else{
+    const byDay={};
+    d.fixtures.slice().sort((a,b)=>(a.utcDate||'').localeCompare(b.utcDate||''))
+      .forEach(m=>{(byDay[dayKey(m.utcDate)] ||= []).push(m);});
+    fb.innerHTML=Object.entries(byDay).map(([day,ms])=>`
+      <div class="day">${day}</div>${ms.map(m=>matchRow(m)).join('')}`).join('');
+  }
+  renderOdds(d);
+  renderBracket(d);
+}
+
+function renderBracket(d){
+  const ko=(d.fixtures||[]).filter(m=>m.stage!=='GROUP_STAGE');
+  const present=KO_STAGES.filter(s=>ko.some(m=>m.stage===s));
+  const rounds=document.getElementById('koRounds'), body=document.getElementById('bracketBody');
+  if(!present.length){rounds.innerHTML='';body.innerHTML='<div class="empty">The bracket fills in once the knockouts begin (28 June).</div>';return;}
+  if(!KO_USER_SET || !present.includes(KOROUND)) KOROUND=liveOrCurrentRound(ko,present);
+  const liveRounds=new Set(ko.filter(m=>m.status==='IN_PLAY'||m.status==='PAUSED').map(m=>m.stage));
+  rounds.innerHTML=present.map(s=>`<button data-r="${s}" class="${s===KOROUND?'on':''} ${liveRounds.has(s)?'live':''}">${STAGE_LABEL[s]||s}</button>`).join('');
+  rounds.querySelectorAll('button').forEach(b=>b.onclick=()=>{KOROUND=b.dataset.r;KO_USER_SET=true;renderBracket(d);});
+  const ms=ko.filter(m=>m.stage===KOROUND);
+  body.innerHTML='<div class="bracket">'+ms.map(bracketCard).join('')+'</div>';
+}
+function liveOrCurrentRound(ko,present){
+  const live=ko.find(m=>m.status==='IN_PLAY'||m.status==='PAUSED');
+  if(live) return live.stage;
+  const open=present.find(s=>ko.some(m=>m.stage===s && m.status!=='FINISHED'));
+  return open || present[present.length-1];
+}
+function bracketCard(m){
+  const isLive=m.status==='IN_PLAY'||m.status==='PAUSED';
+  const done=m.status==='FINISHED', hw=m.winner==='HOME', aw=m.winner==='AWAY';
+  const show=done||isLive;
+  const sc=home=>show?((home?m.homeScore:m.awayScore)??0):'';
+  const foot=isLive?'<div class="blive"><span class="pd"></span>LIVE</div>':(done?'':`<div class="btime">${fmtTime(m.utcDate)}</div>`);
+  return `<div class="bcard">
+    <div class="brow ${hw?'win':''} ${done&&aw?'lose':''}"><span class="bteam">${flag(m.home)}${m.home}<small>${m.homeOwner}</small></span><span class="bsc">${sc(true)}</span></div>
+    <div class="brow ${aw?'win':''} ${done&&hw?'lose':''}"><span class="bteam">${flag(m.away)}${m.away}<small>${m.awayOwner}</small></span><span class="bsc">${sc(false)}</span></div>
+    ${(!done&&m.home&&m.away)?(()=>{const p=winProb(m.home,m.away,m.homeScore,m.awayScore,isLive),h=p.h/(p.h+p.a),R=Math.round(h*100);return `<div class="wp" title="${m.home} ${R}% · ${m.away} ${100-R}%"><i style="width:${h*100}%;background:var(--t2)"></i><i style="width:${(1-h)*100}%;background:var(--gold)"></i></div><div class="wppct"><span style="width:${R}%">${R}%</span><span style="width:${100-R}%;text-align:right">${100-R}%</span></div>`;})():''}
+    ${foot}
+  </div>`;
+}
+
+function winProb(h,a,hs,as_,inplay){
+  const ch=(COMP[h]||40)+1, ca=(COMP[a]||40)+1;
+  let pw=ch/(ch+ca), edge=Math.abs(pw-0.5);
+  let pd=Math.max(0.12,0.30-edge*0.55);
+  let ph=pw*(1-pd), pa=(1-pw)*(1-pd);
+  if(inplay && hs!=null && as_!=null){
+    const gd=hs-as_, b=Math.min(0.62,Math.abs(gd)*0.30);
+    if(gd>0){ ph+=b*(1-ph); pa*=(1-b); pd*=(1-b); }
+    else if(gd<0){ pa+=b*(1-pa); ph*=(1-b); pd*=(1-b); }
+    const s=ph+pd+pa; ph/=s; pd/=s; pa/=s;
+  }
+  return {h:ph,d:pd,a:pa};
+}
+function wpBar3(m,live){
+  if(m.status==='FINISHED'||!m.home||!m.away||(COMP[m.home]==null&&COMP[m.away]==null))return '';
+  const p=winProb(m.home,m.away,m.homeScore,m.awayScore,live), R=x=>Math.round(x*100);
+  return `<div class="wp" title="${live?'live ':''}win chance — ${m.home} ${R(p.h)}% · draw ${R(p.d)}% · ${m.away} ${R(p.a)}%"><i style="width:${p.h*100}%;background:var(--t2)"></i><i style="width:${p.d*100}%;background:#3a4a40"></i><i style="width:${p.a*100}%;background:var(--gold)"></i></div><div class="wppct"><span style="width:${p.h*100}%">${R(p.h)}%</span><span style="width:${p.d*100}%;text-align:center">draw ${R(p.d)}%</span><span style="width:${p.a*100}%;text-align:right">${R(p.a)}%</span></div>`;
+}
+function matchRow(m){
+  const live=m.status==='IN_PLAY'||m.status==='PAUSED';
+  const done=m.status==='FINISHED';
+  const score=(done||live)?`${m.homeScore??0}–${m.awayScore??0}`:'v';
+  const mid=live?`<span class="live">● LIVE</span>`:(done?`<div class="sc">${score}</div>`:`<div class="time">${fmtTime(m.utcDate)}</div>`);
+  const grp=(m.group||'').replace('GROUP_','').trim();
+  const left=m.stage!=='GROUP_STAGE'?`<div class="stagetag">${STAGE_LABEL[m.stage]||m.stage}</div>`:(grp?`<div class="stagetag">Group ${grp}</div>`:'');
+  return `<div><div class="match">
+    <div>${left}</div>
+    <div class="t home">${flag(m.home)}${m.home||'TBD'}<span class="o">${m.homeOwner||''}</span></div>
+    <div>${live?`<div class="sc">${score}</div>`+mid:mid}</div>
+    <div class="t away">${flag(m.away)}${m.away||'TBD'}<span class="o">${m.awayOwner||''}</span></div>
+  </div>${wpBar3(m,live)}</div>`;
+}
+
+function fmtUpdated(s){if(!s||s==='pre-tournament')return 'pre-tournament (sample)';
+  const d=new Date(s);return isNaN(d)?s:d.toLocaleString();}
+function fmtTime(s){const d=new Date(s);return isNaN(d)?'TBC':d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
+function dayKey(s){const d=new Date(s);return isNaN(d)?'TBC':d.toLocaleDateString([],{weekday:'short',day:'numeric',month:'short'});}
+
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('section').forEach(x=>x.classList.remove('on'));
+  t.classList.add('on');document.getElementById(t.dataset.s).classList.add('on');
+});
+document.querySelectorAll('#modesel button').forEach(b=>b.onclick=()=>{LBMODE=b.dataset.m;render(DATA);});
+
+function renderWinners(d){
+  const lb=d.leaderboards||{}, done=(d.stats&&d.stats.teams_remaining<=1&&d.stats.matches_played>0);
+  const cell=(label,mode,unit)=>{const w=(lb[mode]||[])[0];
+    return `<div class="statcard"><div class="l">${label} ${done?'WINNER 🏆':'LEADER'}</div><div class="v">${w?w.name:'—'} <small>${w?w.score+' '+unit:''}</small></div></div>`;};
+  document.getElementById('winrow').innerHTML=cell('POINTS','points','pts')+cell('SURVIVAL','survival','in')+cell('BOTH','hybrid','total');
+}
+function renderOdds(d){
+  const champ=d.champion||[], st=d.stats||{}, str=d.strength||[];
+  const max=Math.max(1,...champ.map(c=>c.odds));
+  let cards=`
+    <div class="statcard"><div class="l">FAVOURITE TO WIN</div><div class="v">${flag(st.favourite_team)}${st.favourite_team||'—'} <small>${st.favourite_odds||0}%</small></div><div class="l">owned by ${st.favourite_owner||'—'}</div></div>
+    <div class="statcard"><div class="l">DARK HORSE</div><div class="v">${flag(st.dark_horse)}${st.dark_horse||'—'} <small>${st.dark_horse_odds||0}%</small></div><div class="l">best outside shot · ${st.dark_horse_owner||'—'}</div></div>
+    <div class="statcard"><div class="l">GROUP OF DEATH</div><div class="v">Group ${st.group_of_death||'—'}</div><div class="l">strongest group on paper</div></div>
+    <div class="statcard"><div class="l">TEAMS REMAINING</div><div class="v">${st.teams_remaining??'—'}<small> /48</small></div></div>
+    <div class="statcard"><div class="l">MATCHES PLAYED</div><div class="v">${st.matches_played??0}</div></div>
+    <div class="statcard"><div class="l">GOALS SCORED</div><div class="v">${st.goals??0}<small> · ${st.goals_per_match||0}/match</small></div></div>`;
+  if(st.biggest_win) cards+=`<div class="statcard"><div class="l">BIGGEST WIN</div><div class="v" style="font-size:18px">${st.biggest_win}</div></div>`;
+  if(st.top_team) cards+=`<div class="statcard"><div class="l">TOP SCORING TEAM</div><div class="v">${flag(st.top_team)}${st.top_team} <small>${st.top_team_goals} goals</small></div></div>`;
+  cards+=`<div class="statcard"><div class="l">STRONGEST SQUAD</div><div class="v">${st.strongest_player||'—'} <small>${st.strongest_player_strength||0}</small></div><div class="l">highest rated on paper</div></div>`;
+  if(STATUS.scoring_mode!=='survival' && st.proj_points_player) cards+=`<div class="statcard"><div class="l">MOST LIKELY · MOST POINTS</div><div class="v">${st.proj_points_player} <small>${st.proj_points_value}</small></div><div class="l">projected points · group + run model</div></div>`;
+  cards+=`<div class="statcard"><div class="l">UNDERDOG · DARK-HORSE PLAYER</div><div class="v">${st.underdog_player||'—'} <small>${st.underdog_player_strength||0}</small></div><div class="l">weakest squad on paper</div></div>`;
+  if(st.rivalry) cards+=`<div class="statcard"><div class="l">BIGGEST RIVALRY</div><div class="v" style="font-size:18px">${st.rivalry}</div><div class="l">${st.rivalry_count} group meeting${st.rivalry_count===1?'':'s'}</div></div>`;
+  cards+=`<div class="statcard"><div class="l">MOST FAVOURITES</div><div class="v">${st.most_favourites_player||'—'} <small>${st.most_favourites||0}★</small></div><div class="l">tier-1 teams owned</div></div>`;
+  const soon=st.matches_played>0?'':'once games start';
+  cards+=`<div class="statcard"><div class="l">MOST GOALS · PLAYER</div><div class="v">${st.top_scorer_player||'—'} <small>${st.top_scorer_player_goals||0}</small></div><div class="l">${soon}</div></div>`;
+  cards+=`<div class="statcard"><div class="l">MOST CONCEDED · PLAYER</div><div class="v">${st.most_conceded_player||'—'} <small>${st.most_conceded_player?st.most_conceded_player_goals:''}</small></div><div class="l">${soon}</div></div>`;
+  cards+=`<div class="statcard"><div class="l">OVER-PERFORMER · PLAYER</div><div class="v">${st.over_player||'—'}</div><div class="l">beating their squad rating</div></div>`;
+  cards+=`<div class="statcard"><div class="l">UNDER-PERFORMER · PLAYER</div><div class="v">${st.under_player||'—'}</div><div class="l">below their squad rating</div></div>`;
+  cards+=`<div class="statcard"><div class="l">OVER-PERFORMER · TEAM</div><div class="v">${st.over_team?flag(st.over_team)+st.over_team:'—'}</div><div class="l">punching above its odds</div></div>`;
+  cards+=`<div class="statcard"><div class="l">UNDER-PERFORMER · TEAM</div><div class="v">${st.under_team?flag(st.under_team)+st.under_team:'—'}</div><div class="l">below its odds</div></div>`;
+  cards+=`<div class="statcard"><div class="l">BEST DEFENCE</div><div class="v">${st.best_defence_team?flag(st.best_defence_team)+st.best_defence_team:'—'} <small>${st.best_defence_team?st.best_defence_conceded+' conceded':''}</small></div><div class="l">${soon}</div></div>`;
+  cards+=`<div class="statcard"><div class="l">MOST GROUP LEADERS</div><div class="v">${st.group_leaders_player||'—'}</div><div class="l">teams topping their group</div></div>`;
+  document.getElementById('statsBody').innerHTML=cards;
+  document.getElementById('oddsBody').innerHTML='<div style="color:var(--muted);font-size:13px;margin:4px 0 8px">Live chance each player owns the World Cup winner (from bookmaker odds, updates as teams go out):</div>'+
+    champ.map(c=>`<div class="oddrow"><div class="nm">${c.name}</div><div class="oddbar"><i style="width:${Math.round(100*c.odds/max)}%"></i></div><div class="pct">${c.odds}%</div></div>`).join('');
+  const smax=Math.max(1,...str.map(s=>s.strength));
+  document.getElementById('strengthBody').innerHTML=str.map(s=>`<div class="oddrow"><div class="nm">${s.name}</div><div class="oddbar"><i style="width:${Math.round(100*s.strength/smax)}%;background:linear-gradient(90deg,var(--t3),var(--t1))"></i></div><div class="pct" style="width:auto;color:var(--ink)">${s.strength}${s.favourites?` · ${s.favourites}★`:''}</div></div>`).join('');
+}
+
+// ---- Monte Carlo: win % per scoring mode ----
+function simWinOdds(d,N){
+  const teams=[], gmap={};
+  (d.groups||[]).forEach(g=>{ gmap[g.group]=g.table.map(r=>r.team);
+    g.table.forEach(r=>teams.push({name:r.team,group:g.group,owner:r.owner,comp:r.composite||0})); });
+  if(teams.length<40) return null;
+  const SC=(d.scoring&&d.scoring.points)||{}, SV=(d.scoring&&d.scoring.survival)||{};
+  const pg=SC.per_goal||1, pw=SC.win||3, pd=SC.draw||1, pc=SC.clean_sheet||1, SB=SC.stage_bonus||{};
+  const by={}; teams.forEach(t=>by[t.name]=t);
+  const players=[...new Set(teams.map(t=>t.owner))].filter(o=>o&&o!=='—'&&o!=='-');
+  const wS={},wP={},wB={},sumPts={}; players.forEach(p=>{wS[p]=0;wP[p]=0;wB[p]=0;sumPts[p]=0;});
+  const eg=n=>0.55+(by[n].comp||0)/55;
+  const pois=l=>{let L=Math.exp(-l),k=0,p=1;do{k++;p*=Math.random();}while(p>L);return k-1;};
+  for(let s=0;s<N;s++){
+    const pts={},reached={},alive={};
+    teams.forEach(t=>{pts[t.name]=0;reached[t.name]=new Set();alive[t.name]=true;});
+    const rank={};
+    for(const g in gmap){ const gt=gmap[g],tp={}; gt.forEach(n=>tp[n]={p:0,gd:0,gf:0});
+      for(let i=0;i<gt.length;i++)for(let j=i+1;j<gt.length;j++){
+        const a=gt[i],b=gt[j],ga=pois(eg(a)),gb=pois(eg(b));
+        pts[a]+=ga*pg; pts[b]+=gb*pg; tp[a].gf+=ga;tp[b].gf+=gb;tp[a].gd+=ga-gb;tp[b].gd+=gb-ga;
+        if(gb===0)pts[a]+=pc; if(ga===0)pts[b]+=pc;
+        if(ga>gb){pts[a]+=pw;tp[a].p+=3;} else if(gb>ga){pts[b]+=pw;tp[b].p+=3;} else {pts[a]+=pd;pts[b]+=pd;tp[a].p++;tp[b].p++;}
+      }
+      rank[g]=gt.slice().sort((x,y)=>tp[y].p-tp[x].p||tp[y].gd-tp[x].gd||tp[y].gf-tp[x].gf);
+    }
+    const top2=[],thirds=[];
+    for(const g in rank){ top2.push(rank[g][0],rank[g][1]); if(rank[g][2])thirds.push(rank[g][2]); }
+    thirds.sort((x,y)=>by[y].comp-by[x].comp);
+    let br=top2.concat(thirds.slice(0,8));
+    const inSet=new Set(br); teams.forEach(t=>{if(!inSet.has(t.name))alive[t.name]=false;});
+    br.forEach(n=>reached[n].add('LAST_32'));
+    for(let i=br.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[br[i],br[j]]=[br[j],br[i]];}
+    const names=['LAST_16','QUARTER_FINALS','SEMI_FINALS','FINAL']; let si=0;
+    while(br.length>1){ const nx=[],stage=names[si++]||'FINAL';
+      for(let k=0;k<br.length;k+=2){ const a=br[k],b=br[k+1],ca=(by[a].comp||0)+1,cb=(by[b].comp||0)+1,aw=Math.random()<ca/(ca+cb);
+        const w=aw?a:b,l=aw?b:a; pts[w]+=2*pg+pw+pc; pts[l]+=1*pg;
+        reached[w].add(stage); reached[l].add(stage); alive[l]=false; nx.push(w); }
+      br=nx;
+    }
+    reached[br[0]].add('WINNER');
+    teams.forEach(t=>reached[t.name].forEach(stg=>{pts[t.name]+=(SB[stg]||0);}));
+    const svp=n=>{let m=0;reached[n].forEach(stg=>{m=Math.max(m,SV[stg]||0);});return m;};
+    const P={},PT={},AL={}; players.forEach(p=>{P[p]=0;PT[p]=0;AL[p]=0;});
+    teams.forEach(t=>{const o=t.owner; if(PT[o]===undefined)return; PT[o]+=pts[t.name]; P[o]+=svp(t.name); if(alive[t.name])AL[o]++;});
+    players.forEach(p=>sumPts[p]+=PT[p]);
+    wP[players.slice().sort((a,b)=>PT[b]-PT[a])[0]]++;
+    wS[players.slice().sort((a,b)=>AL[b]-AL[a]||P[b]-P[a])[0]]++;
+    wB[players.slice().sort((a,b)=>(PT[b]+P[b])-(PT[a]+P[a]))[0]]++;
+  }
+  return players.map(p=>({name:p,surv:100*wS[p]/N,pts:100*wP[p]/N,both:100*wB[p]/N,proj:sumPts[p]/N})).sort((a,b)=>b.both-a.both);
+}
+let SIMRES=null, SIMSORT='both';
+function renderSim(sortKey){
+  if(!SIMRES)return;
+  const mode=STATUS.scoring_mode||DATA.default_mode||'hybrid';
+  const cols=[{k:'pts',label:'Points %'},{k:'surv',label:'Survival %'},{k:'both',label:'Both %'}];
+  if(mode!=='survival') cols.push({k:'proj',label:'Proj pts'});
+  let sk=sortKey||SIMSORT; if(!cols.some(c=>c.k===sk)) sk=(mode==='points'?'pts':mode==='survival'?'surv':'both'); SIMSORT=sk;
+  const rows=SIMRES.slice().sort((a,b)=>(b[sk]||0)-(a[sk]||0));
+  const head='<tr style="color:var(--muted);text-align:left"><th style="padding:6px 8px">Player</th>'+
+    cols.map(c=>`<th class="simh" data-k="${c.k}" style="cursor:pointer;padding:6px 8px;${c.k===sk?'color:var(--gold)':''}">${c.label}${c.k===sk?' ↓':' ↕'}</th>`).join('')+'</tr>';
+  const body=rows.map(r=>`<tr style="border-top:1px solid var(--line)"><td style="padding:7px 8px;font-weight:600">${r.name}</td>`+
+    cols.map(c=>c.k==='proj'?`<td style="padding:7px 8px">${Math.round(r.proj)}</td>`:`<td style="padding:7px 8px;${c.k===sk?'color:var(--gold);font-weight:700':''}">${r[c.k].toFixed(1)}%</td>`).join('')+'</tr>').join('');
+  document.getElementById('simBody').innerHTML='<table style="width:100%;border-collapse:collapse;font-family:Sora;font-size:14px">'+head+body+'</table>';
+  document.querySelectorAll('.simh').forEach(h=>h.onclick=()=>renderSim(h.dataset.k));
+}
+document.getElementById('simBtn').onclick=()=>{
+  const note=document.getElementById('simNote');
+  note.textContent='Simulating…'; document.getElementById('simBody').innerHTML='';
+  setTimeout(()=>{
+    SIMRES=simWinOdds(DATA,2000);
+    if(!SIMRES){ note.textContent='Need the full group data first (run the draw).'; return; }
+    const mode=STATUS.scoring_mode||'hybrid';
+    SIMSORT = mode==='points'?'pts':(mode==='survival'?'surv':'both');
+    note.textContent='From 2,000 simulated tournaments. Survival ≈ the live bars above. Tap a column header to sort.';
+    renderSim(SIMSORT);
+  },30);
+};
+let STATUS={};
+async function refreshStatus(){
+  try{ STATUS=await fetch('/api/status').then(r=>r.json()); }catch(e){ STATUS={}; }
+  const m=STATUS.scoring_mode||DATA.default_mode||'hybrid';
+  const ml={points:'Points',survival:'Survival',hybrid:'Points + survival'}[m]||m;
+  const dm={fair:'Fair',weighted:'Weighted',random:'Random (even)'}[STATUS.draw_mode]||STATUS.draw_mode||'—';
+  const live=STATUS.has_token;
+  document.getElementById('badges').innerHTML=
+    `<span class="badge">Scoring: <b>${ml}</b></span>`+
+    `<span class="badge">Draw: <b>${dm}</b></span>`+
+    `<span class="badge">Comp: <b>${STATUS.competition||'WC'}</b></span>`+
+    `<span class="badge ${live?'live':''}">Live scores: <b>${live?'on':'off'}</b></span>`;
+  if(STATUS.poll_minutes) document.getElementById('setPoll').placeholder='refresh mins (now '+STATUS.poll_minutes+')';
+  if(STATUS.competition) document.getElementById('setComp').placeholder='competition (now '+STATUS.competition+')';
+}
+document.getElementById('helpBtn').onclick=()=>{const p=document.getElementById('helpPanel');p.style.display=p.style.display==='none'?'block':'none';};
+let ADMINKEY='';
+document.getElementById('setBtn').onclick=()=>{
+  const p=document.getElementById('setPanel'); const show=p.style.display==='none'; p.style.display=show?'block':'none';
+  if(show){ const locked=STATUS.drawn && !ADMINKEY;
+    document.getElementById('setGate').style.display=locked?'block':'none';
+    document.getElementById('setFields').style.display=locked?'none':'block'; }
+};
+document.getElementById('setUnlock').onclick=async()=>{
+  const k=document.getElementById('setGateKey').value.trim(), gm=document.getElementById('setGateMsg');
+  if(!k){gm.textContent='Enter the key from the server terminal.';return;}
+  gm.textContent='Checking…';
+  try{ const j=await fetch('/api/check_key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:k})}).then(r=>r.json());
+    if(j.ok){ ADMINKEY=k; document.getElementById('setGate').style.display='none'; document.getElementById('setFields').style.display='block'; }
+    else gm.textContent='Wrong key — check the server terminal.';
+  }catch(e){ gm.textContent='Could not reach the server.'; }
+};
+document.getElementById('setSave').onclick=async()=>{
+  const msg=document.getElementById('setMsg');msg.textContent='Saving…';
+  const payload={token:document.getElementById('setToken').value,
+    poll_minutes:+document.getElementById('setPoll').value||undefined,
+    competition:document.getElementById('setComp').value.trim()||undefined,
+    admin_key:ADMINKEY};
+  try{ const j=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(r=>r.json());
+    if(j.ok){ msg.textContent='Saved — live scores will refresh shortly.'; refreshStatus(); load(); }
+    else if(j.need_key){ msg.textContent='Session expired — reopen Settings and unlock again.'; ADMINKEY=''; }
+    else msg.textContent=j.error||'Could not save.';
+  }catch(e){ msg.textContent='Could not reach the server.'; }
+};
+document.getElementById('setExport').onclick=async()=>{
+  const bm=document.getElementById('setBakMsg'); bm.textContent='Preparing backup…';
+  try{ const j=await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:ADMINKEY})}).then(r=>r.json());
+    if(j.need_key){ bm.textContent='Unlock with the admin key first.'; return; }
+    const blob=new Blob([JSON.stringify(j,null,2)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download='wc26-backup-'+new Date().toISOString().slice(0,10)+'.json'; a.click(); URL.revokeObjectURL(a.href);
+    bm.textContent='Backup downloaded. Keep this file safe — you can restore from it any time.';
+  }catch(e){ bm.textContent='Could not create the backup.'; }
+};
+document.getElementById('setImportBtn').onclick=()=>document.getElementById('setImportFile').click();
+document.getElementById('setImportFile').onchange=async(ev)=>{
+  const bm=document.getElementById('setBakMsg'), f=ev.target.files[0]; if(!f){return;}
+  bm.textContent='Restoring…';
+  try{ const bundle=JSON.parse(await f.text());
+    const j=await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:ADMINKEY,bundle})}).then(r=>r.json());
+    if(j.ok){ bm.textContent='Restored ✓ Reloading…'; setTimeout(()=>location.reload(),800); }
+    else if(j.need_key){ bm.textContent='Unlock with the admin key first.'; }
+    else bm.textContent=j.error||'Could not restore — is this a valid backup file?';
+  }catch(e){ bm.textContent='That file is not a valid backup.'; }
+  ev.target.value='';
+};
+load();
+setInterval(load,60000);                       // auto-refresh every 60s
+document.getElementById('auto').innerHTML='<span class="dot-live"></span>auto-refresh on';
+
+window.addEventListener('pageshow',function(e){ if(e.persisted) location.reload(); });
+</script>
+</body>
+</html>

@@ -1,0 +1,142 @@
+{
+  "mode": "snake",
+  "leftover_policy": "drop",
+  "players": [
+    {
+      "name": "Alex",
+      "strength": 0,
+      "teams": [
+        {
+          "name": "Argentina",
+          "tier": 1,
+          "group": "C",
+          "confederation": "-",
+          "composite": 0
+        },
+        {
+          "name": "England",
+          "tier": 1,
+          "group": "B",
+          "confederation": "-",
+          "composite": 0
+        },
+        {
+          "name": "Japan",
+          "tier": 3,
+          "group": "E",
+          "confederation": "-",
+          "composite": 0
+        },
+        {
+          "name": "Spain",
+          "tier": 1,
+          "group": "E",
+          "confederation": "-",
+          "composite": 0
+        }
+      ]
+    },
+    {
+      "name": "Sam",
+      "strength": 0,
+      "teams": [
+        {
+          "name": "France",
+          "tier": 1,
+          "group": "D",
+          "confederation": "-",
+          "composite": 0
+        },
+        {
+          "name": "Netherlands",
+          "tier": 2,
+          "group": "A",
+          "confederation": "-",
+          "composite": 0
+        },
+        {
+          "name": "Brazil",
+          "tier": 1,
+          "group": "G",
+          "confederation": "-",
+          "composite": 0
+        },
+        {
+          "name": "Switzerland",
+          "tier": 3,
+          "group": "G",
+          "confederation": "-",
+          "composite": 0
+        }
+      ]
+    },
+    {
+      "name": "Jo",
+      "strength": 0,
+      "teams": [
+        {
+          "name": "Portugal",
+          "tier": 2,
+          "group": "H",
+          "confederation": "-",
+          "composite": 0
+        },
+        {
+          "name": "Croatia",
+          "tier": 2,
+          "group": "F",
+          "confederation": "-",
+          "composite": 0
+        },
+        {
+          "name": "USA",
+          "tier": 3,
+          "group": "B",
+          "confederation": "-",
+          "composite": 0
+        },
+        {
+          "name": "Senegal",
+          "tier": 3,
+          "group": "A",
+          "confederation": "-",
+          "composite": 0
+        }
+      ]
+    },
+    {
+      "name": "Ria",
+      "strength": 0,
+      "teams": [
+        {
+          "name": "Morocco",
+          "tier": 2,
+          "group": "F",
+          "confederation": "-",
+          "composite": 0
+        },
+        {
+          "name": "Poland",
+          "tier": 4,
+          "group": "C",
+          "confederation": "-",
+          "composite": 0
+        },
+        {
+          "name": "Australia",
+          "tier": 4,
+          "group": "D",
+          "confederation": "-",
+          "composite": 0
+        },
+        {
+          "name": "South Korea",
+          "tier": 4,
+          "group": "H",
+          "confederation": "-",
+          "composite": 0
+        }
+      ]
+    }
+  ]
+}

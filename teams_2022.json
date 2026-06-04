@@ -1,0 +1,180 @@
+{
+  "teams": [
+    {
+      "name": "Netherlands",
+      "confederation": "-",
+      "group": "A",
+      "tier": 2,
+      "tier_label": "",
+      "weight": 1,
+      "composite": 0,
+      "decimal_odds": 0,
+      "fifa_points": 0
+    },
+    {
+      "name": "USA",
+      "confederation": "-",
+      "group": "B",
+      "tier": 3,
+      "tier_label": "",
+      "weight": 1,
+      "composite": 0,
+      "decimal_odds": 0,
+      "fifa_points": 0
+    },
+    {
+      "name": "Argentina",
+      "confederation": "-",
+      "group": "C",
+      "tier": 1,
+      "tier_label": "",
+      "weight": 1,
+      "composite": 0,
+      "decimal_odds": 0,
+      "fifa_points": 0
+    },
+    {
+      "name": "Australia",
+      "confederation": "-",
+      "group": "D",
+      "tier": 4,
+      "tier_label": "",
+      "weight": 1,
+      "composite": 0,
+      "decimal_odds": 0,
+      "fifa_points": 0
+    },
+    {
+      "name": "France",
+      "confederation": "-",
+      "group": "D",
+      "tier": 1,
+      "tier_label": "",
+      "weight": 1,
+      "composite": 0,
+      "decimal_odds": 0,
+      "fifa_points": 0
+    },
+    {
+      "name": "Poland",
+      "confederation": "-",
+      "group": "C",
+      "tier": 4,
+      "tier_label": "",
+      "weight": 1,
+      "composite": 0,
+      "decimal_odds": 0,
+      "fifa_points": 0
+    },
+    {
+      "name": "England",
+      "confederation": "-",
+      "group": "B",
+      "tier": 1,
+      "tier_label": "",
+      "weight": 1,
+      "composite": 0,
+      "decimal_odds": 0,
+      "fifa_points": 0
+    },
+    {
+      "name": "Senegal",
+      "confederation": "-",
+      "group": "A",
+      "tier": 3,
+      "tier_label": "",
+      "weight": 1,
+      "composite": 0,
+      "decimal_odds": 0,
+      "fifa_points": 0
+    },
+    {
+      "name": "Japan",
+      "confederation": "-",
+      "group": "E",
+      "tier": 3,
+      "tier_label": "",
+      "weight": 1,
+      "composite": 0,
+      "decimal_odds": 0,
+      "fifa_points": 0
+    },
+    {
+      "name": "Croatia",
+      "confederation": "-",
+      "group": "F",
+      "tier": 2,
+      "tier_label": "",
+      "weight": 1,
+      "composite": 0,
+      "decimal_odds": 0,
+      "fifa_points": 0
+    },
+    {
+      "name": "Brazil",
+      "confederation": "-",
+      "group": "G",
+      "tier": 1,
+      "tier_label": "",
+      "weight": 1,
+      "composite": 0,
+      "decimal_odds": 0,
+      "fifa_points": 0
+    },
+    {
+      "name": "South Korea",
+      "confederation": "-",
+      "group": "H",
+      "tier": 4,
+      "tier_label": "",
+      "weight": 1,
+      "composite": 0,
+      "decimal_odds": 0,
+      "fifa_points": 0
+    },
+    {
+      "name": "Morocco",
+      "confederation": "-",
+      "group": "F",
+      "tier": 2,
+      "tier_label": "",
+      "weight": 1,
+      "composite": 0,
+      "decimal_odds": 0,
+      "fifa_points": 0
+    },
+    {
+      "name": "Spain",
+      "confederation": "-",
+      "group": "E",
+      "tier": 1,
+      "tier_label": "",
+      "weight": 1,
+      "composite": 0,
+      "decimal_odds": 0,
+      "fifa_points": 0
+    },
+    {
+      "name": "Portugal",
+      "confederation": "-",
+      "group": "H",
+      "tier": 2,
+      "tier_label": "",
+      "weight": 1,
+      "composite": 0,
+      "decimal_odds": 0,
+      "fifa_points": 0
+    },
+    {
+      "name": "Switzerland",
+      "confederation": "-",
+      "group": "G",
+      "tier": 3,
+      "tier_label": "",
+      "weight": 1,
+      "composite": 0,
+      "decimal_odds": 0,
+      "fifa_points": 0
+    }
+  ]
+}
