@@ -151,6 +151,13 @@
   .winnerbox .wbk{color:var(--gold);font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase}
   .winnerbox .wbteam{font-family:'Anton';font-weight:400;font-size:clamp(30px,6vw,52px);text-transform:uppercase;margin:8px 0 2px}
   .winnerbox .wbsub{color:var(--muted);font-size:14px}.winnerbox .wbsub b{color:var(--ink)}
+  .wbnav{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .warrow{background:#0a1f15;border:1px solid var(--line);color:var(--gold);font-size:22px;line-height:1;
+    width:38px;height:38px;border-radius:50%;cursor:pointer;flex:0 0 auto}
+  .warrow:hover{border-color:var(--gold)}
+  .wbwin{font-family:'Sora';font-weight:700;font-size:16px;color:var(--ink);margin-top:12px}
+  .wdots{display:flex;gap:7px;justify-content:center;margin-top:14px}
+  .wdot{width:8px;height:8px;border-radius:50%;background:var(--line)}.wdot.on{background:var(--gold)}
   .ovsec{margin-bottom:22px}
   .ovh{font-family:'Anton';font-weight:400;font-size:18px;letter-spacing:.04em;text-transform:uppercase;margin:0 0 10px;color:var(--ink)}
   .livegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:12px}
@@ -239,9 +246,16 @@
       <button id="setSave">Save settings</button>
       <div class="hint" id="setMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
-        <p style="margin:0 0 8px"><b>Telegram alerts.</b> A ping when the draw locks, a team's knocked out, or the lead changes. Make a bot with <b>@BotFather</b>, message it once, then paste its token and your chat ID(s) (comma-separated).</p>
-        <input id="setTgToken" type="password" placeholder="bot token (e.g. 123456:ABC-DEF…)">
-        <input id="setTgChats" type="text" placeholder="chat ID(s), comma-separated" style="margin-top:8px">
+        <p style="margin:0 0 4px"><b>Telegram alerts</b> — a ping when the draw locks, a team's knocked out, or the lead changes.</p>
+        <ol style="margin:0 0 10px 18px;padding:0;color:var(--muted);font-size:12.5px;line-height:1.7">
+          <li>In Telegram, search <b>@BotFather</b> → send <b>/newbot</b> → follow prompts → copy the <b>token</b> it gives you.</li>
+          <li>Paste the token below.</li>
+          <li>Open your new bot and send it any message (e.g. "hi").</li>
+          <li>Tap <b>Find my chat ID</b> — it fills itself in.</li>
+          <li><b>Save alerts</b>, then <b>Send test</b>.</li>
+        </ol>
+        <input id="setTgToken" type="password" placeholder="1 — bot token (123456:ABC-DEF…)">
+        <div class="row2" style="margin-top:8px"><input id="setTgChats" type="text" placeholder="2 — chat ID (auto-filled)"><button id="setTgFind">Find my chat ID</button></div>
         <div class="row2" style="margin-top:8px"><button id="setTgSave">Save alerts</button><button id="setTgTest">Send test</button></div>
         <div class="hint" id="setTgMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
       </div>
@@ -521,18 +535,18 @@ function renderOverview(d){
   const live=fx.filter(m=>['IN_PLAY','PAUSED','LIVE','SUSPENDED'].includes(m.status));
   const own=o=>(o&&o!=='—'&&o!=='-')?`<small>${o}</small>`:'';
   let html='';
-  // WINNER banner (tournament over)
+  // WINNER carousel (tournament over) — flip between Both / Points / Survival
   if(done){
-    const champTeam=fx.filter(m=>m.stage==='FINAL'&&m.winner).map(m=>m.winner==='HOME'?{t:m.home,o:m.homeOwner}:{t:m.away,o:m.awayOwner})[0];
-    const sm=STATUS.scoring_mode||'hybrid';
-    const wl=mode=>{const w=(lb[mode]||[])[0]; return w?`<b style="color:var(--gold)">${w.name}</b> · ${w.score}`:'—';};
-    let winLines;
-    if(sm==='points') winLines='Points winner: '+wl('points');
-    else if(sm==='survival') winLines='Survival winner: '+wl('survival');
-    else winLines='Points: '+wl('points')+'<br>Survival: '+wl('survival')+'<br>Both: '+wl('hybrid');
-    html+=`<div class="winnerbox"><div class="wbk">🏆 World Cup won</div>`
-      +(champTeam?`<div class="wbteam">${flag(champTeam.t)}${champTeam.t}</div><div class="wbsub">owned by <b>${champTeam.o&&champTeam.o!=='—'?champTeam.o:'the bonus pool'}</b></div>`:'')
-      +`<div class="wbsub" style="margin-top:12px;line-height:1.7">${winLines}</div></div>`;
+    const slides=winSlides(d);
+    if(WINSLIDE>=slides.length) WINSLIDE=0;
+    const s=slides[WINSLIDE], multi=slides.length>1;
+    const dots=multi?'<div class="wdots">'+slides.map((_,i)=>`<span class="wdot${i===WINSLIDE?' on':''}"></span>`).join('')+'</div>':'';
+    html+=`<div class="winnerbox">
+      <div class="wbnav">${multi?'<button class="warrow" id="winPrev">‹</button>':'<span></span>'}
+        <div class="wbk">🏆 ${s.label} winner</div>
+        ${multi?'<button class="warrow" id="winNext">›</button>':'<span></span>'}</div>
+      ${s.team?`<div class="wbteam">${flag(s.team.t)}${s.team.t}</div><div class="wbsub">World Cup champion${s.team.o&&s.team.o!=='—'?' · owned by <b>'+s.team.o+'</b>':''}</div>`:''}
+      <div class="wbwin">${s.player}<span style="color:var(--gold)"> · ${s.score}</span></div>${dots}</div>`;
   }
   // LIVE NOW
   html+='<div class="ovsec"><div class="ovh">🔴 Live now</div>';
@@ -547,12 +561,16 @@ function renderOverview(d){
   const cells=leaderCells(lb,done);
   html+='<div class="ovsec"><div class="ovh">Who\'s winning</div><div class="winrow" style="grid-template-columns:repeat('+cells.length+',1fr)">'
     +cells.join('')+'</div></div>';
-  // LIVE CHAMPION ODDS (chance of owning the eventual winner)
-  if(champ.length){
-    const max=Math.max(1,...champ.map(c=>c.odds));
-    html+='<div class="ovsec"><div class="ovh">Win odds</div>'
-      +'<div style="color:var(--muted);font-size:12.5px;margin:0 0 8px">Live chance of owning the World Cup winner (bookmaker odds, updates as teams go out). Full Points / Survival / Both odds are in <b>Odds &amp; stats</b>.</div>'
-      +champ.map(c=>`<div class="oddrow"><div class="nm">${c.name}</div><div class="oddbar"><i style="width:${Math.round(100*c.odds/max)}%"></i></div><div class="pct">${c.odds}%</div></div>`).join('')+'</div>';
+  // WIN ODDS — toggle Points / Survival / Both (gated by scoring mode)
+  {
+    const sm=STATUS.scoring_mode||'hybrid';
+    const opts = sm==='points' ? [['pts','Points']] : sm==='survival' ? [['surv','Survival']]
+               : [['both','Both'],['pts','Points'],['surv','Survival']];
+    if(!WINODDSMODE || !opts.some(o=>o[0]===WINODDSMODE)) WINODDSMODE=opts[0][0];
+    const toggle = opts.length>1 ? '<div class="modesel" id="ovOddsSel" style="margin:0 0 10px">'
+        +opts.map(o=>`<button data-c="${o[0]}"${o[0]===WINODDSMODE?' class="on"':''}>${o[1]}</button>`).join('')+'</div>' : '';
+    html+='<div class="ovsec"><div class="ovh">Win odds</div>'+toggle
+      +'<div id="ovOddsBody">'+winOddsRows(d,WINODDSMODE)+'</div></div>';
   }
   // SEASON SO FAR
   html+='<div class="ovsec"><div class="ovh">Season so far</div><div class="statgrid">'
@@ -562,6 +580,38 @@ function renderOverview(d){
     +(st.top_scorer_player?`<div class="statcard"><div class="l">MOST GOALS · PLAYER</div><div class="v">${st.top_scorer_player} <small>${st.top_scorer_player_goals}</small></div></div>`:'')
     +'</div></div>';
   document.getElementById('ovBody').innerHTML=html;
+  // carousel arrows
+  const wp=document.getElementById('winPrev'), wn=document.getElementById('winNext');
+  if(wp) wp.onclick=()=>{ const n=winSlides(d).length; WINSLIDE=(WINSLIDE-1+n)%n; renderOverview(d); };
+  if(wn) wn.onclick=()=>{ const n=winSlides(d).length; WINSLIDE=(WINSLIDE+1)%n; renderOverview(d); };
+  // win-odds toggle + simulate button
+  document.querySelectorAll('#ovOddsSel button').forEach(b=>b.onclick=()=>{ WINODDSMODE=b.dataset.c; renderOverview(d); });
+  const sr=document.getElementById('ovSimRun');
+  if(sr) sr.onclick=()=>{ const body=document.getElementById('ovOddsBody'); if(body) body.innerHTML='<div class="empty" style="margin:6px 0">Simulating…</div>';
+    setTimeout(()=>{ SIMRES=simWinOdds(DATA,1500); renderOverview(d); },30); };
+}
+let WINSLIDE=0, WINODDSMODE=null;
+function winSlides(d){
+  const lb=d.leaderboards||{}, fx=d.fixtures||[], sm=STATUS.scoring_mode||'hybrid';
+  const champTeam=fx.filter(m=>m.stage==='FINAL'&&m.winner).map(m=>m.winner==='HOME'?{t:m.home,o:m.homeOwner}:{t:m.away,o:m.awayOwner})[0];
+  const defs = sm==='points'?[['Points','points','pts']] : sm==='survival'?[['Survival','survival','in']]
+             : [['Both','hybrid','total'],['Points','points','pts'],['Survival','survival','in']];
+  return defs.map(([label,mode,unit])=>{ const w=(lb[mode]||[])[0];
+    return {label, team:champTeam, player:w?w.name:'—', score:w?w.score+' '+unit:''}; });
+}
+const oddBar=(name,val,max)=>`<div class="oddrow"><div class="nm">${name}</div><div class="oddbar"><i style="width:${Math.round(100*val/(max||1))}%"></i></div><div class="pct">${val}%</div></div>`;
+function winOddsRows(d,mode){
+  if(mode==='surv' || mode==='survival'){
+    const c=(d.champion||[]); if(!c.length) return '<div class="empty">Odds appear once the draw is in.</div>';
+    const max=Math.max(1,...c.map(x=>x.odds));
+    return '<div style="color:var(--muted);font-size:12.5px;margin:0 0 8px">Live chance of owning the World Cup winner (bookmaker odds, updates as teams go out).</div>'
+      +c.map(x=>oddBar(x.name,x.odds,max)).join('');
+  }
+  if(!SIMRES) return '<button id="ovSimRun">Calculate '+(mode==='pts'?'Points':'Both')+' odds</button>'
+    +'<div style="margin-top:6px;font-size:12px;color:var(--muted)">Runs a one-off quick simulation of thousands of tournaments.</div>';
+  const rows=SIMRES.slice().sort((a,b)=>(b[mode]||0)-(a[mode]||0)), max=Math.max(1,...rows.map(r=>r[mode]||0));
+  return '<div style="color:var(--muted);font-size:12.5px;margin:0 0 8px">From simulated tournaments — how often each player tops the '+(mode==='pts'?'Points':'Both')+' table.</div>'
+    +rows.map(r=>oddBar(r.name,+(r[mode]||0).toFixed(1),max)).join('');
 }
 function renderOdds(d){
   const champ=d.champion||[], st=d.stats||{}, str=d.strength||[];
@@ -770,6 +820,14 @@ document.getElementById('setSave').onclick=async()=>{
     else if(j.need_key){ msg.textContent='Session expired — reopen Settings and unlock again.'; ADMINKEY=''; }
     else msg.textContent=j.error||'Could not save.';
   }catch(e){ msg.textContent='Could not reach the server.'; }
+};
+document.getElementById('setTgFind').onclick=async()=>{
+  const m=document.getElementById('setTgMsg');m.textContent='Looking for your messages…';
+  try{ const j=await fetch('/api/telegram_discover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:ADMINKEY,telegram_token:document.getElementById('setTgToken').value.trim()})}).then(r=>r.json());
+    if(j.ok&&j.chats&&j.chats.length){ document.getElementById('setTgChats').value=j.chats.map(c=>c.id).join(','); m.textContent='Found: '+j.chats.map(c=>c.name).join(', ')+'. Now hit Save alerts → Send test.'; }
+    else if(j.need_key){ m.textContent='Unlock Settings again.'; ADMINKEY=''; }
+    else m.textContent=j.error||'No messages yet — send your bot a message first, then tap Find again.';
+  }catch(e){ m.textContent='Could not reach the server.'; }
 };
 document.getElementById('setTgSave').onclick=async()=>{
   const m=document.getElementById('setTgMsg');m.textContent='Saving…';

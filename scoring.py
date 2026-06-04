@@ -38,6 +38,52 @@ def _winner_side(m):
     return "HOME" if hs > as_ else ("AWAY" if as_ > hs else "DRAW")
 
 
+def _player_totals(fin, teams, owner):
+    """Points + survival per PLAYER from a subset of finished matches (used for the over-time history)."""
+    pts = defaultdict(int); reached = defaultdict(set)
+    for m in fin:
+        hs, as_ = m.get("homeScore"), m.get("awayScore")
+        if hs is None or as_ is None:
+            continue
+        for team, sc, co in ((m["home"], hs, as_), (m["away"], as_, hs)):
+            if team not in teams:
+                continue
+            pts[team] += sc * SCORING["per_goal"]
+            if co == 0:
+                pts[team] += SCORING["clean_sheet"]
+            if sc > co:
+                pts[team] += SCORING["win"]
+            elif sc == co:
+                pts[team] += SCORING["draw"]
+        if m["stage"] != "GROUP_STAGE":
+            for s in ("home", "away"):
+                if m[s] in teams:
+                    reached[m[s]].add(m["stage"])
+            side = _winner_side(m)
+            champ = m["home"] if side == "HOME" else (m["away"] if side == "AWAY" else None)
+            if m["stage"] == "FINAL" and champ in teams:
+                reached[champ].add("WINNER")
+    for team, stages in reached.items():
+        pts[team] += max((SCORING["stage_bonus"].get(st, 0) for st in stages), default=0)
+    P = defaultdict(int); S = defaultdict(int)
+    for team, o in owner.items():
+        P[o] += pts[team]
+        S[o] += max((SURVIVAL_VALUE.get(s, 0) for s in reached.get(team, ())), default=0)
+    return P, S
+
+
+def _build_history(finished, teams, owner, players):
+    """One snapshot per finished match, in chronological order — points/survival/hybrid per player."""
+    fin = sorted([m for m in finished if m.get("homeScore") is not None],
+                 key=lambda m: m.get("utcDate") or "")
+    hist = []
+    for i in range(1, len(fin) + 1):
+        P, S = _player_totals(fin[:i], teams, owner)
+        hist.append({"m": i, "p": {pl: {"pts": P[pl], "srv": S[pl], "hyb": P[pl] + S[pl]}
+                                   for pl in players}})
+    return hist
+
+
 def compute(teams_path="teams.json", draw_path="draw_result.json",
             results_path="results.json", out="tracker_data.json", default_mode="hybrid"):
     teams = {t["name"]: t for t in _load(teams_path)["teams"]}
@@ -288,6 +334,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                           "homeOwner": owner.get(m["home"], "—"), "awayOwner": owner.get(m["away"], "—"),
                           "homeScore": m.get("homeScore"), "awayScore": m.get("awayScore"),
                           "winner": _winner_side(m)} for m in matches]}
+    data["history"] = _build_history(finished, teams, owner, [p["name"] for p in draw["players"]])
     if out:
         with open(out, "w") as f:
             json.dump(data, f, indent=2)

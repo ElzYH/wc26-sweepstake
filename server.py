@@ -204,38 +204,11 @@ def _alive_owners(td):
     return out
 
 
-def append_history(td):
-    """Append a points/survival snapshot keyed by matches played; embed history into tracker_data."""
-    snap = {"t": td.get("updated_at"),
-            "m": (td.get("stats") or {}).get("matches_played", 0),
-            "p": {p["name"]: {"pts": p["points"], "hyb": p["hybrid"], "srv": p["survival"]}
-                  for p in td.get("players", [])}}
-    hist = []
-    try:
-        with open(HISTORY_FILE) as f:
-            hist = json.load(f)
-    except Exception:
-        hist = []
-    if hist and hist[-1].get("m") == snap["m"]:
-        hist[-1] = snap                     # one point per distinct match count
-    else:
-        hist.append(snap)
-    hist = hist[-300:]
-    with open(HISTORY_FILE, "w") as f:
-        json.dump(hist, f)
-    td["history"] = hist
-    with open("tracker_data.json", "w") as f:
-        json.dump(td, f, indent=2)
-
-
 def notify_changes(old):
     """Compare the previous tracker snapshot to the new one and ping Telegram on big moments."""
     new = _load_tracker()
-    if not new:
-        return
-    append_history(new)
-    if old is None:
-        return                              # first compute: nothing to compare
+    if not new or old is None:
+        return                              # first compute / no data: nothing to compare
     if (new.get("stats") or {}).get("matches_played", 0) == 0:
         return
     # new overall (Both) leader
@@ -517,6 +490,26 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(403, json.dumps({"ok": False, "need_key": True}))
             tg_notify("✅ WC26 test message — notifications are working.")
             return self._send(200, json.dumps({"ok": True}))
+        if path == "/api/telegram_discover":
+            if not key_ok(body):
+                return self._send(403, json.dumps({"ok": False, "need_key": True}))
+            tok = str(body.get("telegram_token") or load_config().get("telegram_token") or "").strip()
+            if not tok:
+                return self._send(400, json.dumps({"ok": False, "error": "Paste the bot token first."}))
+            try:
+                with urllib.request.urlopen("https://api.telegram.org/bot%s/getUpdates" % tok, timeout=8) as r:
+                    upd = json.loads(r.read().decode())
+                chats, seen = [], set()
+                for u in upd.get("result", []):
+                    msg = u.get("message") or u.get("edited_message") or u.get("my_chat_member") or {}
+                    chat = msg.get("chat") or {}
+                    cid = chat.get("id")
+                    if cid is not None and cid not in seen:
+                        seen.add(cid)
+                        chats.append({"id": cid, "name": chat.get("first_name") or chat.get("title") or str(cid)})
+                return self._send(200, json.dumps({"ok": True, "chats": chats}))
+            except Exception as e:
+                return self._send(200, json.dumps({"ok": False, "error": str(e)}))
         if path == "/api/rotate_key":
             if not key_ok(body):
                 return self._send(403, json.dumps({"ok": False, "need_key": True}))
