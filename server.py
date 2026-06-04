@@ -20,7 +20,7 @@ from collections import defaultdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-os.chdir(APP_DIR)
+os.chdir(os.environ.get("WC26_DATA", APP_DIR))
 _hits = defaultdict(list)
 _rl_lock = threading.Lock()
 def rate_ok(ip, limit, window=60):
