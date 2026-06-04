@@ -218,6 +218,7 @@
       <button data-m="points">Points</button>
       <button data-m="survival">Survival</button>
       <button data-m="hybrid">Both</button>
+      <button data-m="fair">Fair</button>
     </div>
     <div class="modecap" id="modeCap"></div>
     <div class="lb" id="lbBody"></div>
@@ -286,16 +287,18 @@ function render(d){
   const CAP={
     points:"<b>Points</b> — teams earn points for goals, wins, clean sheets and bonuses for reaching each knockout round. Rewards teams that perform, even ones knocked out early.",
     survival:"<b>Survival</b> — ranked on how many of your teams are still alive and how far they go. Rewards backing teams that last.",
-    hybrid:"<b>Both</b> — Points and Survival added into one number. A single winner: the squad that racks up points <b>and</b> survives deep."
+    hybrid:"<b>Both</b> — Points and Survival added into one number. A single winner: the squad that racks up points <b>and</b> survives deep.",
+    fair:"<b>Fair</b> — points scored <b>above or below what your squad was expected to score</b> (from the group + run model). Levels out lucky vs tough draws: beat your number to climb, no matter who you drew. Kicks in once games start."
   };
   document.getElementById('modeCap').innerHTML=CAP[lbm]||'';
   const board=(d.leaderboards&&d.leaderboards[lbm])||[];
-  const unit=lbm==='survival'?'STILL IN':(lbm==='hybrid'?'TOTAL':'PTS');
+  const unit=lbm==='survival'?'STILL IN':(lbm==='hybrid'?'TOTAL':(lbm==='fair'?'VS PAR':'PTS'));
+  const disp=v=>lbm==='fair'?((v>0?'+':'')+v):v;
   document.getElementById('lbBody').innerHTML=board.map((p,i)=>`
     <div class="row ${i===0&&p.score>0?'lead':''}">
       <div class="rank">${i+1}</div>
       <div><div class="pname">${p.name}</div><div class="palive">${p.alive_teams}/${p.total_teams} teams still in</div></div>
-      <div class="pscore">${p.score}<span> ${unit}</span></div>
+      <div class="pscore">${disp(p.score)}<span> ${unit}</span></div>
     </div>`).join('');
   // player cards
   document.getElementById('playersBody').innerHTML=d.players.map(p=>`

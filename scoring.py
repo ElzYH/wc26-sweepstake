@@ -180,6 +180,13 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
     proj_team = {n: _exp_group_points(n) + _advance_prob(n) * KO_VALUE for n in teams}
     for p in players_out:
         p["projected_points"] = round(sum(proj_team.get(t["name"], 0.0) for t in p["teams"]), 1)
+    # ---- fair (handicap): points scored above/below your expected share ----
+    # expected share = your projected_points as a fraction of everyone's, applied to the
+    # total points actually scored. Beating it (positive) = overperforming a weaker/clustered squad.
+    _tot_pts = sum(p["points"] for p in players_out)
+    _tot_proj = sum(p["projected_points"] for p in players_out) or 1.0
+    for p in players_out:
+        p["fair"] = round(p["points"] - _tot_pts * p["projected_points"] / _tot_proj)
     by_proj = sorted(players_out, key=lambda p: -p["projected_points"])
     champ_board = [{"name": p["name"], "odds": p["champion_odds"], "alive_teams": p["alive_teams"],
                     "total_teams": p["total_teams"]} for p in sorted(players_out, key=lambda p: -p["champion_odds"])]
@@ -265,7 +272,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
     data = {"updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "competition": results.get("competition", "WC"), "default_mode": default_mode,
             "scoring": {"points": SCORING, "survival": SURVIVAL_VALUE},
-            "leaderboards": {"points": board("points"), "survival": board("survival"), "hybrid": board("hybrid")},
+            "leaderboards": {"points": board("points"), "survival": board("survival"), "hybrid": board("hybrid"), "fair": board("fair")},
             "champion": champ_board, "strength": strength_board, "stats": stats,
             "players": players_out,
             "groups": [{"group": s["group"],
