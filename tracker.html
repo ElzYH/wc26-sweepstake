@@ -173,6 +173,9 @@
   .simh:hover{text-decoration:underline}
   @media(max-width:560px){
     body{padding:18px 13px 60px}
+    .ctrls{margin-left:0;width:100%}
+    #menuBtn{width:100%;text-align:center;padding:9px 13px}
+    .menu{left:0;right:0}
     .tabs{gap:6px;margin:16px 0 14px}
     .tabs .tab{padding:7px 12px;font-size:13px}
     th,td{padding:6px 7px;font-size:11.5px}
@@ -872,8 +875,13 @@ function renderAlerts(){
   const body=document.getElementById('alertsBody');
   const supported=('Notification' in window);
   const perm=supported?Notification.permission:'unsupported';
+  const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   const players=(STATUS.players||[]).map(p=>typeof p==='string'?p:(p&&p.name)).filter(Boolean);
-  if(!supported){ body.innerHTML='<div class="empty">This browser can\'t show notifications. Try Chrome, Edge, or Safari.</div>'; return; }
+  if(!supported){
+    if(isIOS) body.innerHTML='<div class="empty">On iPhone/iPad, Safari blocks web alerts in a normal tab — Apple only allows them for sites <b>added to the Home Screen</b>, delivered via push. Proper push alerts can be switched on (they\'ll work on iPhone once the site is added to your Home Screen). For now, alerts work great on a laptop — Chrome, Edge, or desktop Safari.</div>';
+    else body.innerHTML='<div class="empty">This browser can\'t show notifications. Alerts work on Chrome, Edge, or desktop Safari.</div>';
+    return;
+  }
   if(!players.length){ body.innerHTML='<div class="empty">Set up the players first (Setup), then come back.</div>'; return; }
   const me=notifyMe();
   let h='<div style="color:var(--ink);opacity:.85;font-size:13px;margin:0 0 12px">Pick your name and allow notifications. You\'ll get pinged about your teams whenever this tracker is open in a tab.</div>';
