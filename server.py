@@ -12,6 +12,7 @@ The API token is stored in config.json (gitignored) — keep your box private.
 """
 import json
 import os
+import random
 import secrets
 import shutil
 import threading
@@ -102,6 +103,11 @@ def backup_data():
 
 def reset_draw():
     backup_draw()                       # keep a copy before wiping, so a re-draw is recoverable
+    try:
+        _draw_state["gen"] += 1         # signal any running server reveal to stop
+        _draw_state["running"] = False
+    except Exception:
+        pass
     for f in ("draw_result.json", "tracker_data.json", "results.json", LIVE_FILE):
         if os.path.exists(f):
             os.remove(f)
@@ -722,6 +728,103 @@ def poller():
         time.sleep(max(60, mins * 60))
 
 
+def _team_brief(t):
+    return {"name": t["name"], "tier": t["tier"], "group": t["group"],
+            "composite": t.get("composite", 0), "confederation": t.get("confederation", "?")}
+
+
+def compute_assignment(mode, players, t1_cap=None, leftover="pool", seed=None):
+    """Return ({player: [team dicts]}, bonus_pool list). 'fair' is ported from the wheel."""
+    teams = json.load(open("teams.json"))["teams"]
+    n = len(players)
+    per_player = len(teams) // n
+    in_play_n = per_player * n
+    if mode == "fair":
+        pool = sorted(teams, key=lambda t: -t.get("composite", 0))[:in_play_n]
+        rng = random.Random(seed)
+        assign = {p: [] for p in players}
+        for pot in range(per_player):
+            band = pool[pot * n:pot * n + n][:]
+            rng.shuffle(band)                               # every team in the band equally likely
+            seq = players if pot % 2 == 0 else players[::-1]
+            for i, p in enumerate(seq):
+                assign[p].append(_team_brief(band[i]))
+        return assign, []
+    d = draw_mod.Draw(mode=("weighted" if str(mode).startswith("weighted") else "snake"),
+                      leftover_policy=leftover, t1_cap=t1_cap, seed=seed)
+    d.add_players(players)
+    d.add_all_teams("teams.json")
+    d.sort_teams_to_players()
+    assign = {p.name: [{"name": t.name, "tier": t.tier, "group": t.group,
+                        "composite": t.composite, "confederation": t.confederation} for t in p.teams]
+              for p in d.players}
+    bonus = [{"name": t.name, "tier": t.tier, "group": t.group,
+              "composite": t.composite, "confederation": t.confederation} for t in d.bonus_pool]
+    return assign, bonus
+
+
+_draw_state = {"gen": 0, "running": False}
+
+
+def run_auto_draw(gen, players, mode, t1_cap, leftover, order_gap=1.0, pick_gap=1.4):
+    """Reveal the draw pick-by-pick on the server, writing live_draw.json as it goes,
+    so /watch (and the host) follow along even with every tab closed. Then lock + recompute."""
+    def stale():
+        return _draw_state["gen"] != gen
+    try:
+        assign, bonus = compute_assignment(mode, players, t1_cap, leftover)
+        per_player = max(len(v) for v in assign.values()) if assign else 0
+        order = players[:]
+        random.shuffle(order)
+        with _lock:
+            live_save({"phase": "order", "active": True, "done": False, "server": True,
+                       "order": [], "picks": [], "updated": None})
+        revealed = []
+        for p in order:
+            time.sleep(order_gap)
+            if stale():
+                return
+            revealed.append(p)
+            with _lock:
+                st = live_load(); st["order"] = revealed[:]; st["phase"] = "order"; st["active"] = True; live_save(st)
+        time.sleep(order_gap)
+        if stale():
+            return
+        with _lock:
+            st = live_load(); st["phase"] = "teams"; st["order"] = order[:]; st["picks"] = []; live_save(st)
+        picks = []
+        for idx in range(per_player):
+            seq = order if idx % 2 == 0 else order[::-1]    # snake reveal, like a draft
+            for p in seq:
+                if idx >= len(assign.get(p, [])):
+                    continue
+                t = assign[p][idx]
+                time.sleep(pick_gap)
+                if stale():
+                    return
+                picks.append({"player": p, "team": t["name"], "tier": t["tier"], "group": t["group"]})
+                with _lock:
+                    st = live_load(); st["picks"] = picks[:]; st["phase"] = "teams"; st["active"] = True; live_save(st)
+        if stale():
+            return
+        payload = {"mode": mode, "leftover": leftover,
+                   "players": [{"name": p, "teams": [t["name"] for t in assign[p]]} for p in order],
+                   "bonus_pool": [t["name"] for t in bonus]}
+        with _lock:
+            json.dump(build_draw_result(payload), open("draw_result.json", "w"), indent=2)
+            cfg = load_config()
+            ok, err = update_now(cfg)
+            st = live_load(); st["done"] = True; st["active"] = False; st["phase"] = "done"; live_save(st)
+        log("server draw complete" if ok else "server draw lock FAILED:", err or "")
+        if ok:
+            discord_send("🏆 The WC26 draw is locked — open the tracker to see your teams!")
+    except Exception as e:
+        log("auto-draw error:", e)
+    finally:
+        if _draw_state["gen"] == gen:
+            _draw_state["running"] = False
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json"):
         body = body.encode() if isinstance(body, str) else body
@@ -928,6 +1031,32 @@ class Handler(BaseHTTPRequestHandler):
             if ok:
                 tg_broadcast("🏆 The WC26 draw is locked — open the tracker to see your teams!")
             return self._send(200 if ok else 500, json.dumps({"ok": ok, "error": err}))
+        if path == "/api/start_draw":
+            if not key_ok(body):
+                return self._send(403, json.dumps({"ok": False, "need_key": True,
+                    "error": "Admin key required to run the draw."}))
+            if draw_locked():
+                return self._send(403, json.dumps({"ok": False, "error": "draw already locked"}))
+            cfg = load_config()
+            players = cfg.get("players") or [p.get("name") for p in (body.get("players") or [])
+                                             if isinstance(p, dict) and p.get("name")]
+            players = [p for p in players if p]
+            if len(players) < 2:
+                return self._send(400, json.dumps({"ok": False, "error": "need at least 2 players"}))
+            if not cfg.get("players"):
+                cfg["players"] = players
+                save_config(cfg)
+            if _draw_state["running"]:
+                return self._send(400, json.dumps({"ok": False, "error": "a draw is already running"}))
+            mode = body.get("mode") or cfg.get("draw_mode") or "fair"
+            _draw_state["gen"] += 1
+            _draw_state["running"] = True
+            gen = _draw_state["gen"]
+            threading.Thread(target=run_auto_draw,
+                             args=(gen, players, mode, cfg.get("t1_cap"), cfg.get("leftover", "pool")),
+                             daemon=True).start()
+            log("server draw started:", mode, len(players), "players")
+            return self._send(200, json.dumps({"ok": True}))
         if path == "/api/settings":
             cfg = load_config()
             if not cfg.get("players"):

@@ -104,6 +104,9 @@
         <button class="act ghost" id="autoBtn">Auto-play</button>
         <button class="act ghost" id="resetBtn">Restart</button>
       </div>
+      <div class="controls" style="margin-top:8px">
+        <button class="act ghost" id="serverBtn" style="width:100%" title="The draw runs on the server and keeps going even if you close this tab">🖥️ Run draw on the server (keeps going if you close this)</button>
+      </div>
       <div class="progress" id="progress"></div>
       <div class="saved" id="saved"></div>
     </div>
@@ -389,6 +392,19 @@ $('autoBtn').onclick=()=>{ auto=!auto; syncUI(); if(auto&&!spinning) beginSpin(r
 $('resetBtn').onclick=async()=>{ if(isServer() && !(await keyValid(localStorage.getItem('wc26_admin_key')))){ showAdminGate(); return; }
   auto=false;spinning=false;holding=false;if(holdRAF)cancelAnimationFrame(holdRAF);
   $('saved').style.display='none';$('saved').className='saved';$('reveal').classList.remove('show');startOrder(); };
+$('serverBtn').onclick=async()=>{
+  if(!isServer()){ alert('Open this from the live site to run a server draw.'); return; }
+  const key=localStorage.getItem('wc26_admin_key')||'';
+  if(!(await keyValid(key))){ showAdminGate(); return; }
+  if(!confirm('Run the draw on the server? It will reveal pick-by-pick and keep going even if you close this — you\'ll be taken to the live Watch page to follow along.')) return;
+  const b=$('serverBtn'); b.disabled=true; b.textContent='Starting…';
+  try{
+    const j=await fetch('/api/start_draw',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({admin_key:key,mode:mode,players:players.map(p=>({name:p}))})}).then(r=>r.json());
+    if(j.ok){ location.href='/watch'; }
+    else { b.disabled=false; b.textContent='🖥️ Run draw on the server'; alert(j.error||'Could not start the draw.'); }
+  }catch(e){ b.disabled=false; b.textContent='🖥️ Run draw on the server'; alert('Could not reach the server.'); }
+};
 document.querySelectorAll('#speed button').forEach(b=>b.onclick=()=>{ speed=b.dataset.s;
   document.querySelectorAll('#speed button').forEach(x=>x.classList.toggle('on',x===b)); });
 

@@ -131,6 +131,8 @@ def run():
         check("interactions reject unsigned (401)", st == 401, str(st))
         st, body = req("POST", "/api/register_commands", {"admin_key": "wrong"})
         check("register_commands needs admin key (403)", st == 403, str(st))
+        st, body = req("POST", "/api/start_draw", {"admin_key": "wrong"})
+        check("start_draw needs admin key (403)", st == 403, str(st))
         st, body = req("GET", "/manifest.webmanifest")
         check("manifest served (200)", st == 200 and "{" in body, str(st))
     finally:
