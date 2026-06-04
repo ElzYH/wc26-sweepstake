@@ -156,7 +156,28 @@ async function init(){
     if(saved&&saved.players){ showLocked(saved); return; }
   }
   if(!offline && !(st.players&&st.players.length)){ showNeedSetup(); return; }   // server is up but no players configured — don't run a sample draw
+  if(!offline && !(await keyValid(localStorage.getItem('wc26_admin_key')))){ showAdminGate(); return; }
   startOrder();
+}
+
+async function keyValid(key){
+  if(!key) return false;
+  try{ const j=await fetch('/api/check_key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:key})}).then(r=>r.json()); return !!(j&&j.ok); }
+  catch(e){ return false; }
+}
+function showAdminGate(){
+  phase='need';
+  $('spinBtn').disabled=true; $('autoBtn').disabled=true;
+  $('modenote').textContent='Admin only'; $('phasetag').textContent='Admin access'; $('turn').textContent='Enter the admin key to run the draw';
+  const box=$('saved'); box.style.display='block'; box.classList.remove('err');
+  box.innerHTML='\uD83D\uDD12 <b>Running the draw is admin-only.</b><div class="note">Spectators can follow along on the watch link. To run it, enter the admin key.</div>'
+    +'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><input id="wkey" type="text" placeholder="admin key" style="flex:1;min-width:160px;padding:9px 11px;border-radius:8px;border:1px solid #1f4733;background:#08180f;color:#eafff4;font-family:Sora"><button id="wkeyBtn" type="button">Unlock</button></div><div class="note" id="wkeyMsg"></div>';
+  $('wkeyBtn').onclick=async()=>{
+    const k=$('wkey').value.trim(); if(!k){ $('wkeyMsg').textContent='Enter the key.'; return; }
+    $('wkeyMsg').textContent='Checking\u2026';
+    if(await keyValid(k)){ localStorage.setItem('wc26_admin_key',k); box.style.display='none'; startOrder(); }
+    else $('wkeyMsg').textContent='Wrong key.';
+  };
 }
 function showNeedSetup(){
   phase='need';
