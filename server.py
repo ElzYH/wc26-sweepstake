@@ -639,7 +639,8 @@ class Handler(BaseHTTPRequestHandler):
                 "has_telegram": bool(cfg.get("telegram_token")),
                 "push_enabled": push_enabled(),
                 "vapid_public": (cfg.get("vapid_public") if push_enabled() else None),
-                "discord": bool(cfg.get("discord_webhook"))}))
+                "discord": bool(cfg.get("discord_webhook")),
+                "has_invite": bool(cfg.get("discord_invite") and cfg.get("join_code"))}))
         return self._file(path.lstrip("/"))
 
     def do_POST(self):
@@ -667,7 +668,7 @@ class Handler(BaseHTTPRequestHandler):
         ip = self.client_address[0]
         if path == "/api/live_pick":
             klass, limit = "live", 300          # turbo fires ~1/team in a burst; its own bucket
-        elif path in ("/api/setup", "/api/settings", "/api/redraw", "/api/save_draw", "/api/export", "/api/import"):
+        elif path in ("/api/setup", "/api/settings", "/api/redraw", "/api/save_draw", "/api/export", "/api/import", "/api/discord_invite"):
             klass, limit = "strict", 10
         else:
             klass, limit = "norm", 60
@@ -748,6 +749,11 @@ class Handler(BaseHTTPRequestHandler):
             if "discord_webhook" in body:
                 w = str(body["discord_webhook"]).strip()
                 cfg["discord_webhook"] = w if (w == "" or w.startswith("https://")) else cfg.get("discord_webhook", "")
+            if "discord_invite" in body:
+                inv = str(body["discord_invite"]).strip()
+                cfg["discord_invite"] = inv if (inv == "" or inv.startswith("https://")) else cfg.get("discord_invite", "")
+            if "join_code" in body:
+                cfg["join_code"] = str(body["join_code"]).strip()[:60]
             if body.get("vapid_sub"):
                 cfg["vapid_sub"] = str(body["vapid_sub"]).strip()[:120]
             with _lock:
@@ -798,6 +804,16 @@ class Handler(BaseHTTPRequestHandler):
                 backup_data()
             log("data imported:", len(cfg.get("players", [])), "players, ok", ok, err or "")
             return self._send(200 if ok else 500, json.dumps({"ok": ok, "error": err}))
+        if path == "/api/discord_invite":          # OPEN but code-gated: reveal invite only on correct code
+            import hmac
+            cfg = load_config()
+            invite, code = cfg.get("discord_invite") or "", cfg.get("join_code") or ""
+            if not invite or not code:
+                return self._send(404, json.dumps({"ok": False, "error": "no invite set"}))
+            given = str(body.get("code", ""))
+            if given and hmac.compare_digest(given, code):
+                return self._send(200, json.dumps({"ok": True, "invite": invite}))
+            return self._send(200, json.dumps({"ok": False, "error": "wrong code"}))
         if path == "/api/check_key":
             return self._send(200, json.dumps({"ok": key_ok(body)}))
         if path == "/api/discord_test":

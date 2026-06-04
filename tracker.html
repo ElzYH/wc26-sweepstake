@@ -262,6 +262,11 @@
         <input id="setDiscord" type="text" placeholder="https://discord.com/api/webhooks/…">
         <div class="row2" style="margin-top:6px"><button id="setSaveDiscord">Save webhook</button><button id="setTestDiscord" class="mini">Send Discord test</button></div>
         <div class="hint" id="setDiscordMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
+        <p style="margin:12px 0 6px;color:var(--muted);font-size:12.5px">• <b>Invite link (code-protected)</b> — paste your server invite + a join code. The site never shows either; players type the code (which you share privately) to reveal the link, so randoms who find the site can't join.</p>
+        <input id="setInvite" type="text" placeholder="https://discord.gg/… (server invite)">
+        <input id="setJoinCode" type="text" placeholder="join code (share this privately, e.g. NORTHBANK)" style="margin-top:6px">
+        <div class="row2" style="margin-top:6px"><button id="setSaveInvite">Save invite + code</button></div>
+        <div class="hint" id="setInviteMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
       </div>
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
         <p style="margin:0 0 8px"><b>Backup &amp; restore.</b> Download your draw + results so nothing is ever lost — and restore it on this or a fresh server.</p>
@@ -842,6 +847,8 @@ async function refreshStatus(){
   if(STATUS.competition) document.getElementById('setComp').placeholder='competition (now '+STATUS.competition+')';
   const ps=document.getElementById('setPushState'); if(ps) ps.textContent=STATUS.push_enabled?'on ✅':'off (pywebpush not installed)';
   const dw=document.getElementById('setDiscord'); if(dw && STATUS.discord) dw.placeholder='webhook saved ✅ (paste to replace, or clear to remove)';
+  if(STATUS.has_invite){ const iv=document.getElementById('setInvite'), jc=document.getElementById('setJoinCode');
+    if(iv) iv.placeholder='invite saved ✅ (paste to replace)'; if(jc) jc.placeholder='code saved ✅ (type to replace)'; }
 }
 document.getElementById('helpBtn').onclick=()=>{const p=document.getElementById('helpPanel');p.style.display=p.style.display==='none'?'block':'none';};
 document.getElementById('refreshBtn').onclick=async()=>{
@@ -885,6 +892,16 @@ document.getElementById('setSaveDiscord').onclick=async()=>{
   m.textContent='Saving…';
   try{ const j=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({discord_webhook:v,admin_key:ADMINKEY})}).then(r=>r.json());
     if(j.ok){ m.textContent=v?'Saved — try “Send Discord test”.':'Webhook cleared.'; refreshStatus(); }
+    else if(j.need_key){ m.textContent='Session expired — reopen Settings and unlock again.'; ADMINKEY=''; }
+    else m.textContent=j.error||'Could not save.';
+  }catch(e){ m.textContent='Could not reach the server.'; }
+};
+document.getElementById('setSaveInvite').onclick=async()=>{
+  const m=document.getElementById('setInviteMsg'); const inv=document.getElementById('setInvite').value.trim(); const code=document.getElementById('setJoinCode').value.trim();
+  if(inv && !inv.startsWith('https://')){ m.textContent='Invite must start with https:// .'; return; }
+  m.textContent='Saving…';
+  try{ const j=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({discord_invite:inv,join_code:code,admin_key:ADMINKEY})}).then(r=>r.json());
+    if(j.ok){ m.textContent=(inv&&code)?'Saved — share the join code with your group privately.':'Saved.'; refreshStatus(); }
     else if(j.need_key){ m.textContent='Session expired — reopen Settings and unlock again.'; ADMINKEY=''; }
     else m.textContent=j.error||'Could not save.';
   }catch(e){ m.textContent='Could not reach the server.'; }
@@ -941,9 +958,27 @@ function renderAlerts(){
   }
   const showPrefs = pushOn || (supported && perm==='granted' && !pushCap);
   if(showPrefs) h+=prefRows();
-  if(STATUS.discord) h+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);color:var(--muted);font-size:12px">💬 Group alerts also post to your Discord channel.</div>';
+  if(STATUS.discord||STATUS.has_invite){
+    h+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">';
+    if(STATUS.discord) h+='<div style="color:var(--muted);font-size:12px;margin-bottom:8px">💬 Group alerts also post to the Discord channel.</div>';
+    if(STATUS.has_invite) h+='<button class="mini" id="alJoin">💬 Join the group chat</button><div class="hint" id="alJoinMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>';
+    h+='</div>';
+  }
+  h+='<details style="margin-top:14px"><summary style="cursor:pointer;color:var(--t2);font-size:12.5px">How do I get alerts on my phone?</summary>'
+    +'<div style="color:var(--muted);font-size:12.5px;line-height:1.55;margin-top:8px">'
+    +'<b>iPhone:</b> 1) open this page in Safari · 2) tap the <b>Share</b> icon · 3) <b>Add to Home Screen</b> · 4) open the app from that new icon · 5) come back here, pick your name, tap <b>Turn on alerts</b> and Allow · 6) <b>Send a test</b>.<br>'
+    +'<b>Android / laptop:</b> pick your name, tap <b>Turn on alerts</b> (or Allow notifications), then <b>Send a test</b>.<br>'
+    +'<b>Or just join the Discord</b> with the button above — no install, works on any phone.</div></details>';
   h+='<div class="hint" id="alMsg" style="color:var(--muted);font-size:12px;margin-top:8px"></div>';
   body.innerHTML=h;
+  const join=document.getElementById('alJoin');
+  if(join) join.onclick=async()=>{ const jm=document.getElementById('alJoinMsg');
+    const code=prompt('Enter the join code (ask whoever set up the sweepstake):'); if(code===null) return;
+    jm.textContent='Checking…';
+    try{ const j=await fetch('/api/discord_invite',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:code})}).then(r=>r.json());
+      if(j.ok&&j.invite){ jm.innerHTML='Opening Discord… if it doesn\'t open, <a href="'+j.invite+'" target="_blank" rel="noopener" style="color:var(--t2)">tap here</a>.'; window.open(j.invite,'_blank','noopener'); }
+      else jm.textContent=(j.error==='wrong code')?'That code didn\'t match.':(j.error||'Could not get the invite.');
+    }catch(e){ jm.textContent='Could not reach the server.'; } };
   const sel=document.getElementById('alMe');
   if(sel) sel.onchange=async()=>{ localStorage.setItem('wc26_me',sel.value); NOTIFYSNAP=null;
     if(localStorage.getItem('wc26_push_on')==='1' && sel.value){ await pushSubscribe(sel.value); } renderAlerts(); };

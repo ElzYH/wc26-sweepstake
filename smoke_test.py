@@ -115,6 +115,8 @@ def run():
         check("push_test 400 when push not enabled", st == 400, f"{st} {body[:80]}")
         st, body = req("POST", "/api/push_prefs", {"endpoint": "x", "prefs": {"goal": False}})
         check("push_prefs responds ok", st == 200, str(st))
+        st, body = req("POST", "/api/discord_invite", {"code": "x"})
+        check("discord_invite 404 when none set (no leak)", st == 404, str(st))
         st, body = req("GET", "/manifest.webmanifest")
         check("manifest served (200)", st == 200 and "{" in body, str(st))
     finally:
