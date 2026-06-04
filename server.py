@@ -413,6 +413,16 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200 if ok else 500, json.dumps({"ok": ok, "error": err}))
         if path == "/api/check_key":
             return self._send(200, json.dumps({"ok": key_ok(body)}))
+        if path == "/api/rotate_key":
+            if not key_ok(body):
+                return self._send(403, json.dumps({"ok": False, "need_key": True}))
+            with _lock:
+                cfg = load_config()
+                newk = secrets.token_urlsafe(16)
+                cfg["admin_key"] = newk
+                save_config(cfg)
+            log("admin key rotated")
+            return self._send(200, json.dumps({"ok": True, "key": newk}))
         if path == "/api/poll":
             cfg = load_config()
             with _lock:

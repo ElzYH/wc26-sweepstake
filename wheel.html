@@ -80,7 +80,7 @@
 </head>
 <body>
 <div class="wrap">
-  <nav class="topnav"><a class="brand" href="/tracker">⚽ WC26 Sweepstake</a><div class="navlinks"><a href="/setup">Setup</a><a href="/wheel" class="on">Reveal</a><a href="/tracker">Tracker</a><a href="/me">My teams</a></div></nav>
+  <nav class="topnav"><a class="brand" href="/tracker">⚽ WC26 Sweepstake</a><div class="navlinks"><a href="/setup">Setup</a><a href="/wheel" class="on">Reveal</a><a href="/watch">Watch</a><a href="/tracker">Tracker</a><a href="/me">My teams</a></div></nav>
   <header><h1>World Cup <span class="y">2026</span> Draw</h1><span class="phasetag" id="phasetag">Pick order</span></header>
   <div class="legend">
     <span><i style="background:var(--t1)"></i>Favourites</span><span><i style="background:var(--t2)"></i>Contenders</span>
@@ -176,7 +176,7 @@ function showAdminGate(){
   const box=$('saved'); box.style.display='block'; box.classList.remove('err');
   box.innerHTML='\uD83D\uDD12 <b>Running the draw is admin-only.</b><div class="note">Spectators can follow along live on the tracker. To run it, enter the admin key.</div>'
     +'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><input id="wkey" type="text" placeholder="admin key" style="flex:1;min-width:160px;padding:9px 11px;border-radius:8px;border:1px solid #1f4733;background:#08180f;color:#eafff4;font-family:Sora"><button id="wkeyBtn" type="button">Unlock</button></div>'
-    +'<div class="note" id="wkeyMsg"></div><div style="margin-top:10px"><a href="/tracker" style="color:var(--gold);background:none;text-decoration:underline;font-weight:600">Watch live on the tracker →</a></div>';
+    +'<div class="note" id="wkeyMsg"></div><div style="margin-top:12px"><a href="/watch" style="display:inline-block;padding:11px 20px;border-radius:999px;background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205;font-weight:700;text-decoration:none">▶ Watch the draw live</a></div>';
   $('wkeyBtn').onclick=async()=>{
     const k=$('wkey').value.trim(); if(!k){ $('wkeyMsg').textContent='Enter the key.'; return; }
     $('wkeyMsg').textContent='Checking\u2026';

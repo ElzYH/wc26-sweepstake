@@ -143,7 +143,7 @@
 </head>
 <body>
 <div class="wrap">
-  <nav class="topnav"><a class="brand" href="/tracker">⚽ WC26 Sweepstake</a><div class="navlinks"><a href="setup.html">Setup</a><a href="/wheel">Reveal</a><a href="tracker.html" class="on">Tracker</a><a href="me.html">My teams</a></div></nav>
+  <nav class="topnav"><a class="brand" href="/tracker">⚽ WC26 Sweepstake</a><div class="navlinks"><a href="setup.html">Setup</a><a href="/wheel">Reveal</a><a href="/watch">Watch</a><a href="tracker.html" class="on">Tracker</a><a href="me.html">My teams</a></div></nav>
     <header>
     <h1>World Cup <span class="y">2026</span> — Tracker</h1>
     <div class="meta"><div id="updated">—</div><div id="auto"></div></div>
@@ -194,6 +194,11 @@
         <div class="row2"><button id="setExport">⬇ Download backup</button><button id="setImportBtn">⬆ Restore from file</button></div>
         <input id="setImportFile" type="file" accept="application/json,.json" style="display:none">
         <div class="hint" id="setBakMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
+      </div>
+      <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
+        <p style="margin:0 0 8px"><b>Admin key.</b> Generate a new key if the old one leaked. The current key stops working immediately — save the new one.</p>
+        <button id="setRotate">⟳ Regenerate admin key</button>
+        <div class="hint" id="setRotateMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
       </div>
     </div>
   </div>
@@ -582,6 +587,17 @@ document.getElementById('setSave').onclick=async()=>{
     else if(j.need_key){ msg.textContent='Session expired — reopen Settings and unlock again.'; ADMINKEY=''; }
     else msg.textContent=j.error||'Could not save.';
   }catch(e){ msg.textContent='Could not reach the server.'; }
+};
+document.getElementById('setRotate').onclick=async()=>{
+  const m=document.getElementById('setRotateMsg');
+  if(!confirm('Generate a new admin key? The current key will stop working immediately on every device.')) return;
+  m.textContent='Generating…';
+  try{ const j=await fetch('/api/rotate_key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:ADMINKEY})}).then(r=>r.json());
+    if(j.ok&&j.key){ ADMINKEY=j.key; localStorage.setItem('wc26_admin_key',j.key);
+      m.innerHTML='New admin key (save it now): <b style="color:var(--gold);user-select:all">'+j.key+'</b>'; }
+    else if(j.need_key){ m.textContent='Session expired — reopen Settings and unlock again.'; ADMINKEY=''; }
+    else m.textContent=j.error||'Could not regenerate.';
+  }catch(e){ m.textContent='Could not reach the server.'; }
 };
 document.getElementById('setExport').onclick=async()=>{
   const bm=document.getElementById('setBakMsg'); bm.textContent='Preparing backup…';
