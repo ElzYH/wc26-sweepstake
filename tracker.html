@@ -208,6 +208,7 @@
       <button class="mini" id="menuBtn">⋯ Menu</button>
       <div class="menu" id="menuDrop">
         <button class="mini" id="refreshBtn">↻ Refresh now</button>
+        <button class="mini" id="alertsBtn">🔔 Get alerts</button>
         <button class="mini" id="helpBtn">What am I looking at?</button>
         <button class="mini" id="setBtn">⚙ Settings</button>
       </div>
@@ -246,17 +247,14 @@
       <button id="setSave">Save settings</button>
       <div class="hint" id="setMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
-        <p style="margin:0 0 4px"><b>Telegram alerts</b> — a ping when the draw locks, a team's knocked out, or the lead changes.</p>
+        <p style="margin:0 0 4px"><b>Telegram alerts — one-time bot setup.</b> After this, every player subscribes themselves from the 🔔 <b>Get alerts</b> menu (no key needed).</p>
         <ol style="margin:0 0 10px 18px;padding:0;color:var(--muted);font-size:12.5px;line-height:1.7">
-          <li>In Telegram, search <b>@BotFather</b> → send <b>/newbot</b> → follow prompts → copy the <b>token</b> it gives you.</li>
-          <li>Paste the token below.</li>
-          <li>Open your new bot and send it any message (e.g. "hi").</li>
-          <li>Tap <b>Find my chat ID</b> — it fills itself in.</li>
-          <li><b>Save alerts</b>, then <b>Send test</b>.</li>
+          <li>In Telegram, search <b>@BotFather</b> → send <b>/newbot</b> → follow the prompts → copy the <b>token</b>.</li>
+          <li>Paste it below and tap <b>Save bot</b>.</li>
+          <li>Share the tracker link — players tap 🔔 Get alerts and pick their name.</li>
         </ol>
-        <input id="setTgToken" type="password" placeholder="1 — bot token (123456:ABC-DEF…)">
-        <div class="row2" style="margin-top:8px"><input id="setTgChats" type="text" placeholder="2 — chat ID (auto-filled)"><button id="setTgFind">Find my chat ID</button></div>
-        <div class="row2" style="margin-top:8px"><button id="setTgSave">Save alerts</button><button id="setTgTest">Send test</button></div>
+        <input id="setTgToken" type="password" placeholder="bot token (123456:ABC-DEF…)">
+        <div class="row2" style="margin-top:8px"><button id="setTgSave">Save bot</button><button id="setTgTest">Send test to all</button></div>
         <div class="hint" id="setTgMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
       </div>
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
@@ -273,7 +271,16 @@
     </div>
   </div>
 
-  <div id="gate" style="display:none;text-align:center;padding:50px 20px;border:1px dashed var(--line);border-radius:18px;margin-top:10px">
+  <div id="alertsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50;padding:20px;overflow:auto">
+    <div style="max-width:460px;margin:6vh auto;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-family:'Anton';font-size:22px;color:var(--gold);text-transform:uppercase">🔔 Get alerts</div>
+        <button class="mini" id="alertsClose">✕ Close</button>
+      </div>
+      <p style="color:var(--muted);font-size:13px;margin:0 0 14px">Pings on Telegram when your team kicks off (and who they're up against), when one of your teams goes out, and when the lead changes.</p>
+      <div id="alertsBody"></div>
+    </div>
+  </div>
     <div style="font-family:'Anton';font-size:30px;color:var(--gold);text-transform:uppercase">The draw hasn't run yet</div>
     <p style="color:var(--muted);max-width:460px;margin:14px auto 22px">Spin the wheel to hand out the teams. The tracker, groups and bracket unlock the moment every team has an owner.</p>
     <a href="/wheel" style="display:inline-block;font-family:'Sora';font-weight:700;background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205;text-decoration:none;padding:13px 26px;border-radius:999px">Go to the draw →</a>
@@ -601,6 +608,13 @@ function winSlides(d){
 }
 const oddBar=(name,val,max)=>`<div class="oddrow"><div class="nm">${name}</div><div class="oddbar"><i style="width:${Math.round(100*val/(max||1))}%"></i></div><div class="pct">${val}%</div></div>`;
 function winOddsRows(d,mode){
+  const done=(d.stats&&d.stats.teams_remaining<=1&&d.stats.matches_played>0);
+  if(done){
+    const lbk = mode==='pts'?'points':(mode==='both'?'hybrid':'survival');
+    const rows=(d.leaderboards||{})[lbk]||[]; const max=Math.max(1,...rows.map(r=>r.score||0));
+    return '<div style="color:var(--muted);font-size:12.5px;margin:0 0 8px">Tournament over — this is the <b>final result</b>, not a forecast.</div>'
+      +rows.map((r,i)=>`<div class="oddrow"><div class="nm">${i===0?'🏆 ':''}${r.name}</div><div class="oddbar"><i style="width:${Math.round(100*(r.score||0)/max)}%;${i===0?'':'opacity:.55'}"></i></div><div class="pct" style="color:${i===0?'var(--gold)':'var(--ink)'}">${r.score}</div></div>`).join('');
+  }
   if(mode==='surv' || mode==='survival'){
     const c=(d.champion||[]); if(!c.length) return '<div class="empty">Odds appear once the draw is in.</div>';
     const max=Math.max(1,...c.map(x=>x.odds));
@@ -610,7 +624,7 @@ function winOddsRows(d,mode){
   if(!SIMRES) return '<button id="ovSimRun">Calculate '+(mode==='pts'?'Points':'Both')+' odds</button>'
     +'<div style="margin-top:6px;font-size:12px;color:var(--muted)">Runs a one-off quick simulation of thousands of tournaments.</div>';
   const rows=SIMRES.slice().sort((a,b)=>(b[mode]||0)-(a[mode]||0)), max=Math.max(1,...rows.map(r=>r[mode]||0));
-  return '<div style="color:var(--muted);font-size:12.5px;margin:0 0 8px">From simulated tournaments — how often each player tops the '+(mode==='pts'?'Points':'Both')+' table.</div>'
+  return '<div style="color:var(--muted);font-size:12.5px;margin:0 0 8px">Pre-tournament forecast from team strength — it doesn\'t use live results, so trust the leaderboard once games are under way.</div>'
     +rows.map(r=>oddBar(r.name,+(r[mode]||0).toFixed(1),max)).join('');
 }
 function renderOdds(d){
@@ -766,7 +780,10 @@ document.getElementById('simBtn').onclick=()=>{
     if(!SIMRES){ note.textContent='Need the full group data first (run the draw).'; return; }
     const mode=STATUS.scoring_mode||'hybrid';
     SIMSORT = mode==='points'?'pts':(mode==='survival'?'surv':'both');
-    note.textContent='From 2,000 simulated tournaments. Survival ≈ the live bars above. Tap a column header to sort.';
+    const done=(DATA.stats&&DATA.stats.teams_remaining<=1&&DATA.stats.matches_played>0);
+    note.innerHTML = done
+      ? '<b style="color:var(--gold)">Tournament over.</b> These are hypothetical re-simulations, not the real result — see the leaderboard / Overview for who actually won.'
+      : 'From 2,000 simulated tournaments — a forecast from team strength, not live results. Tap a column header to sort.';
     renderSim(SIMSORT);
   },30);
 };
@@ -821,21 +838,11 @@ document.getElementById('setSave').onclick=async()=>{
     else msg.textContent=j.error||'Could not save.';
   }catch(e){ msg.textContent='Could not reach the server.'; }
 };
-document.getElementById('setTgFind').onclick=async()=>{
-  const m=document.getElementById('setTgMsg');m.textContent='Looking for your messages…';
-  try{ const j=await fetch('/api/telegram_discover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:ADMINKEY,telegram_token:document.getElementById('setTgToken').value.trim()})}).then(r=>r.json());
-    if(j.ok&&j.chats&&j.chats.length){ document.getElementById('setTgChats').value=j.chats.map(c=>c.id).join(','); m.textContent='Found: '+j.chats.map(c=>c.name).join(', ')+'. Now hit Save alerts → Send test.'; }
-    else if(j.need_key){ m.textContent='Unlock Settings again.'; ADMINKEY=''; }
-    else m.textContent=j.error||'No messages yet — send your bot a message first, then tap Find again.';
-  }catch(e){ m.textContent='Could not reach the server.'; }
-};
 document.getElementById('setTgSave').onclick=async()=>{
   const m=document.getElementById('setTgMsg');m.textContent='Saving…';
-  const payload={admin_key:ADMINKEY,
-    telegram_token:document.getElementById('setTgToken').value.trim(),
-    telegram_chats:document.getElementById('setTgChats').value.trim()};
+  const payload={admin_key:ADMINKEY,telegram_token:document.getElementById('setTgToken').value.trim()};
   try{ const j=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(r=>r.json());
-    if(j.ok){ m.textContent='Saved. Hit “Send test” to confirm it reaches you.'; refreshStatus(); }
+    if(j.ok){ m.textContent='Bot saved. Players can now use 🔔 Get alerts to subscribe.'; refreshStatus(); }
     else if(j.need_key){ m.textContent='Session expired — unlock Settings again.'; ADMINKEY=''; }
     else m.textContent=j.error||'Could not save.';
   }catch(e){ m.textContent='Could not reach the server.'; }
@@ -843,8 +850,35 @@ document.getElementById('setTgSave').onclick=async()=>{
 document.getElementById('setTgTest').onclick=async()=>{
   const m=document.getElementById('setTgMsg');m.textContent='Sending…';
   try{ const j=await fetch('/api/telegram_test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:ADMINKEY})}).then(r=>r.json());
-    m.textContent=j.ok?'Test sent ✓ — check Telegram.':(j.need_key?'Unlock Settings again.':'Failed — check the token and chat ID, then save.');
+    m.textContent=j.ok?'Test sent to everyone who subscribed ✓':(j.need_key?'Unlock Settings again.':'Failed.');
   }catch(e){ m.textContent='Could not reach the server.'; }
+};
+// ---- open, no-key alerts subscription ----
+function closeAlerts(){ document.getElementById('alertsModal').style.display='none'; }
+document.getElementById('alertsClose').onclick=closeAlerts;
+document.getElementById('alertsModal').onclick=e=>{ if(e.target.id==='alertsModal') closeAlerts(); };
+document.getElementById('alertsBtn').onclick=async()=>{
+  const modal=document.getElementById('alertsModal'), body=document.getElementById('alertsBody');
+  modal.style.display='block'; body.innerHTML='<div class="empty">Loading…</div>';
+  let j; try{ j=await fetch('/api/telegram_links').then(r=>r.json()); }catch(e){ body.innerHTML='<div class="empty">Could not reach the server.</div>'; return; }
+  if(!j.ok || !j.configured || !j.bot_username){ body.innerHTML='<div class="empty">Alerts aren\'t switched on yet — ask whoever set up the sweepstake to add the Telegram bot in Settings.</div>'; return; }
+  body.innerHTML='<div style="color:var(--muted);font-size:13px;margin:0 0 10px">Tap your name — it opens our Telegram bot. Press <b>Start</b> there, come back and tap <b>Link me</b>.</div>'
+    +j.players.map(p=>`<div class="alrow" data-code="${p.code}" data-name="${p.name}" style="border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <b>${p.name}${p.subscribed?' <span style="color:var(--t2);font-weight:400;font-size:12px">· subscribed</span>':''}</b>
+          <a class="mini allink" href="https://t.me/${j.bot_username}?start=${p.code}" target="_blank" rel="noopener" style="text-decoration:none">Open Telegram →</a>
+        </div>
+        <div class="row2" style="margin-top:8px"><button class="mini allinkme">I'm done — Link me</button></div>
+        <div class="hint almsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
+      </div>`).join('');
+  body.querySelectorAll('.alrow').forEach(row=>{
+    row.querySelector('.allinkme').onclick=async()=>{
+      const msg=row.querySelector('.almsg'); msg.textContent='Linking…';
+      try{ const r=await fetch('/api/telegram_subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:row.dataset.code})}).then(x=>x.json());
+        msg.textContent = r.ok ? '✅ Subscribed! Check Telegram for a confirmation.' : (r.error||'Not found yet — open Telegram, press Start, then tap Link me again.');
+      }catch(e){ msg.textContent='Could not reach the server.'; }
+    };
+  });
 };
 document.getElementById('setRotate').onclick=async()=>{
   const m=document.getElementById('setRotateMsg');

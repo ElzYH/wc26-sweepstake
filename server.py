@@ -89,7 +89,7 @@ def backup_data():
 
 def reset_draw():
     backup_draw()                       # keep a copy before wiping, so a re-draw is recoverable
-    for f in ("draw_result.json", "tracker_data.json", "results.json", LIVE_FILE, HISTORY_FILE):
+    for f in ("draw_result.json", "tracker_data.json", "results.json", LIVE_FILE, SUBS_FILE):
         if os.path.exists(f):
             os.remove(f)
 
@@ -169,22 +169,68 @@ def key_ok(body):
                                str(load_config().get("admin_key", "")))
 
 
-HISTORY_FILE = "history.json"
+SUBS_FILE = "telegram_subs.json"          # {player_name: [chat_id, ...]}
+_bot_user = {"name": None}
 
 
-def tg_notify(text):
-    """Fire-and-forget Telegram message to every configured chat. Never raises."""
-    cfg = load_config()
-    tok = cfg.get("telegram_token"); chats = str(cfg.get("telegram_chats", "")).strip()
-    if not tok or not chats:
+def _tg_token():
+    return (load_config().get("telegram_token") or "").strip()
+
+
+def tg_send(chat_id, text):
+    """Low-level fire-and-forget message to one chat. Never raises."""
+    tok = _tg_token()
+    if not tok:
         return
-    for cid in [c.strip() for c in chats.replace(";", ",").split(",") if c.strip()]:
-        try:
-            data = urllib.parse.urlencode({"chat_id": cid, "text": text, "parse_mode": "HTML",
-                                           "disable_web_page_preview": "true"}).encode()
-            urllib.request.urlopen("https://api.telegram.org/bot%s/sendMessage" % tok, data=data, timeout=8)
-        except Exception as e:
-            log("telegram send failed:", e)
+    try:
+        data = urllib.parse.urlencode({"chat_id": chat_id, "text": text, "parse_mode": "HTML",
+                                       "disable_web_page_preview": "true"}).encode()
+        urllib.request.urlopen("https://api.telegram.org/bot%s/sendMessage" % tok, data=data, timeout=8)
+    except Exception as e:
+        log("telegram send failed:", e)
+
+
+def _load_subs():
+    try:
+        with open(SUBS_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_subs(subs):
+    with open(SUBS_FILE, "w") as f:
+        json.dump(subs, f)
+
+
+def tg_player(player, text):
+    """Message every chat subscribed as this player."""
+    for cid in _load_subs().get(player, []):
+        tg_send(cid, text)
+
+
+def tg_broadcast(text):
+    """Message every subscribed chat once."""
+    seen = set()
+    for chats in _load_subs().values():
+        for cid in chats:
+            if cid not in seen:
+                seen.add(cid)
+                tg_send(cid, text)
+
+
+def bot_username():
+    if _bot_user["name"]:
+        return _bot_user["name"]
+    tok = _tg_token()
+    if not tok:
+        return None
+    try:
+        with urllib.request.urlopen("https://api.telegram.org/bot%s/getMe" % tok, timeout=8) as r:
+            _bot_user["name"] = (json.loads(r.read().decode()).get("result") or {}).get("username")
+    except Exception as e:
+        log("telegram getMe failed:", e)
+    return _bot_user["name"]
 
 
 def _load_tracker():
@@ -204,28 +250,53 @@ def _alive_owners(td):
     return out
 
 
+def _fixture_status(td):
+    """{(home,away): (status, homeOwner, awayOwner)} for detecting kickoffs."""
+    out = {}
+    for m in (td or {}).get("fixtures", []):
+        out[(m.get("home"), m.get("away"))] = (m.get("status"), m.get("homeOwner"), m.get("awayOwner"))
+    return out
+
+
+LIVE_STATUSES = ("IN_PLAY", "PAUSED", "LIVE", "SUSPENDED")
+
+
 def notify_changes(old):
-    """Compare the previous tracker snapshot to the new one and ping Telegram on big moments."""
+    """Compare previous tracker snapshot to the new one and ping each player about their teams."""
     new = _load_tracker()
     if not new or old is None:
         return                              # first compute / no data: nothing to compare
     if (new.get("stats") or {}).get("matches_played", 0) == 0:
         return
-    # new overall (Both) leader
+    # overall (Both) leader change -> broadcast
     try:
         ol = (old["leaderboards"]["hybrid"][0] or {}).get("name")
         nl = (new["leaderboards"]["hybrid"][0] or {}).get("name")
         if nl and ol and nl != ol:
-            tg_notify("📈 New leader: <b>%s</b> now tops the table." % nl)
+            tg_broadcast("📈 New leader: <b>%s</b> now tops the table." % nl)
     except Exception:
         pass
-    # newly eliminated teams
+    # a player's team kicks off -> tell that player (with the opponent)
+    try:
+        of, nf = _fixture_status(old), _fixture_status(new)
+        for key, (st, ho, ao) in nf.items():
+            h, a = key
+            was = (of.get(key) or (None,))[0]
+            if st in LIVE_STATUSES and was not in LIVE_STATUSES:
+                if ho and ho not in ("—", "-"):
+                    tg_player(ho, "🔵 Your team <b>%s</b> is playing now — vs %s." % (h, a))
+                if ao and ao not in ("—", "-"):
+                    tg_player(ao, "🔵 Your team <b>%s</b> is playing now — vs %s." % (a, h))
+    except Exception:
+        pass
+    # a player's team is knocked out -> tell that player
     try:
         oa, na = _alive_owners(old), _alive_owners(new)
-        gone = [(t, oa[t][1]) for t in oa if oa[t][0] and t in na and not na[t][0]]
-        if gone:
-            lines = ", ".join("%s (%s)" % (t, o) for t, o in gone[:8])
-            tg_notify("❌ Knocked out: %s" % lines)
+        for t in oa:
+            if oa[t][0] and t in na and not na[t][0]:
+                owner = na[t][1]
+                if owner and owner not in ("—", "-"):
+                    tg_player(owner, "❌ Your team <b>%s</b> is out. Check the leaderboard to see where you stand." % t)
     except Exception:
         pass
 
@@ -336,7 +407,7 @@ class Handler(BaseHTTPRequestHandler):
                 "leftover": cfg.get("leftover", "pool"),
                 "max_per_player": cfg.get("max_per_player"),
                 "poll_minutes": cfg.get("poll_minutes", 10),
-                "has_telegram": bool(cfg.get("telegram_token") and cfg.get("telegram_chats"))}))
+                "has_telegram": bool(cfg.get("telegram_token"))}))
         return self._file(path.lstrip("/"))
 
     def do_POST(self):
@@ -419,7 +490,7 @@ class Handler(BaseHTTPRequestHandler):
                 ok, err = update_now(cfg)
             log("draw locked" if ok else "draw save FAILED:", err or "")
             if ok:
-                tg_notify("🏆 The WC26 draw is locked — open the tracker to see your teams!")
+                tg_broadcast("🏆 The WC26 draw is locked — open the tracker to see your teams!")
             return self._send(200 if ok else 500, json.dumps({"ok": ok, "error": err}))
         if path == "/api/settings":
             cfg = load_config()
@@ -436,8 +507,7 @@ class Handler(BaseHTTPRequestHandler):
                 cfg["competition"] = str(body["competition"]).strip()[:8]
             if "telegram_token" in body:
                 cfg["telegram_token"] = str(body["telegram_token"]).strip()
-            if "telegram_chats" in body:
-                cfg["telegram_chats"] = str(body["telegram_chats"]).strip()[:400]
+                _bot_user["name"] = None        # re-fetch username for the new bot
             with _lock:
                 save_config(cfg)
                 ok, err = update_now(cfg)
@@ -488,28 +558,45 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/telegram_test":
             if not key_ok(body):
                 return self._send(403, json.dumps({"ok": False, "need_key": True}))
-            tg_notify("✅ WC26 test message — notifications are working.")
+            tg_broadcast("✅ WC26 test — alerts are working.")
             return self._send(200, json.dumps({"ok": True}))
-        if path == "/api/telegram_discover":
-            if not key_ok(body):
-                return self._send(403, json.dumps({"ok": False, "need_key": True}))
-            tok = str(body.get("telegram_token") or load_config().get("telegram_token") or "").strip()
+        if path == "/api/telegram_links":          # OPEN: players self-subscribe, no admin key
+            cfg = load_config()
+            players = [p["name"] for p in cfg.get("players", [])]
+            subs = _load_subs()
+            return self._send(200, json.dumps({"ok": True,
+                "configured": bool(_tg_token()), "bot_username": bot_username(),
+                "players": [{"name": nm, "code": "p%d" % i, "subscribed": len(subs.get(nm, []))}
+                            for i, nm in enumerate(players)]}))
+        if path == "/api/telegram_subscribe":      # OPEN: link the chat that sent /start <code>
+            cfg = load_config()
+            players = [p["name"] for p in cfg.get("players", [])]
+            code = str(body.get("code", "")).strip()
+            if not code.startswith("p") or not code[1:].isdigit() or int(code[1:]) >= len(players):
+                return self._send(400, json.dumps({"ok": False, "error": "bad code"}))
+            name = players[int(code[1:])]
+            tok = _tg_token()
             if not tok:
-                return self._send(400, json.dumps({"ok": False, "error": "Paste the bot token first."}))
+                return self._send(400, json.dumps({"ok": False, "error": "Alerts aren't set up yet."}))
             try:
                 with urllib.request.urlopen("https://api.telegram.org/bot%s/getUpdates" % tok, timeout=8) as r:
                     upd = json.loads(r.read().decode())
-                chats, seen = [], set()
-                for u in upd.get("result", []):
-                    msg = u.get("message") or u.get("edited_message") or u.get("my_chat_member") or {}
-                    chat = msg.get("chat") or {}
-                    cid = chat.get("id")
-                    if cid is not None and cid not in seen:
-                        seen.add(cid)
-                        chats.append({"id": cid, "name": chat.get("first_name") or chat.get("title") or str(cid)})
-                return self._send(200, json.dumps({"ok": True, "chats": chats}))
             except Exception as e:
                 return self._send(200, json.dumps({"ok": False, "error": str(e)}))
+            chat = None
+            for u in reversed(upd.get("result", [])):     # newest first
+                msg = u.get("message") or u.get("edited_message") or {}
+                if str(msg.get("text", "")).strip() == "/start " + code:
+                    chat = (msg.get("chat") or {}).get("id")
+                    break
+            if chat is None:
+                return self._send(200, json.dumps({"ok": False,
+                    "error": "Couldn't find your message. Tap the Telegram link, send /start, then try Link me again."}))
+            subs = _load_subs(); lst = subs.setdefault(name, [])
+            if chat not in lst:
+                lst.append(chat); _save_subs(subs)
+            tg_send(chat, "✅ You're set, %s! You'll get alerts about your teams." % name)
+            return self._send(200, json.dumps({"ok": True, "name": name}))
         if path == "/api/rotate_key":
             if not key_ok(body):
                 return self._send(403, json.dumps({"ok": False, "need_key": True}))
