@@ -335,6 +335,8 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                           "homeOwner": owner.get(m["home"], "—"), "awayOwner": owner.get(m["away"], "—"),
                           "homeScore": m.get("homeScore"), "awayScore": m.get("awayScore"),
                           "minute": m.get("minute"),
+                          "aet": m.get("aet"), "shootout": m.get("shootout"),
+                          "penHome": m.get("penHome"), "penAway": m.get("penAway"),
                           "winner": _winner_side(m)} for m in matches]}
     data["history"] = _build_history(finished, teams, owner, [p["name"] for p in draw["players"]])
     if out:

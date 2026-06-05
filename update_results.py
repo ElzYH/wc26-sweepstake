@@ -45,17 +45,36 @@ def normalize_matches(api_matches, resolve):
     for m in api_matches:
         h = resolve(m["homeTeam"]["name"] or "")
         a = resolve(m["awayTeam"]["name"] or "")
-        score = m.get("score", {})
-        ft = score.get("fullTime", {})
+        score = m.get("score", {}) or {}
+        ft = score.get("fullTime", {}) or {}
+        rt = score.get("regularTime", {}) or {}
+        et = score.get("extraTime", {}) or {}
+        pen = score.get("penalties", {}) or {}
+        duration = score.get("duration", "REGULAR")
         winner = {"HOME_TEAM": "HOME", "AWAY_TEAM": "AWAY", "DRAW": "DRAW"}.get(score.get("winner"))
+
+        # v4 quirk: score/fullTime INCLUDES extra-time AND penalty-shootout goals. For our points and
+        # the on-screen match score we want the real on-field goals (90' + ET, excluding the shootout).
+        # Prefer regularTime+extraTime (unambiguous); fall back to fullTime - penalties; else fullTime.
+        def on_field(side):
+            if rt.get(side) is not None:
+                return rt.get(side, 0) + (et.get(side) or 0)
+            if pen.get(side) is not None and ft.get(side) is not None:
+                return ft.get(side) - pen.get(side, 0)
+            return ft.get(side)
+
         out.append({
             "id": m["id"], "stage": m.get("stage", "GROUP_STAGE"),
             "group": ((m.get("group") or "").replace("GROUP_", "").strip() or None), "utcDate": m.get("utcDate"),
             "status": m.get("status", "SCHEDULED"),
             "home": h, "away": a,
-            "homeScore": ft.get("home"), "awayScore": ft.get("away"),
-            "winner": winner,
+            "homeScore": on_field("home"), "awayScore": on_field("away"),   # goals only (no shootout)
+            "winner": winner,                                               # already reflects the shootout result
             "minute": m.get("minute"),          # populated for live matches on paid (live) tiers
+            "duration": duration,
+            "aet": duration in ("EXTRA_TIME", "PENALTY_SHOOTOUT"),          # went to extra time
+            "shootout": duration == "PENALTY_SHOOTOUT",
+            "penHome": pen.get("home"), "penAway": pen.get("away"),         # shootout score, if any
         })
     return out
 

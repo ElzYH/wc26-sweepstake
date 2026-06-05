@@ -176,6 +176,7 @@ function showAdminGate(){
   phase='need';
   $('spinBtn').disabled=true; $('autoBtn').disabled=true;
   const rb=$('resetBtn'); if(rb){ rb.disabled=true; rb.style.opacity='.4'; rb.style.pointerEvents='none'; }
+  const sb=$('serverBtn'); if(sb){ sb.disabled=true; sb.style.opacity='.4'; sb.style.pointerEvents='none'; }
   $('modenote').textContent='Admin only'; $('phasetag').textContent='Admin access'; $('turn').textContent='Enter the admin key to run the draw';
   const box=$('saved'); box.style.display='block'; box.classList.remove('err');
   box.innerHTML='\uD83D\uDD12 <b>Running the draw is admin-only.</b><div class="note">Spectators can follow along live on the tracker. To run it, enter the admin key.</div>'
@@ -184,7 +185,7 @@ function showAdminGate(){
   $('wkeyBtn').onclick=async()=>{
     const k=$('wkey').value.trim(); if(!k){ $('wkeyMsg').textContent='Enter the key.'; return; }
     $('wkeyMsg').textContent='Checking\u2026';
-    if(await keyValid(k)){ localStorage.setItem('wc26_admin_key',k); sessionStorage.setItem('wc26_unlocked','1'); const rb=$('resetBtn'); if(rb){rb.disabled=false;rb.style.opacity='';rb.style.pointerEvents='';} box.style.display='none'; startOrder(); }
+    if(await keyValid(k)){ localStorage.setItem('wc26_admin_key',k); sessionStorage.setItem('wc26_unlocked','1'); const rb=$('resetBtn'); if(rb){rb.disabled=false;rb.style.opacity='';rb.style.pointerEvents='';} const sb=$('serverBtn'); if(sb){sb.disabled=false;sb.style.opacity='';sb.style.pointerEvents='';} box.style.display='none'; startOrder(); }
     else $('wkeyMsg').textContent='Wrong key.';
   };
 }

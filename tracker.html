@@ -89,6 +89,7 @@
   .match .away{text-align:right}.match .away .o{text-align:right}
   .match .sc{text-align:center;font-family:'Anton';font-size:20px}
   .match .time{color:var(--muted);font-size:12px;text-align:center;font-variant-numeric:tabular-nums}
+  .konote{font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:1px;text-align:center;white-space:nowrap}
   .live{color:var(--live);font-weight:700;font-size:11px;letter-spacing:.08em}
   .stagetag{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
   .empty{color:var(--muted);padding:30px;text-align:center}
@@ -540,7 +541,10 @@ function matchRow(m){
   const live=m.status==='IN_PLAY'||m.status==='PAUSED';
   const done=m.status==='FINISHED';
   const score=(done||live)?`${m.homeScore??0}–${m.awayScore??0}`:'v';
-  const mid=live?`<span class="live">● LIVE</span>`:(done?`<div class="sc">${score}</div>`:`<div class="time">${fmtTime(m.utcDate)}</div>`);
+  const koNote = done && (m.aet||m.shootout)
+    ? `<div class="konote">${m.aet?'a.e.t.':''}${m.shootout?(m.aet?' · ':'')+'pens '+(m.penHome??0)+'–'+(m.penAway??0):''}</div>`
+    : '';
+  const mid=live?`<span class="live">● LIVE</span>`:(done?`<div class="sc">${score}</div>${koNote}`:`<div class="time">${fmtTime(m.utcDate)}</div>`);
   const grp=(m.group||'').replace('GROUP_','').trim();
   const left=m.stage!=='GROUP_STAGE'?`${STAGE_LABEL[m.stage]||m.stage}`:(grp?`Group ${grp}`:'');
   return `<div>${left?`<div class="mstage">${left}</div>`:''}<div class="match">

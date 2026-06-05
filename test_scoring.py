@@ -51,6 +51,36 @@ def _m(home, away, hs, as_, stage="GROUP_STAGE", group="X", status="FINISHED", d
 def run():
     tmp = tempfile.mkdtemp()
 
+    # ---- normaliser: extra time + penalty shootout (v4 fullTime INCLUDES shootout goals) ----
+    import update_results
+    ident = lambda n: n
+    raw = [
+        # EC1996-style: 1-1 after 90 & ET, home win 6-5 on pens. v4 stores fullTime as 7-6.
+        {"id": 1, "stage": "SEMI_FINALS", "homeTeam": {"name": "H"}, "awayTeam": {"name": "A"},
+         "status": "FINISHED", "score": {"winner": "HOME_TEAM", "duration": "PENALTY_SHOOTOUT",
+             "fullTime": {"home": 7, "away": 6}, "regularTime": {"home": 1, "away": 1},
+             "extraTime": {"home": 0, "away": 0}, "penalties": {"home": 6, "away": 5}}},
+        # extra-time winner, no pens: 1-1 then 2-1 in ET → fullTime 2-1.
+        {"id": 2, "stage": "QUARTER_FINALS", "homeTeam": {"name": "H"}, "awayTeam": {"name": "A"},
+         "status": "FINISHED", "score": {"winner": "HOME_TEAM", "duration": "EXTRA_TIME",
+             "fullTime": {"home": 2, "away": 1}, "regularTime": {"home": 1, "away": 1},
+             "extraTime": {"home": 1, "away": 0}}},
+        # ordinary 90-minute game.
+        {"id": 3, "stage": "GROUP_STAGE", "homeTeam": {"name": "H"}, "awayTeam": {"name": "A"},
+         "status": "FINISHED", "score": {"winner": "AWAY_TEAM", "duration": "REGULAR",
+             "fullTime": {"home": 0, "away": 2}}},
+    ]
+    nm = {x["id"]: x for x in update_results.normalize_matches(raw, ident)}
+    check("shootout: on-field goals exclude pens (1-1 not 7-6)",
+          nm[1]["homeScore"] == 1 and nm[1]["awayScore"] == 1, nm[1])
+    check("shootout: shootout score + a.e.t. flags carried",
+          nm[1]["shootout"] and nm[1]["aet"] and nm[1]["penHome"] == 6 and nm[1]["penAway"] == 5, nm[1])
+    check("shootout: winner still HOME", nm[1]["winner"] == "HOME", nm[1])
+    check("extra time: on-field goals include ET (2-1), aet set, no shootout",
+          nm[2]["homeScore"] == 2 and nm[2]["awayScore"] == 1 and nm[2]["aet"] and not nm[2]["shootout"], nm[2])
+    check("regular game: plain fullTime, no aet/shootout",
+          nm[3]["homeScore"] == 0 and nm[3]["awayScore"] == 2 and not nm[3]["aet"] and not nm[3]["shootout"], nm[3])
+
     # ---- group-stage scoring ----
     fx = _fixtures(tmp, [
         _m("A", "B", 2, 0, group="X", date="2026-06-11T18:00:00Z"),   # A: 2 goals + win(3) + clean sheet(1) = 6 ; B: 0
