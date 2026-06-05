@@ -81,6 +81,27 @@ def run():
     check("regular game: plain fullTime, no aet/shootout",
           nm[3]["homeScore"] == 0 and nm[3]["awayScore"] == 2 and not nm[3]["aet"] and not nm[3]["shootout"], nm[3])
 
+    # ---- free tier: minimal payload (delayed scores, NO minute, NO regular/extra/penalty breakdown) ----
+    free_raw = [
+        # live game on free tier: score present (delayed), no minute, no breakdown, no duration
+        {"id": 11, "stage": "GROUP_STAGE", "homeTeam": {"name": "H"}, "awayTeam": {"name": "A"},
+         "status": "IN_PLAY", "score": {"winner": None, "fullTime": {"home": 1, "away": 0}}},
+        # finished game on free tier: just fullTime + winner, nothing else
+        {"id": 12, "stage": "GROUP_STAGE", "homeTeam": {"name": "H"}, "awayTeam": {"name": "A"},
+         "status": "FINISHED", "score": {"winner": "AWAY_TEAM", "fullTime": {"home": 0, "away": 1}}},
+        # scheduled game on free tier: no score object at all
+        {"id": 13, "stage": "GROUP_STAGE", "homeTeam": {"name": "H"}, "awayTeam": {"name": "A"},
+         "status": "TIMED"},
+    ]
+    fm = {x["id"]: x for x in update_results.normalize_matches(free_raw, ident)}
+    check("free tier live: score reads from fullTime, minute is None, no aet/shootout",
+          fm[11]["homeScore"] == 1 and fm[11]["awayScore"] == 0 and fm[11]["minute"] is None
+          and not fm[11]["aet"] and not fm[11]["shootout"], fm[11])
+    check("free tier finished: fullTime score + winner resolve with no breakdown",
+          fm[12]["homeScore"] == 0 and fm[12]["awayScore"] == 1 and fm[12]["winner"] == "AWAY", fm[12])
+    check("free tier scheduled: no score object doesn't crash",
+          fm[13]["homeScore"] is None and fm[13]["awayScore"] is None and fm[13]["status"] == "TIMED", fm[13])
+
     # ---- group-stage scoring ----
     fx = _fixtures(tmp, [
         _m("A", "B", 2, 0, group="X", date="2026-06-11T18:00:00Z"),   # A: 2 goals + win(3) + clean sheet(1) = 6 ; B: 0

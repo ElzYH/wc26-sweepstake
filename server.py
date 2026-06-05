@@ -572,10 +572,11 @@ def build_summary():
     mp = stats.get("matches_played", 0) or 0
     if not mp:
         return ["📊 WC26 Sweepstake", "Tournament hasn't kicked off yet — the summary fills in once games start (11 June)."]
+    today = time.strftime("%a %d %b", time.gmtime())
     mode = (load_config().get("scoring_mode") or "hybrid")
     mode = mode if mode in ("points", "survival", "hybrid") else "hybrid"
     label = {"points": "pts", "survival": "survival", "hybrid": "pts"}[mode]
-    lines = ["📊 WC26 Sweepstake — summary"]
+    lines = ["📊 **WC26 Sweepstake** — %s" % today]
     board = (d.get("leaderboards") or {}).get(mode) or []
     medals = ["🥇", "🥈", "🥉"]
     for i, p in enumerate(board[:3]):
@@ -813,7 +814,7 @@ def maybe_send_daily_digest(cfg):
     lines = build_summary()
     if not lines:
         return
-    discord_send("📰 **Daily summary**\n" + "\n".join(lines))
+    discord_send("\n".join(lines))
     cfg["last_digest_date"] = today
     save_config(cfg)
     log("daily digest sent for", today)
@@ -848,8 +849,15 @@ def compute_assignment(mode, players, t1_cap=None, leftover="pool", seed=None):
     in_play_n = per_player * n
     rng = random.Random(seed)
     if mode == "fair":
-        J = 0.5                                             # keep in sync with wheel.html computeFair
-        pool = sorted(teams, key=lambda t: -(t.get("composite", 0) * (1 + (rng.random() * 2 - 1) * J)))[:in_play_n]
+        J = 0.5                                             # MAX jitter, applied to the weakest teams; the best teams barely move
+        ranked = sorted(teams, key=lambda t: -t.get("composite", 0))
+        Nr = max(1, len(ranked) - 1)
+        keyed = []
+        for i, t in enumerate(ranked):
+            scale = 0.0 if i < n else J * ((i - n) / max(1, Nr - n))   # first band (top n) strictly fair; jitter ramps in after
+            keyed.append((t.get("composite", 0) * (1 + (rng.random() * 2 - 1) * scale), t))
+        keyed.sort(key=lambda x: -x[0])
+        pool = [t for _, t in keyed][:in_play_n]
         assign = {p: [] for p in players}
         for pot in range(per_player):
             band = pool[pot * n:pot * n + n][:]

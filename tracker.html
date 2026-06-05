@@ -33,8 +33,9 @@
   .dot-live{display:inline-block;width:8px;height:8px;border-radius:50%;background:#39d98a;margin-right:6px;
     animation:pulse 1.6s infinite}
   @keyframes pulse{50%{opacity:.3}}
-  .tabs{display:flex;gap:8px;margin:22px 0 18px;flex-wrap:wrap}
-  .tab{font-family:'Sora';font-weight:700;font-size:14px;padding:9px 18px;border-radius:999px;cursor:pointer;
+  .tabs{display:flex;gap:8px;margin:22px 0 18px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{flex:0 0 auto;white-space:nowrap;font-family:'Sora';font-weight:700;font-size:14px;padding:9px 18px;border-radius:999px;cursor:pointer;
     background:#10301f;border:1px solid var(--line);color:var(--ink)}
   .tab.on{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205;border-color:var(--gold)}
   section{display:none}section.on{display:block}
@@ -312,7 +313,7 @@
         <div class="hint" id="setSiteMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
         <p style="margin:12px 0 6px;color:var(--muted);font-size:12.5px">• <b>Daily summary</b> — automatically post the standings digest to Discord once a day.</p>
         <div class="row2" style="align-items:center"><label style="display:flex;align-items:center;gap:8px;font-size:13.5px"><input type="checkbox" id="setDigest"> Post a daily summary</label><label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)">at <input id="setDigestHour" type="number" min="0" max="23" style="width:60px"> :00 UTC</label></div>
-        <div class="row2" style="margin-top:6px"><button id="setSaveDigest">Save daily summary</button></div>
+        <div class="row2" style="margin-top:6px"><button id="setSaveDigest">Save daily summary</button><button id="setTestDigest" class="mini">Send a test now</button></div>
         <div class="hint" id="setDigestMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
       </div>
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
@@ -345,7 +346,7 @@
         <div style="font-family:'Anton';font-size:22px;color:var(--gold);text-transform:uppercase">🔔 Get alerts</div>
         <button class="mini" id="alertsClose">✕ Close</button>
       </div>
-      <p style="color:var(--ink);opacity:.85;font-size:13px;margin:0 0 14px">Pings on Telegram when your team kicks off (and who they're up against), when your team scores or goes out, and when the lead changes.</p>
+      <p style="color:var(--ink);opacity:.85;font-size:13px;margin:0 0 14px">Pings your phone when your team kicks off (and who they're up against), when your team scores or goes out, and when the lead changes.</p>
       <div id="alertsBody"></div>
     </div>
   </div>
@@ -361,11 +362,11 @@
     <div class="tab on" data-s="overview">Overview</div>
     <div class="tab" data-s="live">Live</div>
     <div class="tab" data-s="lb">Leaderboard</div>
-    <div class="tab" data-s="players">Teams by player</div>
+    <div class="tab" data-s="players">Teams</div>
     <div class="tab" data-s="h2h">Head-to-head</div>
     <div class="tab" data-s="groups">Groups</div>
     <div class="tab" data-s="bracket">Bracket</div>
-    <div class="tab" data-s="fixtures">Fixtures &amp; times</div>
+    <div class="tab" data-s="fixtures">Fixtures</div>
     <div class="tab" data-s="odds">Odds &amp; stats</div>
   </div>
 
@@ -1108,6 +1109,14 @@ document.getElementById('setSaveDigest').onclick=async()=>{
     if(j.ok){ m.textContent=en?('Daily summary will post around '+hr+':00 UTC (needs a Discord webhook).'):'Daily summary turned off.'; refreshStatus(); }
     else if(j.need_key){ m.textContent='Session expired — reopen Settings and unlock again.'; ADMINKEY=''; }
     else m.textContent=j.error||'Could not save.';
+  }catch(e){ m.textContent='Could not reach the server.'; }
+};
+document.getElementById('setTestDigest').onclick=async()=>{
+  const m=document.getElementById('setDigestMsg'); m.textContent='Sending…';
+  try{ const j=await fetch('/api/discord_summary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:ADMINKEY})}).then(r=>r.json());
+    if(j.ok) m.textContent='Test summary posted to Discord.';
+    else if(j.need_key){ m.textContent='Session expired — reopen Settings and unlock again.'; ADMINKEY=''; }
+    else m.textContent=j.error||'Could not post — add a Discord webhook first.';
   }catch(e){ m.textContent='Could not reach the server.'; }
 };
 document.getElementById('setSaveInvite').onclick=async()=>{

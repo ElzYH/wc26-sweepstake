@@ -132,6 +132,24 @@ elif not server.load_config().get("last_digest_date"):
 else:
     print("[digest] posts once per day, idempotent OK")
 
+# fair draw: the first band is always the true top-n (everyone gets an elite team), squads complete + unique
+_top = set(t["name"] for t in sorted(TEAMS.values(), key=lambda t: -t["composite"])[:len(PLAYERS)])
+_per = len(TEAMS) // len(PLAYERS)
+_fair = "ok"
+for _ in range(150):
+    _a, _ = server.compute_assignment("fair", PLAYERS)
+    _all = [t["name"] for p in PLAYERS for t in _a[p]]
+    if set(_a[p][0]["name"] for p in PLAYERS) != _top:
+        _fair = "first band not the strict top-%d" % len(PLAYERS); break
+    if len(_all) != len(set(_all)):
+        _fair = "duplicate team in draw"; break
+    if any(len(_a[p]) != _per for p in PLAYERS):
+        _fair = "uneven squad sizes"; break
+if _fair != "ok":
+    fails.append(("fair-draw", _fair))
+else:
+    print("[fair-draw] first band always the top %d, squads unique + even OK" % len(PLAYERS))
+
 shutil.rmtree(D, ignore_errors=True)
 if fails:
     print("\nFAILED:", fails)
