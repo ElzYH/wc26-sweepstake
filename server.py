@@ -819,9 +819,10 @@ def compute_assignment(mode, players, t1_cap=None, leftover="pool", seed=None):
     n = len(players)
     per_player = len(teams) // n
     in_play_n = per_player * n
+    rng = random.Random(seed)
     if mode == "fair":
-        pool = sorted(teams, key=lambda t: -t.get("composite", 0))[:in_play_n]
-        rng = random.Random(seed)
+        J = 0.5                                             # keep in sync with wheel.html computeFair
+        pool = sorted(teams, key=lambda t: -(t.get("composite", 0) * (1 + (rng.random() * 2 - 1) * J)))[:in_play_n]
         assign = {p: [] for p in players}
         for pot in range(per_player):
             band = pool[pot * n:pot * n + n][:]

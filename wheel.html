@@ -209,7 +209,8 @@ function teamSlices(list){ const wt=t=>(mode==='weighted'?WEIGHT[t.tier]:1); con
 
 /* fair = balanced snake over the strongest inPlay teams, shuffled within each tier band */
 function computeFair(){
-  const n=order.length, pool=teams.slice().sort((x,y)=> y.composite-x.composite).slice(0,inPlay);
+  const n=order.length, J=0.5;        // ±50% jitter on composite so the band a team lands in (and who gets the favourites) isn't predictable, while squads stay balanced
+  const pool=teams.map(t=>({t,k:t.composite*(1+(Math.random()*2-1)*J)})).sort((a,b)=>b.k-a.k).slice(0,inPlay).map(x=>x.t);
   fairAssign={}; order.forEach(p=>fairAssign[p]=[]);
   for(let pot=0;pot<perPlayer;pot++){
     const slice=pool.slice(pot*n,pot*n+n);
