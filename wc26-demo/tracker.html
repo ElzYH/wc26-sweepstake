@@ -164,6 +164,8 @@
   .menu .mini{width:100%;text-align:left}
   .mini{font-family:'Sora';font-weight:700;font-size:12px;padding:7px 13px;border-radius:999px;cursor:pointer;background:#10301f;border:1px solid var(--line);color:var(--ink)}
   .mini:hover{background:#143a26}
+  .ctrls .cta{background:var(--gold);border-color:var(--gold);color:#04140d}
+  .ctrls .cta:hover{filter:brightness(1.07);background:var(--gold)}
   .panel{background:linear-gradient(180deg,var(--panel),#0a1e15);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-top:12px}
   .panel h4{font-family:'Anton';font-weight:400;color:var(--gold);text-transform:uppercase;font-size:16px;margin-bottom:8px}
   .panel p,.panel li{color:var(--muted);font-size:13.5px;line-height:1.6}.panel ul{margin:6px 0 0 18px}.panel b{color:var(--ink)}
@@ -255,10 +257,10 @@
   <div class="subbar">
     <div class="badges" id="badges"></div>
     <div class="ctrls">
+      <button class="mini cta" id="alertsBtn">🔔 Get alerts</button>
       <button class="mini" id="menuBtn">⋯ Menu</button>
       <div class="menu" id="menuDrop">
         <button class="mini" id="refreshBtn">↻ Refresh now</button>
-        <button class="mini" id="alertsBtn">🔔 Get alerts</button>
         <button class="mini" id="helpBtn">What am I looking at?</button>
         <button class="mini" id="setBtn">⚙ Settings</button>
       </div>
@@ -457,7 +459,7 @@ let COMP={};
 let LBMODE=null;
 const TIER={1:cv('--t1'),2:cv('--t2'),3:cv('--t3'),4:cv('--t4')};
 function cv(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
-const STAGE_LABEL={GROUP_STAGE:"Group",LAST_32:"R32",LAST_16:"R16",QUARTER_FINALS:"QF",SEMI_FINALS:"SF",THIRD_PLACE:"3rd",FINAL:"Final"};
+const STAGE_LABEL={GROUP_STAGE:"Group",LAST_32:"R32",LAST_16:"R16",QUARTER_FINALS:"QF",SEMI_FINALS:"SF",THIRD_PLACE:"3rd",FINAL:"Final",WINNER:"🏆 Champion"};
 const KO_STAGES=["LAST_32","LAST_16","QUARTER_FINALS","SEMI_FINALS","THIRD_PLACE","FINAL"];
 let KOROUND=null, KO_USER_SET=false;
 
@@ -868,7 +870,7 @@ function renderOdds(d){
   cards+=`<div class="statcard"><div class="l">UNDER-PERFORMER · PLAYER</div><div class="v">${st.under_player||'—'}</div><div class="l">below their squad rating</div></div>`;
   cards+=`<div class="statcard"><div class="l">OVER-PERFORMER · TEAM</div><div class="v">${st.over_team?flag(st.over_team)+st.over_team:'—'}</div><div class="l">punching above its odds</div></div>`;
   cards+=`<div class="statcard"><div class="l">UNDER-PERFORMER · TEAM</div><div class="v">${st.under_team?flag(st.under_team)+st.under_team:'—'}</div><div class="l">below its odds</div></div>`;
-  cards+=`<div class="statcard"><div class="l">BEST DEFENCE</div><div class="v">${st.best_defence_team?flag(st.best_defence_team)+st.best_defence_team:'—'} <small>${st.best_defence_team?st.best_defence_conceded+' conceded':''}</small></div><div class="l">${soon}</div></div>`;
+  cards+=`<div class="statcard"><div class="l">BEST DEFENCE</div><div class="v">${st.best_defence_team?flag(st.best_defence_team)+st.best_defence_team:'—'} <small>${st.best_defence_team?(st.best_defence_cs||0)+' clean sheets':''}</small></div><div class="l">${soon}</div></div>`;
   cards+=`<div class="statcard"><div class="l">MOST CLEAN SHEETS · PLAYER</div><div class="v">${st.clean_sheets_player||'—'} <small>${st.clean_sheets_player?st.clean_sheets_value:''}</small></div><div class="l">${st.clean_sheets_player?'shutouts across their teams':soon}</div></div>`;
   cards+=`<div class="statcard"><div class="l">MOST GROUP LEADERS</div><div class="v">${st.group_leaders_player||'—'}</div><div class="l">teams topping their group</div></div>`;
   document.getElementById('statsBody').innerHTML=cards;
@@ -1463,7 +1465,7 @@ document.getElementById('setImportFile').onchange=async(ev)=>{
 };
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(function(){}); }
 load();
-setInterval(load,2500);                       // auto-refresh every 60s
+setInterval(load,2500);                       // auto-refresh every 30s
 document.getElementById('auto').innerHTML='<span class="dot-live"></span>auto-refresh on';
 
 window.addEventListener('pageshow',function(e){ if(e.persisted) location.reload(); });
