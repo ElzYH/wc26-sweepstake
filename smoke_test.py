@@ -135,6 +135,8 @@ def run():
         check("start_draw needs admin key (403)", st == 403, str(st))
         st, body = req("GET", "/manifest.webmanifest")
         check("manifest served (200)", st == 200 and "{" in body, str(st))
+        leftover = [f for f in os.listdir(tmp) if f.endswith(".tmp")]
+        check("no leftover .tmp files (atomic writes clean up)", not leftover, str(leftover))
     finally:
         proc.terminate()
         try:

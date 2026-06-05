@@ -10,6 +10,7 @@ decided on penalties (a draw at full time) resolve correctly. Match points
 still come from the full-time score (a shootout game scores as a draw).
 """
 import json
+import os
 from collections import defaultdict
 from datetime import datetime, timezone
 
@@ -337,6 +338,10 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                           "winner": _winner_side(m)} for m in matches]}
     data["history"] = _build_history(finished, teams, owner, [p["name"] for p in draw["players"]])
     if out:
-        with open(out, "w") as f:
+        tmp = out + ".tmp"                      # write-then-rename: a crash can't leave a half-written tracker
+        with open(tmp, "w") as f:
             json.dump(data, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, out)
     return data

@@ -63,20 +63,36 @@ STATIC = {"tracker.html", "wheel.html", "setup.html", "me.html", "watch.html",
 _lock = threading.Lock()
 
 
+def _atomic_write_json(path, obj, mode=None):
+    """Write JSON via a temp file + rename, so a crash mid-write can't corrupt `path`
+    (a half-written temp is discarded; the old file stays intact until the rename)."""
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(obj, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    if mode is not None:
+        try:
+            os.chmod(tmp, mode)
+        except OSError:
+            pass
+    os.replace(tmp, path)          # atomic on the same filesystem
+
+
 def load_config():
     if os.path.exists(CONFIG):
-        with open(CONFIG) as f:
-            return json.load(f)
+        try:
+            with open(CONFIG) as f:
+                return json.load(f)
+        except Exception as e:
+            # never let a corrupt/partial config take the whole server down — stay up, degraded
+            print("[warn] config unreadable (%s): %r — using empty config until fixed/restored" % (CONFIG, e))
+            return {}
     return {}
 
 
 def save_config(c):
-    with open(CONFIG, "w") as f:
-        json.dump(c, f, indent=2)
-    try:
-        os.chmod(CONFIG, 0o600)   # token + admin key: owner read/write only
-    except OSError:
-        pass
+    _atomic_write_json(CONFIG, c, mode=0o600)   # 600: token + admin key are owner-only
 
 
 def backup_draw():
@@ -126,8 +142,7 @@ def live_load():
 
 def live_save(state):
     state["updated"] = time.time()
-    with open(LIVE_FILE, "w") as f:
-        json.dump(state, f)
+    _atomic_write_json(LIVE_FILE, state)
 
 
 def build_draw_result(payload):
@@ -314,8 +329,7 @@ def _load_push():
 
 
 def _save_push(d):
-    with open(PUSH_FILE, "w") as f:
-        json.dump(d, f)
+    _atomic_write_json(PUSH_FILE, d)
 
 
 def _entry_sub(e):
