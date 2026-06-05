@@ -44,6 +44,12 @@ done
 say "Scoring unit tests"
 if python3 test_scoring.py; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
 
+say "Full-tournament replay (2022: knockouts, penalties, champion)"
+if python3 test_2022.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_2022.py | tail -8; FAIL=1; fi
+
+say "Bot command tests"
+if python3 test_bot.py; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
+
 say "Live smoke + security tests"
 if python3 smoke_test.py; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
 

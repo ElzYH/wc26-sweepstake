@@ -1,0 +1,20 @@
+# --- secrets: NEVER commit ---
+config.json
+*.env
+
+# --- per-instance runtime data (not secret, but shouldn't be in a public template) ---
+results.json
+results.tmp.json
+tracker_data.json
+draw_result.json
+live_draw.json
+push_subs.json
+telegram_subs.json
+*.tmp
+
+# --- backups (draw/score snapshots) ---
+backups/
+
+# --- python ---
+__pycache__/
+*.pyc

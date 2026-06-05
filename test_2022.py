@@ -70,7 +70,7 @@ for r in d["leaderboards"]["hybrid"]:
     print(f"  {r['score']:>4}  {r['name']:6} ({r['alive_teams']}/{r['total_teams']} alive)")
 print()
 checks = {
-    "Argentina alive/WINNER": team("Argentina")["status"] == "alive" and team("Argentina")["survival"] == 150,
+    "Argentina alive/WINNER": team("Argentina")["status"] == "alive" and team("Argentina")["survival"] == scoring.SURVIVAL_VALUE["WINNER"],
     "France out at FINAL": team("France") == team("France") and team("France")["status"] == "out" and team("France")["stage"] == "FINAL",
     "Spain out at LAST_16 (lost pens)": team("Spain")["status"] == "out" and team("Spain")["stage"] == "LAST_16",
     "Brazil out at QF (lost pens)": team("Brazil")["status"] == "out" and team("Brazil")["stage"] == "QUARTER_FINALS",
