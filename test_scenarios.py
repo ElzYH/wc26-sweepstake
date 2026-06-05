@@ -82,12 +82,26 @@ def team_status(d, team):
 def run():
     tmp = tempfile.mkdtemp()
     try:
-        # 1) KICKOFF / live: an in-play game must NOT score yet and must not count as played
+        # 1) KICKOFF / live: points accrue LIVE (fantasy-style) but the game is not yet "played" and nobody is eliminated
         d = run_compute([M(1, "Brazil", "Japan", "IN_PLAY", hs=1, as_=0, minute=30)], tmp)
-        check("live game scores 0 points until final", pts(d, "Erol") == 0, pts(d, "Erol"))
+        # Brazil live 1-0: 1 goal + provisional win 3 + provisional clean sheet 1 = 5
+        check("live game scores provisionally (fantasy-style)", pts(d, "Erol") == 5, pts(d, "Erol"))
         check("live game not counted as played", d["stats"]["matches_played"] == 0, d["stats"])
         check("both teams still alive during live group game",
               team_status(d, "Brazil") == "alive" and team_status(d, "Japan") == "alive", "")
+
+        # 1b) live points climb as goals go in, and a VAR-disallowed goal lowers them again on recompute
+        d = run_compute([M(1, "Brazil", "Japan", "IN_PLAY", hs=2, as_=0, minute=55)], tmp)
+        check("live points rise with a 2nd goal (2 goals + win + CS = 6)", pts(d, "Erol") == 6, pts(d, "Erol"))
+        d = run_compute([M(1, "Brazil", "Japan", "IN_PLAY", hs=1, as_=0, minute=56)], tmp)
+        check("VAR disallows a goal -> live points drop back (5)", pts(d, "Erol") == 5, pts(d, "Erol"))
+
+        # 1c) scheduled KO matches must keep their teams "alive" while a different KO game is live (the R32 false-elimination bug)
+        d = run_compute([M(1, "Brazil", "Japan", "IN_PLAY", stage="LAST_32", hs=0, as_=0, minute=20),
+                         M(2, "Spain", "Ghana", "TIMED", stage="LAST_32")], tmp)
+        check("scheduled R32 teams stay alive while another R32 game is live",
+              all(team_status(d, t) == "alive" for t in ["Brazil", "Japan", "Spain", "Ghana"]),
+              [(t, team_status(d, t)) for t in ["Brazil", "Japan", "Spain", "Ghana"]])
 
         # 2) FINISHED group game: full points (goals + win + clean sheet)
         d = run_compute([M(1, "Brazil", "Japan", "FINISHED", hs=3, as_=0, winner="HOME")], tmp)

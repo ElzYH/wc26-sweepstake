@@ -201,6 +201,8 @@
   .ovsec{margin-bottom:22px}
   .ovh{font-family:'Anton';font-weight:400;font-size:18px;letter-spacing:.04em;text-transform:uppercase;margin:0 0 10px;color:var(--ink)}
   .livegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:12px}
+  .lcpens{text-align:center;font-size:13px;color:var(--gold);margin-top:8px;padding-top:7px;border-top:1px solid var(--line)}
+  .lcpens b{font-family:'Anton';font-size:17px;letter-spacing:.5px}
   .livecard{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--live);border-radius:14px;
     padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--live)}
   .livedot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--live);margin-right:6px;animation:pulse 1.4s infinite}
@@ -419,7 +421,6 @@
     <div class="panel" style="margin-top:20px">
       <h4>Win odds by scoring mode (simulated)</h4>
       <p>The bars above are your <b>Survival</b> odds (owning the eventual winner). To estimate <b>Points</b> and <b>Both</b>, this runs thousands of full tournaments from team strength and counts how often each player tops that leaderboard. <b>Both</b> = highest Points + Survival combined, so you need a squad that piles up points <i>and</i> goes deep.</p>
-      <button id="simBtn">Run 2,000 simulations</button>
       <div class="hint" id="simNote" style="margin-top:6px"></div>
       <div id="simBody" style="margin-top:10px"></div>
     </div>
@@ -444,7 +445,7 @@ function summaryLines(d){
   const mode=(STATUS.scoring_mode||'hybrid'); const m=['points','survival','hybrid'].includes(mode)?mode:'hybrid';
   const label=m==='survival'?'survival':'pts';
   const board=(d.leaderboards||{})[m]||[]; const medals=['🥇','🥈','🥉']; const out=[];
-  board.slice(0,3).forEach((p,i)=>out.push(medals[i]+' '+p.name+' — '+(p[m]??0)+' '+label));
+  board.slice(0,3).forEach((p,i)=>out.push(medals[i]+' '+p.name+' — '+(p.score??0)+' '+label));
   if(st.teams_remaining!=null) out.push('🛡️ Teams still in: '+st.teams_remaining);
   if(st.top_team) out.push('🔥 Top team: '+st.top_team+' ('+ownerOf(d,st.top_team)+') — '+(st.top_team_goals||0)+' goals');
   if(st.top_scorer_player) out.push('⚽ Most goals: '+st.top_scorer_player+' ('+(st.top_scorer_player_goals||0)+')');
@@ -491,7 +492,7 @@ function renderLive(d){
         <div class="lchead"><span class="lcdot"></span>LIVE${m.minute?" "+m.minute+"'":""}${m.status==='PAUSED'?' · HT':''}${stg?' · '+stg:''}</div>
         <div class="lcrow"><span class="lcteam">${flag(m.home)}${esc(m.home)}${own(m.homeOwner)}</span><span class="lcscore">${m.homeScore??0}</span></div>
         <div class="lcrow"><span class="lcteam">${flag(m.away)}${esc(m.away)}${own(m.awayOwner)}</span><span class="lcscore">${m.awayScore??0}</span></div>
-        ${wpBar3(m,true)}
+        ${(m.shootout||m.penHome!=null||m.penAway!=null)?`<div class="lcpens">🥅 Penalties <b>${m.penHome??0}–${m.penAway??0}</b></div>`:wpBar3(m,true)}
       </div>`;}).join('')+'</div>';
   } else {
     h+='<div class="empty">No games in play right now. Live scores, the minute and win-chance bars appear here the moment a match kicks off.</div>';
@@ -806,11 +807,8 @@ function renderOverview(d){
   const wp=document.getElementById('winPrev'), wn=document.getElementById('winNext');
   if(wp) wp.onclick=()=>{ const n=winSlides(d).length; WINSLIDE=(WINSLIDE-1+n)%n; renderOverview(d); };
   if(wn) wn.onclick=()=>{ const n=winSlides(d).length; WINSLIDE=(WINSLIDE+1)%n; renderOverview(d); };
-  // win-odds toggle + simulate button
+  // win-odds toggle (Points / Survival / Both) — the forecast auto-runs via ensureSim()
   document.querySelectorAll('#ovOddsSel button').forEach(b=>b.onclick=()=>{ WINODDSMODE=b.dataset.c; renderOverview(d); });
-  const sr=document.getElementById('ovSimRun');
-  if(sr) sr.onclick=()=>{ const body=document.getElementById('ovOddsBody'); if(body) body.innerHTML='<div class="empty" style="margin:6px 0">Simulating…</div>';
-    setTimeout(()=>{ SIMRES=simWinOdds(DATA,1500); renderOverview(d); },30); };
 }
 let WINSLIDE=0, WINODDSMODE=null;
 function winSlides(d){
@@ -836,8 +834,7 @@ function winOddsRows(d,mode){
     return '<div style="color:var(--muted);font-size:12.5px;margin:0 0 8px">Live chance of owning the World Cup winner (bookmaker odds, updates as teams go out).</div>'
       +c.map(x=>oddBar(x.name,x.odds,max)).join('');
   }
-  if(!SIMRES) return '<button id="ovSimRun">Calculate '+(mode==='pts'?'Points':'Both')+' odds</button>'
-    +'<div style="margin-top:6px;font-size:12px;color:var(--muted)">Runs a one-off quick simulation of thousands of tournaments.</div>';
+  if(!SIMRES){ ensureSim(); return '<div class="empty" style="margin:6px 0">Calculating '+(mode==='pts'?'Points':'Both')+' odds…</div>'; }
   const rows=SIMRES.slice().sort((a,b)=>(b[mode]||0)-(a[mode]||0)), max=Math.max(1,...rows.map(r=>r[mode]||0));
   return '<div style="color:var(--muted);font-size:12.5px;margin:0 0 8px">Pre-tournament forecast from team strength — it doesn\'t use live results, so trust the leaderboard once games are under way.</div>'
     +rows.map(r=>oddBar(r.name,+(r[mode]||0).toFixed(1),max)).join('');
@@ -874,6 +871,7 @@ function renderOdds(d){
     champ.map(c=>`<div class="oddrow"><div class="nm">${c.name}</div><div class="oddbar"><i style="width:${Math.round(100*c.odds/max)}%"></i></div><div class="pct">${c.odds}%</div></div>`).join('');
   const smax=Math.max(1,...str.map(s=>s.strength));
   document.getElementById('strengthBody').innerHTML=str.map(s=>`<div class="oddrow"><div class="nm">${s.name}</div><div class="oddbar"><i style="width:${Math.round(100*s.strength/smax)}%;background:linear-gradient(90deg,var(--t3),var(--t1))"></i></div><div class="pct" style="width:auto;color:var(--ink)">${s.strength}${s.favourites?` · ${s.favourites}★`:''}</div></div>`).join('');
+  ensureSim(); renderSim(SIMSORT);
   renderChart(d);
 }
 
@@ -999,9 +997,27 @@ function simWinOdds(d,N){
   }
   return players.map(p=>({name:p,surv:100*wS[p]/N,pts:100*wP[p]/N,both:100*wB[p]/N,proj:sumPts[p]/N})).sort((a,b)=>b.both-a.both);
 }
-let SIMRES=null, SIMSORT='both';
+let SIMRES=null, SIMSORT='both', SIM_STARTED=false;
+function ensureSim(){                          // auto-run the forecast once (no button) when group data is in
+  if(SIMRES || SIM_STARTED) return;
+  const done=(DATA.stats&&DATA.stats.teams_remaining<=1&&DATA.stats.matches_played>0);
+  if(done) return;                             // tournament over -> the real result is shown instead
+  SIM_STARTED=true;                            // one attempt; don't re-run on every refresh (forecast is static)
+  setTimeout(()=>{
+    try{ SIMRES=simWinOdds(DATA,2000); }catch(e){ SIMRES=null; }
+    if(SIMRES){
+      const mode=STATUS.scoring_mode||'hybrid';
+      SIMSORT = mode==='points'?'pts':(mode==='survival'?'surv':'both');
+      renderSim(SIMSORT); renderOverview(DATA);
+    }
+  },30);
+}
 function renderSim(sortKey){
-  if(!SIMRES)return;
+  if(!SIMRES){
+    const sb=document.getElementById('simBody'); if(sb) sb.innerHTML='<div class="empty">Calculating win odds…</div>';
+    const sn=document.getElementById('simNote'); if(sn) sn.textContent='';
+    return;
+  }
   const mode=STATUS.scoring_mode||DATA.default_mode||'hybrid';
   let cols;
   if(mode==='points') cols=[{k:'pts',label:'Points %'},{k:'proj',label:'Proj pts'}];
@@ -1015,22 +1031,12 @@ function renderSim(sortKey){
     cols.map(c=>c.k==='proj'?`<td style="padding:7px 8px">${Math.round(r.proj)}</td>`:`<td style="padding:7px 8px;${c.k===sk?'color:var(--gold);font-weight:700':''}">${r[c.k].toFixed(1)}%</td>`).join('')+'</tr>').join('');
   document.getElementById('simBody').innerHTML='<table style="width:100%;border-collapse:collapse;font-family:Sora;font-size:14px">'+head+body+'</table>';
   document.querySelectorAll('.simh').forEach(h=>h.onclick=()=>renderSim(h.dataset.k));
-}
-document.getElementById('simBtn').onclick=()=>{
+  const done=(DATA.stats&&DATA.stats.teams_remaining<=1&&DATA.stats.matches_played>0);
   const note=document.getElementById('simNote');
-  note.textContent='Simulating…'; document.getElementById('simBody').innerHTML='';
-  setTimeout(()=>{
-    SIMRES=simWinOdds(DATA,2000);
-    if(!SIMRES){ note.textContent='Need the full group data first (run the draw).'; return; }
-    const mode=STATUS.scoring_mode||'hybrid';
-    SIMSORT = mode==='points'?'pts':(mode==='survival'?'surv':'both');
-    const done=(DATA.stats&&DATA.stats.teams_remaining<=1&&DATA.stats.matches_played>0);
-    note.innerHTML = done
-      ? '<b style="color:var(--gold)">Tournament over.</b> These are hypothetical re-simulations, not the real result — see the leaderboard / Overview for who actually won.'
-      : 'From 2,000 simulated tournaments — a forecast from team strength, not live results. Tap a column header to sort.';
-    renderSim(SIMSORT);
-  },30);
-};
+  if(note) note.innerHTML = done
+    ? '<b style="color:var(--gold)">Tournament over.</b> Hypothetical re-simulations, not the real result — see the leaderboard for who actually won.'
+    : 'From 2,000 simulated tournaments — a forecast from team strength, not live results. Tap a column header to sort.';
+}
 let STATUS={};
 async function refreshStatus(){
   try{ STATUS=await fetch('/api/status').then(r=>r.json()); }catch(e){ STATUS={}; }

@@ -747,6 +747,20 @@ def build_wrapup():
             lines.append("%s %s — %s" % (medals[i], p.get("name", "?"), p.get("score", 0)))
         if len(board) > 3:
             lines.append("…and %d more" % (len(board) - 3))
+    # three separate prizes — each mode can have a DIFFERENT winner
+    lbs = d.get("leaderboards") or {}
+    prizes = []
+    for key, name in (("points", "Points"), ("survival", "Survival"), ("hybrid", "Both")):
+        b = lbs.get(key) or []
+        if b:
+            prizes.append("🏅 %s winner: **%s** (%s)" % (name, b[0].get("name", "?"), b[0].get("score", 0)))
+    if prizes:
+        lines.append("")
+        lines.append("**Prizes** — one per scoring mode")
+        lines += prizes
+        winners = {lbs[k][0]["name"] for k in ("points", "survival", "hybrid") if lbs.get(k)}
+        if len(winners) > 1:
+            lines.append("(%d different winners across the three modes!)" % len(winners))
     if stats.get("top_team"):
         lines.append("⚽ Golden-boot team: %s (%s) — %s goals"
                      % (stats["top_team"], _owner_of(d, stats["top_team"]), stats.get("top_team_goals", 0)))

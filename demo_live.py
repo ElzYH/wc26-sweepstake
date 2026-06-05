@@ -245,6 +245,106 @@ def km(mid, a, b, stage, status="IN_PLAY"):
             "minute": 0, "duration": "REGULAR", "aet": False, "shootout": False, "penHome": None, "penAway": None}
 
 
+def _spec(m, a, b, comp, label, force_pens=False, ga=None, gb=None):
+    """Pre-roll a match's goal minutes so several can be ticked together."""
+    if ga is None or gb is None:
+        ga, gb = goals(a, b, comp)
+    if force_pens:
+        gb = ga                       # showcase game: force level so it goes to a shootout
+    return {"m": m, "a": a, "b": b, "label": label, "force_pens": force_pens,
+            "hg": sorted(random.sample(range(1, 91), min(ga, 89))) if ga else [],
+            "ag": sorted(random.sample(range(1, 91), min(gb, 89))) if gb else []}
+
+
+def _pens_seq(scored, kicks=5):
+    seq = [True] * scored + [False] * (kicks - scored)
+    random.shuffle(seq)
+    return seq
+
+
+def _shootout(d, matches, standings, s, delay):
+    """Tick a penalty shootout kick-by-kick; the live card shows the running tally."""
+    m, a, b = s["m"], s["a"], s["b"]
+    print("   \U0001F945 PENALTY SHOOTOUT: %s v %s" % (a, b))
+    finalH = random.choice([3, 4, 5]); finalA = max(0, finalH - random.choice([1, 2]))
+    if random.random() < 0.5:
+        finalH, finalA = finalA, finalH
+    m["shootout"] = True; m["penHome"] = 0; m["penAway"] = 0; m["minute"] = 120
+    seqH, seqA = _pens_seq(finalH), _pens_seq(finalA)
+    for i in range(5):
+        if seqH[i]:
+            m["penHome"] += 1
+        show("   pens %s %d-%d %s  (%s %s)" % (a, m["penHome"], m["penAway"], b, a, "scores" if seqH[i] else "misses"),
+             write_and_compute(d, matches, standings), 0)
+        time.sleep(delay * 1.5)
+        if seqA[i]:
+            m["penAway"] += 1
+        show("   pens %s %d-%d %s  (%s %s)" % (a, m["penHome"], m["penAway"], b, b, "scores" if seqA[i] else "misses"),
+             write_and_compute(d, matches, standings), 0)
+        time.sleep(delay * 1.5)
+    return m["penHome"], m["penAway"], ("HOME" if m["penHome"] > m["penAway"] else "AWAY")
+
+
+def _finish_ko(d, matches, standings, s, speed, delay):
+    """Extra time + (live) penalties for one KO match that's level at 90'."""
+    m, a, b = s["m"], s["a"], s["b"]
+    dur, penH, penA, winner = "REGULAR", None, None, None
+    is_ko = m.get("stage") != "GROUP_STAGE"
+    if is_ko and (m["homeScore"] == m["awayScore"] or s.get("force_pens")):
+        print("   \u23F1 %s level - EXTRA TIME" % s["label"])
+        m["status"] = "PAUSED"; write_and_compute(d, matches, standings); time.sleep(delay * 2)
+        m["status"] = "IN_PLAY"
+        et_home = (not s.get("force_pens")) and random.random() < 0.30
+        et_away = (not s.get("force_pens")) and (not et_home) and random.random() < 0.30
+        for minute in range(91, 121):
+            if et_home and minute == random.choice([100, 105, 113]):
+                m["homeScore"] += 1
+            if et_away and minute == random.choice([98, 108, 118]):
+                m["awayScore"] += 1
+            m["minute"] = minute
+            if minute % 10 == 0 or minute == 120:
+                show("%s - %d' a.e.t. (%s %d-%d %s)" % (s["label"], minute, a, m["homeScore"], m["awayScore"], b),
+                     write_and_compute(d, matches, standings), 0)
+            time.sleep(delay)
+        dur = "EXTRA_TIME"
+        if m["homeScore"] == m["awayScore"]:
+            dur = "PENALTY_SHOOTOUT"
+            penH, penA, winner = _shootout(d, matches, standings, s, delay)
+    if winner is None:
+        winner = "HOME" if m["homeScore"] > m["awayScore"] else ("AWAY" if m["awayScore"] > m["homeScore"] else ("DRAW" if not is_ko else "HOME"))
+    m.update({"status": "FINISHED", "winner": winner, "duration": dur, "aet": dur != "REGULAR",
+              "shootout": dur == "PENALTY_SHOOTOUT", "penHome": penH, "penAway": penA})
+    write_and_compute(d, matches, standings)
+    tail = "" if dur == "REGULAR" else ("  (a.e.t.)" if dur == "EXTRA_TIME" else "  (pens %d-%d)" % (penH, penA))
+    show("%s - FULL TIME: %s %d-%d %s%s" % (s["label"], a, m["homeScore"], m["awayScore"], b, tail),
+         write_and_compute(d, matches, standings), 0)
+    return a if winner == "HOME" else b
+
+
+def tick_live(d, matches, standings, specs, speed):
+    """Tick several matches at once, minute by minute (the website shows them all live together)."""
+    delay = 1.0 / max(1, speed)
+    print("\n   \u25B6 LIVE (%d game%s at once): %s"
+          % (len(specs), "" if len(specs) == 1 else "s", "  |  ".join("%s v %s" % (s["a"], s["b"]) for s in specs)))
+    for s in specs:
+        s["m"].update({"status": "IN_PLAY", "homeScore": 0, "awayScore": 0, "minute": 0, "winner": None})
+    for minute in range(1, 91):
+        flash = False
+        for s in specs:
+            m = s["m"]
+            if minute in s["hg"]:
+                m["homeScore"] += 1; flash = True
+            if minute in s["ag"]:
+                m["awayScore"] += 1; flash = True
+            m["minute"] = minute
+        data = write_and_compute(d, matches, standings)
+        if flash or minute % 10 == 0 or minute == 90:
+            line = "   |  ".join("%s %d-%d %s" % (s["a"], s["m"]["homeScore"], s["m"]["awayScore"], s["b"]) for s in specs)
+            show("%d' - %s" % (minute, line), data, 0)
+        time.sleep(delay)
+    return [_finish_ko(d, matches, standings, s, speed, delay) for s in specs]
+
+
 def main():
     global DIR, _OWNER
     ap = argparse.ArgumentParser()
@@ -303,24 +403,40 @@ def main():
                 ga, gb = goals(a, b, comp)
                 group_matches.append((g, a, b, ga, gb))
 
-    # featured live group games, minute by minute (two of them, so you see several teams play)
-    for fg in group_matches[:2]:
-        fm = {"id": mid, "stage": "GROUP_STAGE", "group": fg[0], "utcDate": "2026-06-11T18:00:00Z",
-              "status": "IN_PLAY", "home": fg[1], "away": fg[2], "homeScore": 0, "awayScore": 0,
-              "winner": None, "minute": 0, "duration": "REGULAR", "aet": False, "shootout": False,
-              "penHome": None, "penAway": None}
-        matches.append(fm); mid += 1
-        if not args.fast:
-            tick_match(DIR, matches, _standings(gstats, groups, comp), fm, fg[1], fg[2], comp, speed, "Group game")
-        matches = [m for m in matches if m["id"] != fm["id"]]   # fold results into the tally below
-
-    # finish all group games in 3 matchday chunks
-    chunks = [group_matches[:len(group_matches) // 3], group_matches[len(group_matches) // 3: 2 * len(group_matches) // 3], group_matches[2 * len(group_matches) // 3:]]
+    # two featured group games, ticking live AT ONCE (you see two scoreboards move together) — pick games with no shared team
+    i1 = next((j for j in range(1, len(group_matches))
+               if not ({group_matches[j][1], group_matches[j][2]} & {group_matches[0][1], group_matches[0][2]})), 1)
+    featured_idx = {0, i1}
+    featured_g = [group_matches[0], group_matches[i1]]
+    rest_g = [gm for j, gm in enumerate(group_matches) if j not in featured_idx]
     matches = []
+    if not args.fast:
+        fspecs = []
+        for (g, a, b, ga, gb) in featured_g:
+            fm = {"id": mid, "stage": "GROUP_STAGE", "group": g, "utcDate": "2026-06-11T18:00:00Z",
+                  "status": "IN_PLAY", "home": a, "away": b, "homeScore": 0, "awayScore": 0,
+                  "winner": None, "minute": 0, "duration": "REGULAR", "aet": False, "shootout": False,
+                  "penHome": None, "penAway": None}
+            matches.append(fm); mid += 1
+            fspecs.append(_spec(fm, a, b, comp, "Group game", ga=ga, gb=gb))
+        tick_live(DIR, matches, _standings(gstats, groups, comp), fspecs, speed)
+        for fm in matches:                                  # tally the two featured results (now FINISHED)
+            _tally(gstats, fm["home"], fm["away"], fm["homeScore"], fm["awayScore"])
+    else:
+        for (g, a, b, ga, gb) in featured_g:
+            w = "HOME" if ga > gb else ("AWAY" if gb > ga else "DRAW")
+            matches.append({"id": mid, "stage": "GROUP_STAGE", "group": g, "utcDate": "2026-06-11T18:00:00Z",
+                            "status": "FINISHED", "home": a, "away": b, "homeScore": ga, "awayScore": gb, "winner": w,
+                            "minute": None, "duration": "REGULAR", "aet": False, "shootout": False, "penHome": None, "penAway": None})
+            mid += 1
+            _tally(gstats, a, b, ga, gb)
+
+    # finish the remaining group games in 3 matchday chunks
+    chunks = [rest_g[:len(rest_g) // 3], rest_g[len(rest_g) // 3: 2 * len(rest_g) // 3], rest_g[2 * len(rest_g) // 3:]]
     for ci, chunk in enumerate(chunks, 1):
         for (g, a, b, ga, gb) in chunk:
             w = "HOME" if ga > gb else ("AWAY" if gb > ga else "DRAW")
-            matches.append({"id": mid, "stage": "GROUP_STAGE", "group": g, "utcDate": "2026-06-%02dT18:00:00Z" % (11 + ci),
+            matches.append({"id": mid, "stage": "GROUP_STAGE", "group": g, "utcDate": "2026-06-%02dT18:00:00Z" % (12 + ci),
                             "status": "FINISHED", "home": a, "away": b, "homeScore": ga, "awayScore": gb, "winner": w,
                             "minute": None, "duration": "REGULAR", "aet": False, "shootout": False, "penHome": None, "penAway": None})
             mid += 1
@@ -341,42 +457,47 @@ def main():
     random.shuffle(bracket)
     bracket = bracket[:32]
 
-    # ---- KNOCKOUTS: several matches tick live each round; later rounds tick in full; FINAL goes to the wire ----
+    # ---- KNOCKOUTS: two matches tick live each round; SF/final tick in full; the FINAL goes to a live shootout ----
     sf_losers = []
     for r, rnd in enumerate(KO_ROUNDS):
         pairs = [(bracket[i], bracket[i + 1]) for i in range(0, len(bracket), 2)]
+        # create EVERY match in the round up front (scheduled), so all teams in the round count as "still in" while the live games tick
+        rndm = [km(mid + i, a, b, rnd, status="TIMED") for i, (a, b) in enumerate(pairs)]
+        for x in rndm:
+            x["utcDate"] = "2026-07-1%dT18:00:00Z" % r
+        mid += len(pairs)
+        matches.extend(rndm)
         winners = [None] * len(pairs)
         n_feat = len(pairs) if len(pairs) <= 2 else 2       # SF/final tick in full; earlier rounds tick 2 live
         feat = set(range(n_feat))
-        # featured matches live, minute by minute
-        for fi in range(n_feat):
-            fa, fb = pairs[fi]
-            fmatch = km(mid, fa, fb, rnd); matches.append(fmatch); mid += 1
-            if not args.fast:
-                winners[fi] = tick_match(DIR, matches, table, fmatch, fa, fb, comp, speed,
-                                         rnd.replace("_", " ").title() + (" FINAL" if rnd == "FINAL" else ""))
-            else:
+        is_final = (rnd == "FINAL")
+        # featured matches live, two at a time, minute by minute
+        if not args.fast:
+            specs = [_spec(rndm[i], pairs[i][0], pairs[i][1], comp,
+                           rnd.replace("_", " ").title() + (" FINAL" if is_final else ""), force_pens=is_final)
+                     for i in range(n_feat)]
+            res = tick_live(DIR, matches, table, specs, speed)
+            for i in range(n_feat):
+                winners[i] = res[i]
+        else:
+            for i in range(n_feat):
+                fa, fb = pairs[i]
                 ga, gb = goals(fa, fb, comp)
                 if ga == gb: ga += 1
-                fmatch.update({"status": "FINISHED", "homeScore": ga, "awayScore": gb,
-                               "winner": "HOME" if ga > gb else "AWAY"})
-                winners[fi] = fa if ga > gb else fb
-        # resolve the rest of the round instantly
+                rndm[i].update({"status": "FINISHED", "homeScore": ga, "awayScore": gb, "winner": "HOME" if ga > gb else "AWAY"})
+                winners[i] = fa if ga > gb else fb
+        # resolve the rest of the round instantly (one QF is a forfeit)
         for idx, (a, b) in enumerate(pairs):
             if idx in feat:
                 continue
             ga, gb = goals(a, b, comp)
             forfeit = (rnd == "QUARTER_FINALS" and idx == n_feat)
             if forfeit:
-                ga, gb, status, w, dur = 3, 0, "AWARDED", "HOME", "REGULAR"
+                ga, gb, status, w = 3, 0, "AWARDED", "HOME"
             else:
                 if ga == gb: ga += 1
-                status, w, dur = "FINISHED", ("HOME" if ga > gb else "AWAY"), "REGULAR"
-            matches.append({"id": mid, "stage": rnd, "group": None, "utcDate": "2026-07-1%dT18:00:00Z" % r,
-                            "status": status, "home": a, "away": b, "homeScore": ga, "awayScore": gb, "winner": w,
-                            "minute": None, "duration": dur, "aet": False, "shootout": dur == "PENALTY_SHOOTOUT",
-                            "penHome": None, "penAway": None})
-            mid += 1
+                status, w = "FINISHED", ("HOME" if ga > gb else "AWAY")
+            rndm[idx].update({"status": status, "homeScore": ga, "awayScore": gb, "winner": w, "minute": None})
             winners[idx] = a if w == "HOME" else b
         if rnd == "SEMI_FINALS":
             sf_losers = [(b if winners[i] == a else a) for i, (a, b) in enumerate(pairs)]

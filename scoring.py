@@ -99,6 +99,8 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
     owner = {t["name"]: p["name"] for p in draw["players"] for t in p["teams"]}
 
     finished = [m for m in matches if m["status"] in FINAL_STATUSES]
+    live = [m for m in matches if m["status"] in ("IN_PLAY", "PAUSED")]
+    scoring_matches = finished + live      # points/goals/clean-sheets accrue LIVE (fantasy-style); recomputed each refresh so a VAR-disallowed goal just lowers the running total
     ko_matches = [m for m in matches if m["stage"] != "GROUP_STAGE"]
     ko_teams = {m["home"] for m in ko_matches} | {m["away"] for m in ko_matches}
     ko_started = any(m["status"] in FINAL_STATUSES + ("IN_PLAY", "PAUSED") for m in ko_matches)
@@ -113,7 +115,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                 if m[s] in teams:
                     reached[m[s]].add(m["stage"])
 
-    for m in finished:                                 # match points from full time
+    for m in scoring_matches:                          # match points — full-time AND live (provisional, from the current score)
         h, a, hs, as_ = m["home"], m["away"], m["homeScore"], m["awayScore"]
         if hs is None or as_ is None:
             continue
@@ -300,11 +302,13 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                 if r.get("position") == 1 and owner.get(r["team"], "-") not in ("-", "—"):
                     leaders[owner[r["team"]]] += 1
         gl = max(leaders, key=leaders.get) if leaders else None
-    stats = {"goals": sum(gf.values()), "matches_played": len(finished),
+    fin_goals = sum((m["homeScore"] or 0) + (m["awayScore"] or 0)
+                    for m in finished if m.get("homeScore") is not None)
+    stats = {"goals": fin_goals, "matches_played": len(finished),
              "favourite_team": fav, "favourite_owner": (owner.get(fav, "-") if fav else "-"),
              "favourite_odds": (round(100 * alive_prob[fav] / tot_alive, 1) if fav else 0),
              "teams_remaining": len(alive_prob),
-             "goals_per_match": (round(sum(gf.values()) / len(finished), 2) if finished else 0),
+             "goals_per_match": (round(fin_goals / len(finished), 2) if finished else 0),
              "dark_horse": dark, "dark_horse_owner": (owner.get(dark, "-") if dark else "-"),
              "dark_horse_odds": (round(100 * alive_prob[dark] / tot_alive, 1) if dark else 0),
              "group_of_death": god,

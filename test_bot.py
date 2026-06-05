@@ -237,22 +237,22 @@ else:
 # end-of-tournament wrap-up: champion + podium + final table once the final is done
 _wd = {"stats": {"matches_played": 104, "goals": 250, "goals_per_match": 2.4, "top_team": "Brazil",
                  "top_team_goals": 16, "teams_remaining": 1},
-       "leaderboards": {"hybrid": [{"name": "Erol", "score": 120, "alive_teams": 0, "total_teams": 9},
-                                   {"name": "James", "score": 110, "alive_teams": 0, "total_teams": 9},
-                                   {"name": "Louis", "score": 90, "alive_teams": 0, "total_teams": 9}],
-                        "points": [], "survival": []},
+       "leaderboards": {"points": [{"name": "James", "score": 140}, {"name": "Erol", "score": 130}],
+                        "survival": [{"name": "Louis", "score": 210}, {"name": "Erol", "score": 180}],
+                        "hybrid": [{"name": "Erol", "score": 300}, {"name": "James", "score": 290}, {"name": "Louis", "score": 270}]},
        "champion_decided": {"team": "Brazil", "owner": "Erol", "runnerUp": "Spain"},
        "fixtures": [{"stage": "THIRD_PLACE", "status": "FINISHED", "home": "France", "away": "Germany",
                      "homeScore": 2, "awayScore": 1, "winner": "HOME"}],
        "players": [{"name": "Erol", "teams": [{"name": "Brazil"}]}]}
 json.dump(_wd, open(os.path.join(D, "tracker_data.json"), "w"))
 _wt = "\n".join(server.build_wrapup())
-_need = ["Brazil", "Spain", "France", "Final table", "Golden-boot"]
+_need = ["Brazil", "Spain", "France", "Final table", "Golden-boot",
+         "Points winner", "Survival winner", "Both winner", "different winners"]
 _miss = [w for w in _need if w not in _wt]
 if _miss:
     fails.append(("wrapup", "missing from recap: %s" % _miss))
 else:
-    print("[wrapup] recap has champion + runner-up + 3rd + final table + golden boot OK")
+    print("[wrapup] recap has champion + podium + three separate mode-winners + golden boot OK")
 
 shutil.rmtree(D, ignore_errors=True)
 if fails:
