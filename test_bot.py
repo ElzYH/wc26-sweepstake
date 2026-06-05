@@ -262,6 +262,64 @@ else:
     print("[wrapup] recap has champion + podium + three separate mode-winners + golden boot OK")
 
 shutil.rmtree(D, ignore_errors=True)
+
+# personal Discord pings: /notifyme stores a sub, /stopnotify clears it, and discord_mention
+# only fires for subscribed players (and pings with allowed_mentions). Delivery is stubbed.
+D2 = tempfile.mkdtemp(prefix="wc26notify_"); os.chdir(D2)
+server.CONFIG = os.path.join(D2, "config.json")     # the import-time CONFIG pointed at the now-deleted dir
+json.dump({"teams": list(TEAMS.values())}, open("teams.json", "w"))
+_names3 = [t["name"] for t in list(TEAMS.values())[:3]]
+def _brief3(nm):
+    t = TEAMS[nm] if nm in TEAMS else next(x for x in TEAMS.values() if x["name"] == nm)
+    return {"name": nm, "tier": t.get("tier", 1), "group": t.get("group", "A"), "composite": t.get("composite", 50), "confederation": "?"}
+json.dump({"players": [{"name": "Erol", "teams": [_brief3(_names3[0]), _brief3(_names3[1])]},
+                       {"name": "James", "teams": [_brief3(_names3[2])]}],
+           "bonus_pool": []}, open("draw_result.json", "w"))
+json.dump({"matches": []}, open("results.json", "w"))
+scoring.compute()
+server.save_config({"discord_webhook": "https://discord.com/api/webhooks/x/y"})
+
+r1 = server.discord_command("notifyme", {"player": "erol"}, uid="123")
+if "123" not in server.load_config().get("discord_subs", {}) or server.load_config()["discord_subs"]["123"] != "Erol":
+    fails.append(("notifyme", "did not store sub: %r" % r1))
+elif "No player" not in server.discord_command("notifyme", {"player": "Nobody"}, uid="9"):
+    fails.append(("notifyme", "accepted an unknown player"))
+else:
+    print("[notify] /notifyme stores a subscription (and rejects unknown players) OK")
+
+# capture mention payloads
+_pings = []
+_orig_url = server.urllib.request.urlopen
+class _FakeReq:
+    pass
+def _cap(req, timeout=8):
+    try:
+        _pings.append(json.loads(req.data.decode()))
+    except Exception:
+        pass
+    class _R:
+        def read(self_inner): return b"{}"
+        def __enter__(self_inner): return self_inner
+        def __exit__(self_inner, *a): return False
+    return _R()
+server.urllib.request.urlopen = _cap
+server.discord_mention("Erol", "⚽ Brazil scored")     # subscribed -> should ping
+server.discord_mention("James", "⚽ Spain scored")     # not subscribed -> no ping
+server.urllib.request.urlopen = _orig_url
+if len(_pings) != 1:
+    fails.append(("mention", "expected exactly 1 ping, got %d" % len(_pings)))
+elif "<@123>" not in _pings[0].get("content", "") or _pings[0].get("allowed_mentions", {}).get("users") != ["123"]:
+    fails.append(("mention", "ping did not target the subscribed user: %r" % _pings[0]))
+else:
+    print("[notify] discord_mention pings only the subscribed player with allowed_mentions OK")
+
+r2 = server.discord_command("stopnotify", {}, uid="123")
+if "123" in server.load_config().get("discord_subs", {}):
+    fails.append(("stopnotify", "did not clear sub: %r" % r2))
+else:
+    print("[notify] /stopnotify clears the subscription OK")
+shutil.rmtree(D2, ignore_errors=True)
+
 if fails:
     print("\nFAILED:", fails)
     raise SystemExit(1)

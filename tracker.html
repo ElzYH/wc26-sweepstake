@@ -50,6 +50,7 @@
   .pname{font-family:'Anton';font-size:22px;letter-spacing:.01em}
   .palive{color:var(--muted);font-size:12px;letter-spacing:.06em}
   .pscore{font-family:'Anton';font-size:30px;color:var(--gold)}
+  .livedelta{font-family:'Sora',sans-serif;font-size:11px;font-weight:700;color:#062;background:#7ee787;border-radius:999px;padding:2px 7px;margin-left:8px;vertical-align:middle;animation:pulse 1.6s infinite}
   .pscore span{font-family:'Sora';font-size:12px;color:var(--muted);letter-spacing:.1em}
 
   /* player cards */
@@ -209,6 +210,15 @@
   .livecard{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--live);border-radius:14px;
     padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--live)}
   .livedot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--live);margin-right:6px;animation:pulse 1.4s infinite}
+  .mdgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+  .mdcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+  .mdcard.mdlive{border-color:var(--live);box-shadow:0 0 0 1px var(--live) inset}
+  .mdcard.mdfin{opacity:.72}
+  .mdmeta{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+  .mdteams{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13.5px;font-weight:600}
+  .mdteams span small{display:block;color:var(--muted);font-weight:500;font-size:10.5px}
+  .mdsc{font-family:'Anton';color:var(--gold);font-size:16px;flex:0 0 auto}
+  .mdr{text-align:right}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
   .lmatch{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin-top:8px;
     color:var(--ink);font-weight:600;font-size:14px;letter-spacing:0}
@@ -589,12 +599,12 @@ function render(d){
     <div class="row ${i===0&&p.score>0?'lead':''}">
       <div class="rank">${i+1}</div>
       <div><div class="pname">${p.name}${tied?' <span class="tiebadge">tied</span>':''}</div><div class="palive">${p.alive_teams}/${p.total_teams} teams still in</div></div>
-      <div class="pscore">${disp(p.score)}<span> ${unit}</span></div>
+      <div class="pscore">${disp(p.score)}<span> ${unit}</span>${(p.live>0 && (lbm==='points'||lbm==='hybrid'))?`<span class="livedelta" title="points from games in play right now">+${p.live} live</span>`:''}</div>
     </div>`;}).join('')
     + (board.length>1?`<div class="tbcap">${tbrule}</div>`:'');
   // player cards
   document.getElementById('playersBody').innerHTML=d.players.map(p=>`
-    <div class="pcard"><h3>${p.name}<span class="pts">${p.points} pts · ${p.alive_teams}/${p.total_teams} in</span></h3>
+    <div class="pcard"><h3>${p.name}<span class="pts">${p.points} pts${p.live>0?` <span style="color:#7ee787">+${p.live} live</span>`:''} · ${p.alive_teams}/${p.total_teams} in</span></h3>
       <div class="tl">${p.teams.map(t=>`
         <div class="trow ${t.status==='out'?'out':''}">
           <span class="dot" style="background:${TIER[t.tier]}"></span>
@@ -804,6 +814,27 @@ function renderOverview(d){
     html+='<div class="empty">No games in play right now — live scores appear here the moment a match kicks off.</div>';
   }
   html+='</div>';
+  // MATCHDAY — today's slate, or the next day that has games (works pre-tournament + live)
+  {
+    const todayStr=new Date().toISOString().slice(0,10);
+    const dt=m=>(m.utcDate||'').slice(0,10);
+    let day = fx.some(m=>dt(m)===todayStr) ? todayStr
+            : (fx.filter(m=>m.status!=='FINISHED'&&dt(m)).map(dt).sort()[0]||'');
+    const games = day ? fx.filter(m=>dt(m)===day).sort((a,b)=>(a.utcDate||'').localeCompare(b.utcDate||'')) : [];
+    if(games.length){
+      const dlabel = day===todayStr ? 'Today' : new Date(day+'T12:00:00Z').toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'short'});
+      html+='<div class="ovsec"><div class="ovh">📅 '+dlabel+'’s games</div><div class="mdgrid">'+games.map(m=>{
+        const t=(m.utcDate||'').slice(11,16);
+        const liveN=['IN_PLAY','PAUSED','LIVE','SUSPENDED'].includes(m.status);
+        const fin=m.status==='FINISHED';
+        const sc=(m.homeScore!=null&&m.awayScore!=null)?(m.homeScore+'–'+m.awayScore):'v';
+        const tag=liveN?('<span class="livedot"></span>LIVE'+(m.minute?" "+m.minute+"'":'')):(fin?'FT':(t?t+' UTC':'TBC'));
+        const where=m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):('Group '+(m.group||'?'));
+        return `<div class="mdcard${liveN?' mdlive':''}${fin?' mdfin':''}"><div class="mdmeta">${where} · ${tag}</div>
+          <div class="mdteams"><span>${flag(m.home)}${m.home}${own(m.homeOwner)}</span><span class="mdsc">${sc}</span><span class="mdr">${flag(m.away)}${m.away}${own(m.awayOwner)}</span></div></div>`;
+      }).join('')+'</div></div>';
+    }
+  }
   // LEADERS (mode-aware — all three in Both mode, single in points/survival)
   const cells=leaderCells(lb,done);
   html+='<div class="ovsec"><div class="ovh">Who\'s winning</div><div class="winrow" style="grid-template-columns:repeat('+cells.length+',1fr)">'

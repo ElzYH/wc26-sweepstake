@@ -108,6 +108,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
 
     pts = defaultdict(int); record = defaultdict(lambda: [0, 0, 0])
     gf = defaultdict(int); ga = defaultdict(int); cs = defaultdict(int)
+    live_pts = defaultdict(int)                        # points currently accruing from in-play matches (the live "+N")
     reached = defaultdict(set); lost_ko_at = {}
 
     for m in matches:                                  # which KO stages a team appears in
@@ -120,21 +121,25 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
         h, a, hs, as_ = m["home"], m["away"], m["homeScore"], m["awayScore"]
         if hs is None or as_ is None:
             continue
+        is_live = m["status"] in ("IN_PLAY", "PAUSED")
         side = _winner_side(m)                         # HOME / AWAY / DRAW — reflects penalties + walkovers
         for team, scored, conceded in ((h, hs, as_), (a, as_, hs)):
             if team not in teams:
                 continue
-            pts[team] += scored * SCORING["per_goal"]
+            d = scored * SCORING["per_goal"]
             gf[team] += scored; ga[team] += conceded
             if conceded == 0:
-                pts[team] += SCORING["clean_sheet"]; cs[team] += 1
+                d += SCORING["clean_sheet"]; cs[team] += 1
             won = (side == "HOME" and team == h) or (side == "AWAY" and team == a)
             if won:
-                pts[team] += SCORING["win"]; record[team][0] += 1          # incl. a knockout tie won on penalties
+                d += SCORING["win"]; record[team][0] += 1                  # incl. a knockout tie won on penalties
             elif side in ("HOME", "AWAY"):
                 record[team][2] += 1                                       # lost (incl. on penalties)
             else:
-                pts[team] += SCORING["draw"]; record[team][1] += 1         # genuine draw (group stage)
+                d += SCORING["draw"]; record[team][1] += 1                 # genuine draw (group stage)
+            pts[team] += d
+            if is_live:
+                live_pts[team] += d
 
     for m in [x for x in finished if x["stage"] in BRACKET_KO]:   # KO resolution (pens-aware)
         side = _winner_side(m)
@@ -184,12 +189,13 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
             teams_out.append({"name": name, "tier": t["tier"], "group": t["group"],
                               "points": pts[name], "survival": survival_pts(name),
                               "status": st, "stage": stage, "record": f"{w}-{d}-{l}",
-                              "gf": gf[name], "ga": ga[name],
+                              "gf": gf[name], "ga": ga[name], "live": live_pts[name],
                               "composite": teams.get(name, {}).get("composite", 0),
                               "odds": teams.get(name, {}).get("implied_prob", 0)})
         teams_out.sort(key=lambda x: -(x["points"] + x["survival"]))
         tot_p = sum(x["points"] for x in teams_out); tot_s = sum(x["survival"] for x in teams_out)
         players_out.append({"name": p["name"], "points": tot_p, "survival": tot_s, "hybrid": tot_p + tot_s,
+                            "live": sum(x["live"] for x in teams_out),
                             "alive_teams": sum(1 for x in teams_out if x["status"] == "alive"),
                             "total_teams": len(teams_out), "teams": teams_out})
 
@@ -197,10 +203,10 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
         if key == "survival":
             rows = sorted(players_out, key=lambda p: (-p["alive_teams"], -p["survival"]))
             return [{"name": p["name"], "score": p["alive_teams"], "alive_teams": p["alive_teams"],
-                     "total_teams": p["total_teams"]} for p in rows]
+                     "live": p["live"], "total_teams": p["total_teams"]} for p in rows]
         rows = sorted(players_out, key=lambda p: (-p[key], -p["alive_teams"]))
         return [{"name": p["name"], "score": p[key], "alive_teams": p["alive_teams"],
-                 "total_teams": p["total_teams"]} for p in rows]
+                 "live": p["live"], "total_teams": p["total_teams"]} for p in rows]
 
     # live "odds to own the champion" from bookmaker implied probabilities, alive-aware
     def implied(name):

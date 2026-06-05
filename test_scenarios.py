@@ -87,6 +87,11 @@ def run():
         # Brazil live 1-0: 1 goal + provisional win 3 + provisional clean sheet 1 = 5
         check("live game scores provisionally (fantasy-style)", pts(d, "Erol") == 5, pts(d, "Erol"))
         check("live game not counted as played", d["stats"]["matches_played"] == 0, d["stats"])
+        # the live "+N" delta = points coming from in-play games (all 5 are live here)
+        _er = next(p for p in d["players"] if p["name"] == "Erol")
+        check("live delta equals provisional live points (+5)", _er.get("live") == 5, _er.get("live"))
+        _row = next(r for r in d["leaderboards"]["hybrid"] if r["name"] == "Erol")
+        check("leaderboard row carries the live delta", _row.get("live") == 5, _row)
         check("both teams still alive during live group game",
               team_status(d, "Brazil") == "alive" and team_status(d, "Japan") == "alive", "")
 

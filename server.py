@@ -343,6 +343,33 @@ def discord_send_lines(lines):
         discord_send("\n".join(buf))
 
 
+def _discord_subs():
+    """{discord_user_id: player_name} — who opted into personal pings via /notifyme."""
+    s = load_config().get("discord_subs")
+    return s if isinstance(s, dict) else {}
+
+
+def discord_mention(player, text):
+    """Ping the Discord users who subscribed to this player. No-op if nobody subscribed / no webhook."""
+    try:
+        if not player or player in ("—", "-"):
+            return
+        uids = [u for u, pl in _discord_subs().items() if pl == player][:25]
+        if not uids:
+            return
+        url = (load_config().get("discord_webhook") or "").strip()
+        if not url.startswith("https://"):
+            return
+        mention = " ".join("<@%s>" % u for u in uids)
+        payload = {"content": ("%s %s" % (mention, text))[:1900], "allowed_mentions": {"users": uids}}
+        req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers={
+            "Content-Type": "application/json",
+            "User-Agent": "WC26-Sweepstake/1.0 (+https://bbmsweepstake.co.uk)"})
+        urllib.request.urlopen(req, timeout=8)
+    except Exception as e:
+        log("discord mention failed:", e)
+
+
 # ---------------- Web Push (Path A) — needs pywebpush; guarded so missing lib is harmless ----------------
 PUSH_FILE = "push_subs.json"          # {player: [{"sub": <subscription>, "prefs": {etype: bool}}, ...]}
 EVENT_TYPES = ("goal", "kickoff", "flow", "knockout", "leader", "winner", "rivalry")
@@ -529,11 +556,13 @@ def notify_changes(old):
     if (new.get("stats") or {}).get("matches_played", 0) == 0:
         return
 
-    def match_event(etype, recipients, group_line):
+    def match_event(etype, recipients, group_line, ping=False):
         # recipients: list of (owner, title, body); one Discord line for the whole match event
         for ow, ti, bo in recipients:
             if ow and ow not in ("—", "-"):
                 push_player(ow, etype, ti, bo)
+                if ping:
+                    discord_mention(ow, "%s — %s" % (ti, bo))
         discord_send(group_line)
 
     def own(o):
@@ -558,6 +587,8 @@ def notify_changes(old):
     # per-match transitions: kickoff, half-time, second half, goals
     try:
         of, nf = _fixture_status(old), _fixture_status(new)
+        nmatch = {(m.get("home"), m.get("away")): m for m in (new.get("fixtures") or [])}
+        FT_STATUSES = ("FINISHED", "AWARDED")
         for key, nv in nf.items():
             h, a = key
             st, ho, ao, nhs, nas = nv
@@ -569,7 +600,7 @@ def notify_changes(old):
                 match_event("kickoff",
                             [(ho, "%s vs %s" % (h, a), "Kicked off — your team %s is playing!" % h),
                              (ao, "%s vs %s" % (h, a), "Kicked off — your team %s is playing!" % a)],
-                            "🔵 Kicked off — **%s** (%s) vs **%s** (%s)" % (h, own(ho), a, own(ao)))
+                            "🔵 Kicked off — **%s** (%s) vs **%s** (%s)" % (h, own(ho), a, own(ao)), ping=True)
             elif st == "PAUSED" and was in PLAYING:                                   # half-time
                 sc = "%s %s–%s %s" % (h, nhs, nas, a) if None not in (nhs, nas) else "%s vs %s" % (h, a)
                 match_event("flow",
@@ -580,14 +611,28 @@ def notify_changes(old):
                             [(ho, "Second half ▶️", "%s vs %s under way" % (h, a)),
                              (ao, "Second half ▶️", "%s vs %s under way" % (h, a))],
                             "▶️ Second half under way — %s vs %s" % (h, a))
+            elif st in FT_STATUSES and was in LIVE_STATUSES:                          # full-time (incl. a.e.t. / pens)
+                mm = nmatch.get(key) or {}
+                sc = "%s %s–%s %s" % (h, nhs, nas, a) if None not in (nhs, nas) else "%s vs %s" % (h, a)
+                extra = ""
+                if mm.get("shootout"):
+                    ph, pa = mm.get("penHome"), mm.get("penAway")
+                    extra = " — %s–%s on penalties" % (ph, pa) if None not in (ph, pa) else " — won on penalties"
+                elif mm.get("aet"):
+                    extra = " — after extra time"
+                match_event("flow",
+                            [(ho, "Full-time ⏱️", sc + extra), (ao, "Full-time ⏱️", sc + extra)],
+                            "⏱️ Full-time — %s%s" % (sc, extra), ping=True)
             if ov is not None:                                                        # goals (any time score rises)
                 ohs, oas = ov[3], ov[4]
                 if None not in (nhs, nas, ohs, oas):
                     score = "%s %d–%d %s" % (h, nhs, nas, a)
                     if nhs > ohs and ho_ok:
                         alert_player(ho, "goal", "%s scored! ⚽" % h, score, "⚽ **%s** (%s) scored — %s" % (h, ho, score))
+                        discord_mention(ho, "⚽ **%s** scored — %s" % (h, score))
                     if nas > oas and ao_ok:
                         alert_player(ao, "goal", "%s scored! ⚽" % a, score, "⚽ **%s** (%s) scored — %s" % (a, ao, score))
+                        discord_mention(ao, "⚽ **%s** scored — %s" % (a, score))
     except Exception:
         pass
     # a player's team is knocked out
@@ -598,6 +643,7 @@ def notify_changes(old):
                 owner = na[t][1]
                 alert_player(owner, "knockout", "%s is out ❌" % t, "Check the leaderboard to see where you stand.",
                              "❌ **%s** (%s) is out." % (t, own(owner)))
+                discord_mention(owner, "❌ **%s** is out." % t)
     except Exception:
         pass
     # champion decided -> everyone, with the winner's standing in the active scoring mode
@@ -815,11 +861,28 @@ def _active_mode():
     return m if m in ("points", "survival", "hybrid") else "hybrid"
 
 
-def discord_command(name, opts):
+def discord_command(name, opts, uid=None):
     """Build a read-only reply for a slash command. No admin actions."""
     d = _load_tracker() or {}
     mode = _active_mode()
     label = "survival" if mode == "survival" else "pts"
+    if name == "notifyme":
+        if not uid:
+            return "Couldn't read your Discord account — run this from inside the server."
+        who = str(opts.get("player", "")).strip()
+        pl = next((p for p in (d.get("players") or []) if p.get("name", "").lower() == who.lower()), None)
+        if not pl:
+            names = ", ".join(p.get("name", "") for p in (d.get("players") or []))
+            return "No player called **%s**. Players: %s\nTry `/notifyme <player>`." % (who or "?", names or "-")
+        cfg = load_config(); subs = cfg.get("discord_subs"); subs = subs if isinstance(subs, dict) else {}
+        subs[str(uid)] = pl["name"]; cfg["discord_subs"] = subs; save_config(cfg)
+        return ("🔔 You'll be pinged here when **%s**'s teams kick off, score, reach full-time or go out. "
+                "Use `/stopnotify` to turn it off." % pl["name"])
+    if name == "stopnotify":
+        cfg = load_config(); subs = cfg.get("discord_subs"); subs = subs if isinstance(subs, dict) else {}
+        had = subs.pop(str(uid), None) if uid else None
+        cfg["discord_subs"] = subs; save_config(cfg)
+        return "🔕 Personal pings turned off." if had else "You weren't subscribed to personal pings."
     if name == "help":
         return ("**WC26 bot commands**\n"
                 "/leaderboard - top of the table\n"
@@ -831,6 +894,8 @@ def discord_command(name, opts):
                 "/myteams <player> - that player's teams\n"
                 "/players - everyone's team counts\n"
                 "/team <name> - look up one team (owner, group, points)\n"
+                "/notifyme <player> - ping you here on your teams' events\n"
+                "/stopnotify - turn your pings off\n"
                 "/help - this list")
     if name == "summary":
         return "\n".join(build_summary())
@@ -957,6 +1022,9 @@ def register_discord_commands():
         {"name": "players", "description": "Every player and how many teams are still in", "type": 1},
         {"name": "team", "description": "Look up a team's owner, group and points", "type": 1,
          "options": [{"name": "name", "description": "Team name, e.g. Brazil", "type": 3, "required": True}]},
+        {"name": "notifyme", "description": "Get pinged here when a player's teams play, score or go out", "type": 1,
+         "options": [{"name": "player", "description": "Your player name in the sweepstake", "type": 3, "required": True}]},
+        {"name": "stopnotify", "description": "Turn off your personal pings", "type": 1},
     ]
     base = "https://discord.com/api/v10/applications/%s" % app_id
     url = (base + "/guilds/%s/commands" % guild) if guild else (base + "/commands")
@@ -1336,8 +1404,9 @@ class Handler(BaseHTTPRequestHandler):
         if body.get("type") == 2:                          # APPLICATION_COMMAND
             data = body.get("data") or {}
             opts = {o.get("name"): o.get("value") for o in (data.get("options") or [])}
+            uid = ((body.get("member") or {}).get("user") or {}).get("id") or (body.get("user") or {}).get("id")
             try:
-                content = discord_command(data.get("name"), opts)
+                content = discord_command(data.get("name"), opts, uid)
             except Exception as e:
                 log("discord command error:", e)
                 content = "Something went wrong building that."
