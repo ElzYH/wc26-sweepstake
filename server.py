@@ -796,6 +796,29 @@ def update_now(cfg):
         return False, str(e)          # results.json + tracker_data.json left intact
 
 
+def maybe_send_daily_digest(cfg):
+    """Post the summary to Discord once per day at/after the configured UTC hour.
+    Idempotent: a persisted last_digest_date means a restart can't double-post."""
+    if not (cfg.get("digest_enabled") and cfg.get("discord_webhook") and draw_locked()):
+        return
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    if cfg.get("last_digest_date") == today:
+        return
+    try:
+        hour = int(cfg.get("digest_hour", 9))
+    except (TypeError, ValueError):
+        hour = 9
+    if time.gmtime().tm_hour < max(0, min(23, hour)):
+        return
+    lines = build_summary()
+    if not lines:
+        return
+    discord_send("📰 **Daily summary**\n" + "\n".join(lines))
+    cfg["last_digest_date"] = today
+    save_config(cfg)
+    log("daily digest sent for", today)
+
+
 def poller():
     while True:
         cfg = load_config()
@@ -805,6 +828,10 @@ def poller():
                 ok, err = update_now(cfg)
             if not ok:
                 print("[poller] update failed:", err)
+        try:
+            maybe_send_daily_digest(load_config())
+        except Exception as e:
+            print("[digest] error:", e)
         time.sleep(max(60, mins * 60))
 
 
@@ -990,6 +1017,8 @@ class Handler(BaseHTTPRequestHandler):
                 "has_invite": bool(cfg.get("discord_invite")),
                 "invite": cfg.get("discord_invite", ""),
                 "bot_ready": bool(cfg.get("discord_pubkey") and cfg.get("discord_app_id")),
+                "digest_enabled": bool(cfg.get("digest_enabled")),
+                "digest_hour": cfg.get("digest_hour", 9),
                 "site_url": cfg.get("site_url", "")}))
         return self._file(path.lstrip("/"))
 
@@ -1165,6 +1194,13 @@ class Handler(BaseHTTPRequestHandler):
             if "site_url" in body:
                 s = str(body["site_url"]).strip().rstrip("/")
                 cfg["site_url"] = s if (s == "" or s.startswith("https://")) else cfg.get("site_url", "")
+            if "digest_enabled" in body:
+                cfg["digest_enabled"] = bool(body["digest_enabled"])
+            if "digest_hour" in body:
+                try:
+                    cfg["digest_hour"] = max(0, min(23, int(body["digest_hour"])))
+                except (TypeError, ValueError):
+                    pass
             for f in ("discord_app_id", "discord_guild_id", "discord_pubkey", "discord_bot_token"):
                 if f in body:
                     cfg[f] = str(body[f]).strip()[:120]

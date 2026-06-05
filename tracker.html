@@ -113,6 +113,17 @@
   .live{color:var(--live);font-weight:700;font-size:11px;letter-spacing:.08em}
   .stagetag{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
   .empty{color:var(--muted);padding:30px;text-align:center}
+  .lcgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr));gap:12px}
+  .lccard{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:14px;padding:14px}
+  .lchead{font-family:'Sora';font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--live);display:flex;align-items:center;gap:7px;margin-bottom:8px}
+  .lcdot{width:7px;height:7px;border-radius:50%;background:var(--live);animation:pulse 1.4s infinite}
+  .lcrow{display:flex;justify-content:space-between;align-items:center;padding:5px 0}
+  .lcteam{font-size:15px;font-weight:600;display:flex;align-items:center;gap:7px}
+  .lcteam small{color:var(--gold);font-weight:600;font-size:11px}
+  .lcscore{font-family:'Anton';font-size:24px}
+  .fxrow{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 13px}
+  .fxt{font-size:13.5px;font-weight:500}.fxt small{color:var(--muted);font-weight:400}
+  .fxmeta{color:var(--muted);font-size:11.5px;text-align:right;white-space:nowrap}
   .modesel{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
   .modecap{color:var(--muted);font-size:12.5px;line-height:1.5;margin:-6px 0 14px;padding:9px 12px;background:#08180f;border:1px solid var(--line);border-radius:9px}
   .modecap b{color:var(--ink)}
@@ -299,6 +310,10 @@
         <input id="setSite" type="text" placeholder="https://bbmsweepstake.co.uk">
         <div class="row2" style="margin-top:6px"><button id="setSaveSite">Save link</button></div>
         <div class="hint" id="setSiteMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
+        <p style="margin:12px 0 6px;color:var(--muted);font-size:12.5px">• <b>Daily summary</b> — automatically post the standings digest to Discord once a day.</p>
+        <div class="row2" style="align-items:center"><label style="display:flex;align-items:center;gap:8px;font-size:13.5px"><input type="checkbox" id="setDigest"> Post a daily summary</label><label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)">at <input id="setDigestHour" type="number" min="0" max="23" style="width:60px"> :00 UTC</label></div>
+        <div class="row2" style="margin-top:6px"><button id="setSaveDigest">Save daily summary</button></div>
+        <div class="hint" id="setDigestMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
       </div>
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
         <p style="margin:0 0 8px"><b>Discord bot (slash commands).</b> Lets anyone in the server type <code>/leaderboard</code>, <code>/summary</code>, <code>/odds</code>, <code>/fixtures</code>, <code>/myteams</code> to pull live data. Read-only — no admin commands.</p>
@@ -344,6 +359,7 @@
 
   <div class="tabs">
     <div class="tab on" data-s="overview">Overview</div>
+    <div class="tab" data-s="live">Live</div>
     <div class="tab" data-s="lb">Leaderboard</div>
     <div class="tab" data-s="players">Teams by player</div>
     <div class="tab" data-s="h2h">Head-to-head</div>
@@ -354,6 +370,8 @@
   </div>
 
   <section class="on" id="overview"><div id="ovBody"></div></section>
+
+  <section id="live"><div id="liveBody"></div></section>
 
   <section id="lb">
     <div class="winrow" id="winrow"></div>
@@ -437,7 +455,7 @@ async function load(){
        if(r.ok){ DATA=await r.json(); ok=!!(DATA&&DATA.players&&DATA.players.length); } }
   catch(e){ ok=false; }
   const gate=document.getElementById('gate'), tabs=document.querySelector('.tabs');
-  const secs=['overview','lb','players','h2h','groups','bracket','fixtures','odds'];
+  const secs=['overview','live','lb','players','h2h','groups','bracket','fixtures','odds'];
   if(!ok){ gate.style.display='block'; tabs.style.display='none';
            secs.forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';}); return; }
   gate.style.display='none'; tabs.style.display='';
@@ -446,6 +464,41 @@ async function load(){
 }
 
 let H2H_A=null, H2H_B=null;
+function renderLive(d){
+  const body=document.getElementById('liveBody'); if(!body) return;
+  const fx=d.fixtures||[];
+  const own=o=>(o&&o!=='—'&&o!=='-')?`<small>${esc(o)}</small>`:'';
+  const live=fx.filter(m=>['IN_PLAY','PAUSED','LIVE','SUSPENDED'].includes(m.status));
+  const soon=fx.filter(m=>['TIMED','SCHEDULED'].includes(m.status)).sort((a,b)=>new Date(a.utcDate)-new Date(b.utcDate)).slice(0,5);
+  const isToday=s=>{const x=new Date(s),n=new Date();return x.getFullYear()===n.getFullYear()&&x.getMonth()===n.getMonth()&&x.getDate()===n.getDate();};
+  const earlier=fx.filter(m=>m.status==='FINISHED'&&isToday(m.utcDate)).sort((a,b)=>new Date(b.utcDate)-new Date(a.utcDate));
+  let h='';
+  if(live.length){
+    h+='<div class="lcgrid">'+live.map(m=>{
+      const stg=m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):(m.group?'Group '+m.group:'');
+      return `<div class="lccard">
+        <div class="lchead"><span class="lcdot"></span>LIVE${m.minute?" "+m.minute+"'":""}${m.status==='PAUSED'?' · HT':''}${stg?' · '+stg:''}</div>
+        <div class="lcrow"><span class="lcteam">${flag(m.home)}${esc(m.home)}${own(m.homeOwner)}</span><span class="lcscore">${m.homeScore??0}</span></div>
+        <div class="lcrow"><span class="lcteam">${flag(m.away)}${esc(m.away)}${own(m.awayOwner)}</span><span class="lcscore">${m.awayScore??0}</span></div>
+        ${wpBar3(m,true)}
+      </div>`;}).join('')+'</div>';
+  } else {
+    h+='<div class="empty">No games in play right now. Live scores, the minute and win-chance bars appear here the moment a match kicks off.</div>';
+  }
+  if(soon.length){
+    h+='<div class="ovh" style="margin-top:18px">Kicking off next</div><div class="fx">'+soon.map(m=>{
+      const stg=m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):(m.group?'Group '+m.group:'');
+      return `<div class="fxrow"><span class="fxt">${flag(m.home)}${esc(m.home)} v ${flag(m.away)}${esc(m.away)}</span><span class="fxmeta">${stg} · ${dayKey(m.utcDate)} ${fmtTime(m.utcDate)}</span></div>`;
+    }).join('')+'</div>';
+  }
+  if(earlier.length){
+    h+='<div class="ovh" style="margin-top:18px">Earlier today</div><div class="fx">'+earlier.map(m=>{
+      const ko=(m.aet||m.shootout)?` <small>(${m.aet?'a.e.t.':''}${m.shootout?(m.aet?', ':'')+'pens '+(m.penHome??0)+'–'+(m.penAway??0):''})</small>`:'';
+      return `<div class="fxrow"><span class="fxt">${flag(m.home)}${esc(m.home)} ${m.homeScore??0}–${m.awayScore??0} ${flag(m.away)}${esc(m.away)}${ko}</span><span class="fxmeta">${fmtTime(m.utcDate)}</span></div>`;
+    }).join('')+'</div>';
+  }
+  body.innerHTML=h;
+}
 function renderH2H(d){
   const players=d.players||[], body=document.getElementById('h2hBody');
   if(players.length<2){ if(body) body.innerHTML='<div class="empty">Head-to-head needs at least two players — run the draw first.</div>'; return; }
@@ -477,6 +530,7 @@ function render(d){
   checkNotify(d);
   renderWinners(d);
   renderOverview(d);
+  renderLive(d);
   renderH2H(d);
   // leaderboard for the active mode
   MODE=d.default_mode||'hybrid';
@@ -961,6 +1015,8 @@ async function refreshStatus(){
   const dw=document.getElementById('setDiscord'); if(dw && STATUS.discord) dw.placeholder='webhook saved ✅ (paste to replace, or clear to remove)';
   if(STATUS.has_invite){ const iv=document.getElementById('setInvite'); if(iv) iv.placeholder='invite saved ✅ (paste to replace)'; }
   const su=document.getElementById('setSite'); if(su && STATUS.site_url) su.value=STATUS.site_url;
+  const dg=document.getElementById('setDigest'); if(dg) dg.checked=!!STATUS.digest_enabled;
+  const dh=document.getElementById('setDigestHour'); if(dh) dh.value=(STATUS.digest_hour!=null?STATUS.digest_hour:9);
   const ep=document.getElementById('botEndpoint'); if(ep) ep.textContent=(STATUS.site_url||location.origin)+'/api/discord_interactions';
   if(STATUS.bot_ready){ const ba=document.getElementById('setBotApp'), bt=document.getElementById('setBotToken');
     if(ba) ba.placeholder='Application ID (saved ✅)'; if(bt) bt.placeholder='Bot Token (saved ✅ — leave blank to keep)'; }
@@ -972,10 +1028,11 @@ document.getElementById('refreshBtn').onclick=async()=>{
   await load(); refreshStatus(); b.textContent=t; b.disabled=false;
 };
 let ADMINKEY='';
+try{const _ok=localStorage.getItem('wc26_admin_key');if(_ok){sessionStorage.setItem('wc26_admin_key',_ok);localStorage.removeItem('wc26_admin_key');}}catch(e){}
 document.getElementById('setBtn').onclick=()=>{
   const p=document.getElementById('setPanel'); const show=p.style.display==='none'; p.style.display=show?'block':'none';
   if(show){ const locked=(STATUS.drawn||STATUS.configured) && !ADMINKEY;
-    const saved=localStorage.getItem('wc26_admin_key'); const kf=document.getElementById('setGateKey'); if(saved&&kf&&!kf.value) kf.value=saved;
+    const saved=sessionStorage.getItem('wc26_admin_key'); const kf=document.getElementById('setGateKey'); if(saved&&kf&&!kf.value) kf.value=saved;
     document.getElementById('setGate').style.display=locked?'block':'none';
     document.getElementById('setFields').style.display=locked?'none':'block'; }
 };
@@ -984,7 +1041,7 @@ document.getElementById('setUnlock').onclick=async()=>{
   if(!k){gm.textContent='Enter the admin key.';return;}
   gm.textContent='Checking…';
   try{ const r=await fetch('/api/check_key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:k})}); const j=await r.json();
-    if(j.ok){ ADMINKEY=k; localStorage.setItem('wc26_admin_key',k); document.getElementById('setGate').style.display='none'; document.getElementById('setFields').style.display='block'; }
+    if(j.ok){ ADMINKEY=k; sessionStorage.setItem('wc26_admin_key',k); document.getElementById('setGate').style.display='none'; document.getElementById('setFields').style.display='block'; }
     else if(r.status===429) gm.textContent='Too many tries — wait a few seconds and try again.';
     else gm.textContent='Wrong key.';
   }catch(e){ gm.textContent='Could not reach the server.'; }
@@ -1038,6 +1095,17 @@ document.getElementById('setSaveSite').onclick=async()=>{
   m.textContent='Saving…';
   try{ const j=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({site_url:s,admin_key:ADMINKEY})}).then(r=>r.json());
     if(j.ok){ m.textContent='Saved — Discord alerts now link to the tracker.'; refreshStatus(); }
+    else if(j.need_key){ m.textContent='Session expired — reopen Settings and unlock again.'; ADMINKEY=''; }
+    else m.textContent=j.error||'Could not save.';
+  }catch(e){ m.textContent='Could not reach the server.'; }
+};
+document.getElementById('setSaveDigest').onclick=async()=>{
+  const m=document.getElementById('setDigestMsg');
+  const en=document.getElementById('setDigest').checked;
+  let hr=parseInt(document.getElementById('setDigestHour').value,10); if(isNaN(hr))hr=9; hr=Math.max(0,Math.min(23,hr));
+  m.textContent='Saving…';
+  try{ const j=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({digest_enabled:en,digest_hour:hr,admin_key:ADMINKEY})}).then(r=>r.json());
+    if(j.ok){ m.textContent=en?('Daily summary will post around '+hr+':00 UTC (needs a Discord webhook).'):'Daily summary turned off.'; refreshStatus(); }
     else if(j.need_key){ m.textContent='Session expired — reopen Settings and unlock again.'; ADMINKEY=''; }
     else m.textContent=j.error||'Could not save.';
   }catch(e){ m.textContent='Could not reach the server.'; }
@@ -1261,7 +1329,7 @@ document.getElementById('setRotate').onclick=async()=>{
   if(!confirm('Generate a new admin key? The current key will stop working immediately on every device.')) return;
   m.textContent='Generating…';
   try{ const j=await fetch('/api/rotate_key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:ADMINKEY})}).then(r=>r.json());
-    if(j.ok&&j.key){ ADMINKEY=j.key; localStorage.setItem('wc26_admin_key',j.key);
+    if(j.ok&&j.key){ ADMINKEY=j.key; sessionStorage.setItem('wc26_admin_key',j.key);
       m.innerHTML='New admin key (save it now): <b style="color:var(--gold);user-select:all">'+j.key+'</b>'; }
     else if(j.need_key){ m.textContent='Session expired — reopen Settings and unlock again.'; ADMINKEY=''; }
     else m.textContent=j.error||'Could not regenerate.';

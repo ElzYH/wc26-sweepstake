@@ -116,6 +116,22 @@ elif _total != _want:
 else:
     print("[auto-draw] server reveal completed and locked %d teams OK" % _total)
 
+# daily digest: posts once per day, idempotent across calls/restarts (delivery is stubbed)
+_sent = []
+server.discord_send = lambda text: _sent.append(text)
+_cfg = server.load_config()
+_cfg.update({"discord_webhook": "https://discord.com/api/webhooks/x/y", "digest_enabled": True,
+             "digest_hour": 0, "last_digest_date": None})
+server.save_config(_cfg)
+server.maybe_send_daily_digest(server.load_config())
+server.maybe_send_daily_digest(server.load_config())   # second call same day must NOT re-send
+if len(_sent) != 1:
+    fails.append(("digest", "expected exactly 1 send, got %d" % len(_sent)))
+elif not server.load_config().get("last_digest_date"):
+    fails.append(("digest", "last_digest_date not recorded"))
+else:
+    print("[digest] posts once per day, idempotent OK")
+
 shutil.rmtree(D, ignore_errors=True)
 if fails:
     print("\nFAILED:", fails)

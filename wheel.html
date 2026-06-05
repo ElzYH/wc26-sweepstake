@@ -105,7 +105,7 @@
         <button class="act ghost" id="resetBtn">Restart</button>
       </div>
       <div class="controls" style="margin-top:8px">
-        <button class="act ghost" id="serverBtn" style="width:100%" title="The draw runs on the server and keeps going even if you close this tab">🖥️ Run draw on the server (keeps going if you close this)</button>
+        <button class="act ghost" id="serverBtn" disabled style="width:100%;opacity:.4;pointer-events:none" title="The draw runs on the server and keeps going even if you close this tab">🖥️ Run draw on the server (keeps going if you close this)</button>
       </div>
       <div class="progress" id="progress"></div>
       <div class="saved" id="saved"></div>
@@ -134,6 +134,7 @@ const TIER={1:cv('--t1'),2:cv('--t2'),3:cv('--t3'),4:cv('--t4')};
 const PCOL=['#ffc83d','#3dd9c9','#5b8def','#e08a5b','#b48bff','#7fae97'];
 const AUTO_DUR={normal:2.2,fast:1.0,turbo:0};
 function cv(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+try{const _ok=localStorage.getItem('wc26_admin_key');if(_ok){sessionStorage.setItem('wc26_admin_key',_ok);localStorage.removeItem('wc26_admin_key');}}catch(e){}
 function isServer(){return location.protocol!=='file:';}
 const $=id=>document.getElementById(id);
 const cssId=s=>s.replace(/[^a-zA-Z0-9]/g,'_');
@@ -160,7 +161,7 @@ async function init(){
     if(saved&&saved.players){ showLocked(saved); return; }
   }
   if(!offline && !(st.players&&st.players.length)){ showNeedSetup(); return; }   // server is up but no players configured — don't run a sample draw
-  const haveKey=localStorage.getItem('wc26_admin_key');
+  const haveKey=sessionStorage.getItem('wc26_admin_key');
   const unlocked=sessionStorage.getItem('wc26_unlocked')==='1' && haveKey;
   if(!offline && !unlocked && !(await keyValid(haveKey))){ showAdminGate(); return; }
   if(haveKey) sessionStorage.setItem('wc26_unlocked','1');
@@ -185,7 +186,7 @@ function showAdminGate(){
   $('wkeyBtn').onclick=async()=>{
     const k=$('wkey').value.trim(); if(!k){ $('wkeyMsg').textContent='Enter the key.'; return; }
     $('wkeyMsg').textContent='Checking\u2026';
-    if(await keyValid(k)){ localStorage.setItem('wc26_admin_key',k); sessionStorage.setItem('wc26_unlocked','1'); const rb=$('resetBtn'); if(rb){rb.disabled=false;rb.style.opacity='';rb.style.pointerEvents='';} const sb=$('serverBtn'); if(sb){sb.disabled=false;sb.style.opacity='';sb.style.pointerEvents='';} box.style.display='none'; startOrder(); }
+    if(await keyValid(k)){ sessionStorage.setItem('wc26_admin_key',k); sessionStorage.setItem('wc26_unlocked','1'); const rb=$('resetBtn'); if(rb){rb.disabled=false;rb.style.opacity='';rb.style.pointerEvents='';} const sb=$('serverBtn'); if(sb){sb.disabled=false;sb.style.opacity='';sb.style.pointerEvents='';} box.style.display='none'; startOrder(); }
     else $('wkeyMsg').textContent='Wrong key.';
   };
 }
@@ -289,7 +290,8 @@ function pressEnd(){ if(!holding)return; holding=false; if(holdRAF)cancelAnimati
 function startOrder(){ phase='order';order=[];turnIdx=0;rotation=0;drawn=new Set();
   assignments={};players.forEach(p=>assignments[p]=[]);
   cvEl.style.transition='none';cvEl.style.transform='rotate(0deg)';
-  buildBoards(players); renderTeams(); liveSend({action:'order_start'}); redraw(); syncUI(); }
+  buildBoards(players); renderTeams(); liveSend({action:'order_start'}); redraw(); syncUI();
+  const sb=$('serverBtn'); if(sb){ sb.disabled=false; sb.style.opacity=''; sb.style.pointerEvents=''; } }
 function landOrder(p){ order.push(p);
   const rev=$('reveal');rev.innerHTML=`PICK #${order.length}<span class="arrow">▶</span><span class="who">${p}</span>`;rev.classList.add('show');
   liveSend({action:'order_pick',player:p});
@@ -297,7 +299,7 @@ function landOrder(p){ order.push(p);
   if(order.length>=players.length){ setTimeout(startTeams, auto?gap():750); }
   else if(auto){ setTimeout(()=>{if(auto)beginSpin(rand(3,6),AUTO_DUR[speed]);},gap()); } }
 function liveSend(payload){ if(!isServer())return;
-  payload.admin_key=localStorage.getItem('wc26_admin_key')||'';
+  payload.admin_key=sessionStorage.getItem('wc26_admin_key')||'';
   try{ fetch('/api/live_pick',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(()=>{}); }catch(e){} }
 function startTeams(){ phase='teams';turnIdx=0;rotation=0;
   if(mode==='fair')computeFair();
@@ -342,13 +344,13 @@ async function finish(){ phase='done'; auto=false;
   if(!isServer()){ box.classList.add('err');box.innerHTML='<b>Preview only</b><div class="note">Open from the running server to save the draw.</div>';return; }
   box.innerHTML='<b>Saving…</b>';
   const trySave=async(key)=>{
-    payload.admin_key=(key||localStorage.getItem('wc26_admin_key')||'');
+    payload.admin_key=(key||sessionStorage.getItem('wc26_admin_key')||'');
     return fetch('/api/save_draw',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(r=>r.json());
   };
   try{ let j=await trySave();
     if(j&&j.need_key){
       const k=prompt('Enter the admin key to lock this draw:');
-      if(k){ localStorage.setItem('wc26_admin_key',k.trim()); j=await trySave(k.trim()); }
+      if(k){ sessionStorage.setItem('wc26_admin_key',k.trim()); j=await trySave(k.trim()); }
     }
     if(j.ok) box.innerHTML='🏆 <b>Draw locked &amp; saved.</b> The tracker is now unlocked.<br><a href="/tracker">Go to the live tracker →</a><div class="note">To run a new draw, open Setup and enter the admin key.</div>';
     else{ box.classList.add('err');box.innerHTML='<b>Could not save</b><div class="note">'+(j.error||'error')+'</div>'; }
@@ -359,7 +361,8 @@ function showLocked(saved){ phase='done'; order=saved.players.map(p=>p.name);
   (saved.bonus_pool||[]).forEach(t=>{const el=$('rc_'+cssId(t.name));if(el)el.querySelector('.own').textContent='· bonus pool';});
   drawTeamWheel(wheelOrder); syncUI();
   const box=$('saved');box.style.display='block';
-  box.innerHTML='🏆 <b>This draw is locked.</b> Every team already has an owner.<br><a href="/tracker">Go to the live tracker →</a><div class="note">To run a new draw, open Setup and enter the admin key shown in the server terminal.</div>'; }
+  box.innerHTML='🏆 <b>This draw is locked.</b> Every team already has an owner.<br><a href="/tracker">Go to the live tracker →</a><div class="note">To run a new draw, open Setup and enter the admin key shown in the server terminal.</div>';
+  const sb=$('serverBtn'); if(sb){ sb.disabled=true; sb.style.opacity='.4'; sb.style.pointerEvents='none'; } }
 
 /* ---------- UI ---------- */
 function syncUI(){
@@ -391,12 +394,12 @@ window.addEventListener('pointerup',pressEnd);
 cvEl.addEventListener('pointerleave',()=>{ if(holding)pressEnd(); });
 $('spinBtn').onclick=()=>{ if(!holding) beginSpin(rand(3,7), AUTO_DUR[speed]); };
 $('autoBtn').onclick=()=>{ auto=!auto; syncUI(); if(auto&&!spinning) beginSpin(rand(3,6),AUTO_DUR[speed]); };
-$('resetBtn').onclick=async()=>{ if(isServer() && !(await keyValid(localStorage.getItem('wc26_admin_key')))){ showAdminGate(); return; }
+$('resetBtn').onclick=async()=>{ if(isServer() && !(await keyValid(sessionStorage.getItem('wc26_admin_key')))){ showAdminGate(); return; }
   auto=false;spinning=false;holding=false;if(holdRAF)cancelAnimationFrame(holdRAF);
   $('saved').style.display='none';$('saved').className='saved';$('reveal').classList.remove('show');startOrder(); };
 $('serverBtn').onclick=async()=>{
   if(!isServer()){ alert('Open this from the live site to run a server draw.'); return; }
-  const key=localStorage.getItem('wc26_admin_key')||'';
+  const key=sessionStorage.getItem('wc26_admin_key')||'';
   if(!(await keyValid(key))){ showAdminGate(); return; }
   if(!confirm('Run the draw on the server? It will reveal pick-by-pick and keep going even if you close this — you\'ll be taken to the live Watch page to follow along.')) return;
   const b=$('serverBtn'); b.disabled=true; b.textContent='Starting…';
