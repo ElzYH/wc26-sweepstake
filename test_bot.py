@@ -180,6 +180,25 @@ elif "Argentina" not in _champ:
 else:
     print("[summary] leaderboard score (key='score') + champion line surface OK")
 
+# champion alert must actually FIRE on the final (regression: read wrong key -> KeyError -> alert silently skipped)
+server.push_broadcast = lambda *a, **k: None
+_sent.clear()
+_fin = {"stage": "FINAL", "status": "FINISHED", "home": "Brazil", "away": "Spain",
+        "homeScore": 2, "awayScore": 1, "homeOwner": "Erol", "awayOwner": "James", "winner": "HOME_TEAM"}
+_lb = {"hybrid": [{"name": "Erol", "score": 120, "alive_teams": 1, "total_teams": 9}], "points": [], "survival": []}
+_new = {"stats": {"matches_played": 104, "teams_remaining": 1}, "fixtures": [_fin],
+        "leaderboards": _lb, "players": [], "champion_decided": {"team": "Brazil", "owner": "Erol"}}
+_old = json.loads(json.dumps(_new)); _old["fixtures"][0]["status"] = "IN_PLAY"   # final not yet finished
+json.dump(_new, open(os.path.join(D, "tracker_data.json"), "w"))
+server.notify_changes(_old)
+_champ_msgs = [s for s in _sent if "Champions" in s or "champions" in s]
+if not _champ_msgs:
+    fails.append(("champion-alert", "no champion alert fired on the final"))
+elif "120" not in _champ_msgs[0]:
+    fails.append(("champion-alert", "champion alert missing the finishing score: %r" % _champ_msgs[0]))
+else:
+    print("[champion-alert] champion notification fires with finishing score OK")
+
 shutil.rmtree(D, ignore_errors=True)
 if fails:
     print("\nFAILED:", fails)

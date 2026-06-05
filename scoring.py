@@ -22,6 +22,8 @@ SCORING = {
 SURVIVAL_VALUE = {"LAST_32": 18, "LAST_16": 26, "QUARTER_FINALS": 34,
                   "SEMI_FINALS": 44, "FINAL": 56, "WINNER": 70}
 KO_ORDER = ["LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "FINAL"]
+# A match counts as decided when FINISHED or AWARDED (a walkover/forfeit — the API gives it a winner + score).
+FINAL_STATUSES = ("FINISHED", "AWARDED")
 
 
 def _load(path):
@@ -93,10 +95,10 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
     matches = results.get("matches", [])
     owner = {t["name"]: p["name"] for p in draw["players"] for t in p["teams"]}
 
-    finished = [m for m in matches if m["status"] == "FINISHED"]
+    finished = [m for m in matches if m["status"] in FINAL_STATUSES]
     ko_matches = [m for m in matches if m["stage"] != "GROUP_STAGE"]
     ko_teams = {m["home"] for m in ko_matches} | {m["away"] for m in ko_matches}
-    ko_started = any(m["status"] in ("FINISHED", "IN_PLAY", "PAUSED") for m in ko_matches)
+    ko_started = any(m["status"] in FINAL_STATUSES + ("IN_PLAY", "PAUSED") for m in ko_matches)
 
     pts = defaultdict(int); record = defaultdict(lambda: [0, 0, 0])
     gf = defaultdict(int); ga = defaultdict(int); cs = defaultdict(int)
@@ -320,7 +322,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
 
     champion_decided = None
     for m in matches:
-        if m.get("stage") == "FINAL" and m.get("status") == "FINISHED":
+        if m.get("stage") == "FINAL" and m.get("status") in FINAL_STATUSES:
             side = _winner_side(m)
             win = m["home"] if side == "HOME" else (m["away"] if side == "AWAY" else None)
             if win:

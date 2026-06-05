@@ -64,6 +64,9 @@ if [ $? -ne 0 ]; then FAIL=1; fi
 say "Scoring unit tests"
 if python3 test_scoring.py; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
 
+say "Unexpected-scenario tests (kickoff, forfeit, abandoned, corrections)"
+if python3 test_scenarios.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_scenarios.py | grep FAIL; FAIL=1; fi
+
 say "Full-tournament replay (2022: knockouts, penalties, champion)"
 if python3 test_2022.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_2022.py | tail -8; FAIL=1; fi
 

@@ -498,7 +498,7 @@ PLAYING = ("IN_PLAY", "LIVE")
 def _final_result(d):
     """Return (champion_team, owner) once the FINAL is finished, else (None, None)."""
     for m in (d.get("fixtures") or []):
-        if m.get("stage") == "FINAL" and m.get("status") == "FINISHED":
+        if m.get("stage") == "FINAL" and m.get("status") in ("FINISHED", "AWARDED"):
             hs, as_ = m.get("homeScore"), m.get("awayScore")
             w = m.get("winner")
             if hs is not None and as_ is not None and hs != as_:
@@ -591,7 +591,7 @@ def notify_changes(old):
             mode = mode if mode in ("points", "survival", "hybrid") else "hybrid"
             board = (new.get("leaderboards") or {}).get(mode) or []
             entry = next((p for p in board if p.get("name") == owner), None)
-            tail = (" — %s finishes on %s pts." % (owner, entry[mode])) if (entry and own(owner) != "—") else "."
+            tail = (" — %s finishes on %s pts." % (owner, entry.get("score", 0))) if (entry and own(owner) != "—") else "."
             alert_all("winner", "🏆 Champions: %s" % team,
                       "%s won the World Cup%s" % (team, tail),
                       "🏆 **%s** (%s) are World Cup champions%s" % (team, own(owner), tail))
