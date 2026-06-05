@@ -318,9 +318,20 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
     strength_board = [{"name": p["name"], "strength": p["squad_strength"], "favourites": p["favourites"]}
                       for p in sorted(players_out, key=lambda p: -p["squad_strength"])]
 
+    champion_decided = None
+    for m in matches:
+        if m.get("stage") == "FINAL" and m.get("status") == "FINISHED":
+            side = _winner_side(m)
+            win = m["home"] if side == "HOME" else (m["away"] if side == "AWAY" else None)
+            if win:
+                champion_decided = {"team": win, "owner": owner.get(win, "—"),
+                                    "runnerUp": (m["away"] if side == "HOME" else m["home"])}
+            break
+
     data = {"updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "competition": results.get("competition", "WC"), "default_mode": default_mode,
             "scoring": {"points": SCORING, "survival": SURVIVAL_VALUE},
+            "champion_decided": champion_decided,
             "leaderboards": {"points": board("points"), "survival": board("survival"), "hybrid": board("hybrid"), "fair": board("fair")},
             "champion": champ_board, "strength": strength_board, "stats": stats,
             "players": players_out,

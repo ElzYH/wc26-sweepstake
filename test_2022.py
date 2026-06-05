@@ -76,6 +76,8 @@ checks = {
     "Brazil out at QF (lost pens)": team("Brazil")["status"] == "out" and team("Brazil")["stage"] == "QUARTER_FINALS",
     "Netherlands out at QF (lost pens)": team("Netherlands")["stage"] == "QUARTER_FINALS",
     "Croatia out at SEMI": team("Croatia")["status"] == "out" and team("Croatia")["stage"] == "SEMI_FINALS",
+    "champion_decided = Argentina (owner Alex)": (d.get("champion_decided") or {}).get("team") == "Argentina"
+        and (d.get("champion_decided") or {}).get("owner") == "Alex",
 }
 for k, v in checks.items():
     print(("  PASS  " if v else "  FAIL  ") + k)
