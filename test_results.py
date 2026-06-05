@@ -116,6 +116,27 @@ def run_all():
     check("score before correction (3-0)", first, 3 * SC["per_goal"] + SC["win"] + SC["clean_sheet"])
     check("score after correction (1-1)", second, 1 * SC["per_goal"] + SC["draw"])
 
+    # 6) FAIR when your own two teams meet: you bank BOTH teams' points (winner's win+goals+CS, loser's goals) — you can't lose out.
+    d = run([M(1, "Brazil", "Japan", "GROUP_STAGE", 2, 1, "HOME")], tmp)   # both are Erol's
+    check("own-team game: owner banks both teams' points",
+          player(d, "Erol", "points"), (2 * SC["per_goal"] + SC["win"]) + (1 * SC["per_goal"]))
+    check("own-team game: both your teams stay alive", player(d, "Erol", "alive_teams"), 2)
+    check("own-team game: the other player is unaffected", player(d, "James", "points"), 0)
+
+    # 7) DEPTH beats a short run: a team that reaches the final outscores one knocked out in the round of 32,
+    #    on points AND on Both — reaching later rounds is worth more.
+    deep = run([M(1, "Brazil", "X1", "LAST_32", 1, 0, "HOME"),
+                M(2, "Brazil", "X2", "LAST_16", 1, 0, "HOME"),
+                M(3, "Brazil", "X3", "QUARTER_FINALS", 1, 0, "HOME"),
+                M(4, "Brazil", "X4", "SEMI_FINALS", 1, 0, "HOME"),
+                M(5, "Brazil", "Spain", "FINAL", 1, 0, "HOME"),          # Brazil to the final & wins it; Spain runner-up
+                M(6, "Japan", "X5", "LAST_32", 0, 1, "AWAY")], tmp)      # Erol's other team out in the R32
+    b, jp = team(deep, "Brazil"), team(deep, "Japan")
+    check("a deep run massively out-points an early exit (points)", b["points"] > jp["points"] + 50, True)
+    check("a deep run out-scores on Both too (survival + points)",
+          (b["points"] + b["survival"]) > (jp["points"] + jp["survival"]) + 50, True)
+    check("the deeper team is worth more survival", b["survival"] > jp["survival"], True)
+
     if FAILS:
         print("\nFAILED (%d): %s" % (len(FAILS), ", ".join(FAILS)))
         sys.exit(1)
