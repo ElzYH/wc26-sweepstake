@@ -132,14 +132,16 @@ elif not server.load_config().get("last_digest_date"):
 else:
     print("[digest] posts once per day, idempotent OK")
 
-# fair draw: round-1 favourite guaranteed (band 1 = true top-n), squads complete + unique, and the
-# champion-odds floor holds (no player below 75% of an equal share -> 15% on 5 players)
+# fair draw: round-1 favourite guaranteed (band 1 = true top-n), squads complete + unique, champion-odds
+# floor holds (>=15% on 5 players), and squad strengths are balanced (keeps the pre-tournament forecast fair)
 _top = set(t["name"] for t in sorted(TEAMS.values(), key=lambda t: -t["composite"])[:len(PLAYERS)])
 _per = len(TEAMS) // len(PLAYERS)
 _ti = sum(t.get("implied_prob", 0) for t in TEAMS.values()) or 1.0
-_share = {t["name"]: 100.0 * t.get("implied_prob", 0) / _ti for t in TEAMS.values()}
-_floor_target = 0.75 * (100.0 / len(PLAYERS))
-_fair = "ok"; _worst = 100.0
+_champ = {t["name"]: 100.0 * t.get("implied_prob", 0) / _ti for t in TEAMS.values()}
+_tc = sum(t.get("composite", 0) for t in TEAMS.values()) or 1.0
+_str = {t["name"]: 100.0 * t.get("composite", 0) / _tc for t in TEAMS.values()}
+_eq = 100.0 / len(PLAYERS)
+_fair = "ok"; _worst = 100.0; _max_spread = 0.0
 for _ in range(200):
     _a, _ = server.compute_assignment("fair", PLAYERS)
     _all = [t["name"] for p in PLAYERS for t in _a[p]]
@@ -149,14 +151,19 @@ for _ in range(200):
         _fair = "duplicate team in draw"; break
     if any(len(_a[p]) != _per for p in PLAYERS):
         _fair = "uneven squad sizes"; break
-    _mn = min(sum(_share.get(t["name"], 0) for t in _a[p]) for p in PLAYERS)
-    _worst = min(_worst, _mn)
-    if _mn < _floor_target - 0.01:
-        _fair = "floor breached: %.1f%% < %.1f%%" % (_mn, _floor_target); break
+    _cmin = min(sum(_champ.get(t["name"], 0) for t in _a[p]) for p in PLAYERS)
+    _worst = min(_worst, _cmin)
+    if _cmin < 0.75 * _eq - 0.01:
+        _fair = "champion-odds floor breached: %.1f%% < %.1f%%" % (_cmin, 0.75 * _eq); break
+    _ss = [sum(_str.get(t["name"], 0) for t in _a[p]) for p in PLAYERS]
+    _max_spread = max(_max_spread, max(_ss) - min(_ss))
 if _fair != "ok":
     fails.append(("fair-draw", _fair))
+elif _max_spread > 8.0:                                      # squads should stay within a tight strength band
+    fails.append(("fair-draw", "squad-strength spread too wide: %.1fpts" % _max_spread))
 else:
-    print("[fair-draw] band 1 = favourites, unique+even, floor held (worst %.1f%% >= %.1f%%) OK" % (_worst, _floor_target))
+    print("[fair-draw] favourite guaranteed, champ floor >=%.0f%% (worst %.1f%%), strength spread <=%.1fpts OK"
+          % (0.75 * _eq, _worst, _max_spread))
 
 # summary: medal lines must surface the real leaderboard score (regression: was reading wrong key -> always 0)
 json.dump({"stats": {"matches_played": 104, "goals": 303, "goals_per_match": 2.91, "teams_remaining": 1},

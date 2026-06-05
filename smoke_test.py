@@ -135,8 +135,39 @@ def run():
         check("register_commands needs admin key (403)", st == 403, str(st))
         st, body = req("POST", "/api/start_draw", {"admin_key": "wrong"})
         check("start_draw needs admin key (403)", st == 403, str(st))
+        req("POST", "/api/settings", {"admin_key": KEY, "digest_enabled": True, "digest_hour": 7})
+        st, body = req("GET", "/api/status")
+        j = json.loads(body)
+        check("digest settings persist (enabled + hour via status)",
+              j.get("digest_enabled") is True and j.get("digest_hour") == 7, body[:160])
         st, body = req("GET", "/manifest.webmanifest")
         check("manifest served (200)", st == 200 and "{" in body, str(st))
+
+        # access log: admin-only, returns a summary, leaks no secrets; records real page views
+        st, _ = req("POST", "/api/access_log", {"admin_key": "nope"})
+        check("access_log needs admin key (403)", st == 403, str(st))
+        req("GET", "/tracker"); req("GET", "/wheel")        # generate a couple of page views
+        st, body = req("POST", "/api/access_log", {"admin_key": KEY})
+        j = json.loads(body)
+        check("access_log returns visitor summary", j.get("ok") and "visitors" in j and j.get("total_views", 0) >= 1, body[:160])
+        check("access_log carries no secret", "admin_key" not in body and KEY not in body and "token" not in body, body[:160])
+
+        # concurrency / stress: many parallel reads must not 500 or corrupt; the server is threaded
+        import threading as _th
+        results = []
+        def _hit():
+            try:
+                results.append(req("GET", "/api/live_state")[0])
+            except Exception as e:
+                results.append(("ERR", str(e)))
+        ths = [_th.Thread(target=_hit) for _ in range(40)]
+        for t in ths: t.start()
+        for t in ths: t.join()
+        ok_codes = sum(1 for c in results if c == 200)
+        check("40 concurrent requests, none error/500", ok_codes == 40, "200s=%d of %d: %s" % (ok_codes, len(results), set(results)))
+        st, body = req("GET", "/api/status")                # server still healthy + JSON intact after the burst
+        check("server healthy after burst (status still valid JSON)", st == 200 and json.loads(body).get("configured") is not None, str(st))
+
         leftover = [f for f in os.listdir(tmp) if f.endswith(".tmp")]
         check("no leftover .tmp files (atomic writes clean up)", not leftover, str(leftover))
     finally:

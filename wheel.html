@@ -208,30 +208,33 @@ function remainingTeams(){ return wheelOrder.filter(t=>!drawn.has(t.name)); }
 function teamSlices(list){ const wt=t=>(mode==='weighted'?WEIGHT[t.tier]:1); const tot=list.reduce((s,t)=>s+wt(t),0)||1; let a=-90; const m=new Map();
   for(const t of list){ const span=wt(t)/tot*360; m.set(t.name,{a0:a,span,center:a+span/2}); a+=span; } return m; }
 
-/* fair = guaranteed favourite in round 1, then a loose draw (better teams just more likely); re-drawn until nobody is below a fair floor */
+/* fair = guaranteed favourite in round 1, then loose; re-drawn until squads are balanced in strength (fair forecast) and nobody is below a fair champion-odds floor */
 function computeFair(){
-  const n=order.length, J=0.5;
+  const n=order.length, J=0.3, eq=100/n;
   const ranked=teams.slice().sort((a,b)=>b.composite-a.composite);
   let ti=teams.reduce((s,t)=>s+(t.implied_prob||0),0);
-  const share={};
-  if(ti>0){ teams.forEach(t=>share[t.name]=100*(t.implied_prob||0)/ti); }
-  else { const tc=teams.reduce((s,t)=>s+(t.composite||0),0)||1; teams.forEach(t=>share[t.name]=100*(t.composite||0)/tc); }
-  const floorTarget=0.75*(100/n);   // 75% of an equal champion-odds share -> 15% on 5 players
+  const champ={}; if(ti>0){ teams.forEach(t=>champ[t.name]=100*(t.implied_prob||0)/ti); } else { teams.forEach(t=>champ[t.name]=eq); }
+  const tc=teams.reduce((s,t)=>s+(t.composite||0),0)||1; const strength={}; teams.forEach(t=>strength[t.name]=100*(t.composite||0)/tc);
+  const champFloor=0.75*eq, strFloor=0.92*eq, strCap=1.10*eq;
   const shuffle=arr=>{for(let i=arr.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;};
   function oneDraw(){
-    const top=shuffle(ranked.slice(0,n));                                  // favourites: strict first band, one each
+    const top=shuffle(ranked.slice(0,n));
     const rest=ranked.slice(n).map(t=>({t,k:t.composite*(1+(Math.random()*2-1)*J)})).sort((a,b)=>b.k-a.k).map(x=>x.t);
     const bands=[top]; for(let i=0;i<perPlayer-1;i++) bands.push(rest.slice(i*n,i*n+n));
     const a={}; order.forEach(p=>a[p]=[]);
     bands.forEach((band,bi)=>{ const b=shuffle(band.slice()); const seq= bi%2? order.slice().reverse() : order; seq.forEach((p,i)=>a[p].push(b[i])); });
     return a;
   }
-  let best=null, bestFloor=-1;
-  for(let attempt=0;attempt<400;attempt++){
+  let best=null, bestScore=-1e9;
+  for(let attempt=0;attempt<500;attempt++){
     const a=oneDraw();
-    let fl=Infinity; order.forEach(p=>{const s=a[p].reduce((x,t)=>x+(share[t.name]||0),0); if(s<fl)fl=s;});
-    if(fl>bestFloor){ best=a; bestFloor=fl; }
-    if(fl>=floorTarget) break;
+    let cmin=Infinity, smin=Infinity, smax=-Infinity;
+    order.forEach(p=>{ const c=a[p].reduce((x,t)=>x+(champ[t.name]||0),0); if(c<cmin)cmin=c;
+                       const s=a[p].reduce((x,t)=>x+(strength[t.name]||0),0); if(s<smin)smin=s; if(s>smax)smax=s; });
+    const balanced=smin>=strFloor && smax<=strCap;
+    if(cmin>=champFloor && balanced){ best=a; break; }
+    const score=cmin-(smax-smin)-(balanced?0:5);
+    if(score>bestScore){ best=a; bestScore=score; }
   }
   fairAssign=best;
 }

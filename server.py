@@ -62,6 +62,50 @@ STATIC = {"tracker.html", "wheel.html", "setup.html", "me.html", "watch.html",
           "manifest.webmanifest", "icon.svg"}
 _lock = threading.Lock()
 
+# ---- lightweight access log (admin-only): who's opening the site, in-memory, capped ----
+import collections
+_access = collections.deque(maxlen=600)         # most recent page views
+_visitors = {}                                  # ip -> {hits, first, last, ua, paths}
+_access_lock = threading.Lock()
+RECORD_PATHS = {"/setup", "/tracker", "/wheel", "/me", "/watch"}   # real page views, not API polls
+
+
+def _client_ip(handler):
+    xff = handler.headers.get("X-Forwarded-For", "")            # behind Caddy the socket IP is the proxy's
+    if xff:
+        return xff.split(",")[0].strip()[:45]
+    return handler.client_address[0]
+
+
+def record_access(ip, path, ua):
+    ts = time.time()
+    with _access_lock:
+        _access.append({"t": ts, "ip": ip, "p": path, "ua": (ua or "")[:160]})
+        v = _visitors.get(ip)
+        if v is None:
+            if len(_visitors) > 1500:                          # soft cap: evict least-recently-seen
+                _visitors.pop(min(_visitors, key=lambda k: _visitors[k]["last"]), None)
+            v = _visitors.setdefault(ip, {"hits": 0, "first": ts, "last": ts, "ua": "", "paths": {}})
+        v["hits"] += 1
+        v["last"] = ts
+        v["ua"] = (ua or "")[:160]
+        v["paths"][path] = v["paths"].get(path, 0) + 1
+
+
+def access_summary():
+    with _access_lock:
+        recent = list(_access)[-60:][::-1]
+        day_ago = time.time() - 86400
+        today = {e["ip"] for e in _access if e["t"] >= day_ago}
+        visitors = sorted(
+            ({"ip": ip, "hits": v["hits"], "first": v["first"], "last": v["last"], "ua": v["ua"],
+              "top": (max(v["paths"], key=v["paths"].get) if v["paths"] else "")}
+             for ip, v in _visitors.items()),
+            key=lambda x: -x["last"])[:50]
+        total = sum(v["hits"] for v in _visitors.values())
+    return {"unique": len(_visitors), "today_unique": len(today), "total_views": total,
+            "visitors": visitors, "recent": recent}
+
 
 def _atomic_write_json(path, obj, mode=None):
     """Write JSON via a temp file + rename, so a crash mid-write can't corrupt `path`
@@ -848,18 +892,22 @@ def compute_assignment(mode, players, t1_cap=None, leftover="pool", seed=None):
     in_play_n = per_player * n
     rng = random.Random(seed)
     if mode == "fair":
-        # First band (top n) is guaranteed strict — everyone gets a favourite. After that the draw is loose
-        # (better teams just more likely, like the original). We then reject any draw that leaves a player
-        # below a fair floor of champion odds and re-draw, so nobody ends up with a hopeless squad.
-        J = 0.5
+        # Round 1 is strict — everyone is guaranteed a favourite. After that the draw is loose (better teams
+        # just more likely). We then re-draw until BOTH hold: squads are balanced in strength (which keeps the
+        # pre-tournament forecast fair) and no player is below a fair floor of champion odds. If no draw clears
+        # both inside the attempt budget we keep the most balanced one found.
+        J = 0.3
         ranked = sorted(teams, key=lambda t: -t.get("composite", 0))
+        eq = 100.0 / n
         _ti = sum(t.get("implied_prob", 0) for t in teams)
         if _ti > 0:
-            share = {t["name"]: 100.0 * t.get("implied_prob", 0) / _ti for t in teams}   # pre-tournament champion odds %
+            champ = {t["name"]: 100.0 * t.get("implied_prob", 0) / _ti for t in teams}   # champion odds %
         else:
-            _tc = sum(t.get("composite", 0) for t in teams) or 1.0
-            share = {t["name"]: 100.0 * t.get("composite", 0) / _tc for t in teams}
-        floor_target = 0.75 * (100.0 / n)                   # 75% of an equal share -> 15% on 5 players
+            champ = {t["name"]: eq for t in teams}
+        _tc = sum(t.get("composite", 0) for t in teams) or 1.0
+        strength = {t["name"]: 100.0 * t.get("composite", 0) / _tc for t in teams}        # squad-strength share %
+        champ_floor = 0.75 * eq                             # 15% on 5 players — hard champion-odds floor
+        str_floor, str_cap = 0.92 * eq, 1.10 * eq           # squads within ~10% of an equal share -> fair forecast
 
         def _one_draw():
             top = ranked[:n][:]                             # the favourites: strict first band, one guaranteed per player
@@ -875,14 +923,19 @@ def compute_assignment(mode, players, t1_cap=None, leftover="pool", seed=None):
                     a[p].append(_team_brief(band[i]))
             return a
 
-        best, best_floor = None, -1.0
-        for _ in range(400):
+        best, best_score = None, -1e9
+        for _ in range(500):
             a = _one_draw()
-            fl = min(sum(share.get(t["name"], 0) for t in a[p]) for p in players)
-            if fl > best_floor:
-                best, best_floor = a, fl
-            if fl >= floor_target:
+            cmin = min(sum(champ.get(t["name"], 0) for t in a[p]) for p in players)
+            ss = [sum(strength.get(t["name"], 0) for t in a[p]) for p in players]
+            smin, smax = min(ss), max(ss)
+            balanced = smin >= str_floor and smax <= str_cap
+            if cmin >= champ_floor and balanced:
+                best = a
                 break
+            score = cmin - (smax - smin) - (0 if balanced else 5)   # prefer high champ floor + tight strength spread
+            if score > best_score:
+                best, best_score = a, score
         return best, []
     d = draw_mod.Draw(mode=("weighted" if str(mode).startswith("weighted") else "snake"),
                       leftover_policy=leftover, t1_cap=t1_cap, seed=seed)
@@ -997,6 +1050,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?")[0]
+        if path in RECORD_PATHS:
+            try:
+                record_access(_client_ip(self), path, self.headers.get("User-Agent"))
+            except Exception:
+                pass
         if path == "/":
             cfg = load_config()
             if not cfg.get("players"):
@@ -1287,6 +1345,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, json.dumps({"ok": True, "invite": invite}))
         if path == "/api/check_key":
             return self._send(200, json.dumps({"ok": key_ok(body)}))
+        if path == "/api/access_log":                        # admin-only: who's been opening the site
+            if not key_ok(body):
+                return self._send(403, json.dumps({"ok": False, "need_key": True}))
+            return self._send(200, json.dumps({"ok": True, **access_summary()}))
         if path == "/api/discord_test":
             if not key_ok(body):
                 return self._send(403, json.dumps({"ok": False, "need_key": True}))

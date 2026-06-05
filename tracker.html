@@ -333,6 +333,11 @@
         <div class="hint" id="setBakMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
       </div>
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
+        <p style="margin:0 0 8px"><b>Who's visiting.</b> Recent page views on the site (admin-only).</p>
+        <button id="setAccess">👁️ Load visitors</button>
+        <div id="setAccessBody" style="margin-top:10px"></div>
+      </div>
+      <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
         <p style="margin:0 0 8px"><b>Admin key.</b> Generate a new key if the old one leaked. The current key stops working immediately — save the new one.</p>
         <button id="setRotate">⟳ Regenerate admin key</button>
         <div class="hint" id="setRotateMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
@@ -1333,6 +1338,19 @@ function checkNotify(d){
   }
   NOTIFYSNAP=snap;
 }
+document.getElementById('setAccess').onclick=async()=>{
+  const b=document.getElementById('setAccessBody'); b.textContent='Loading…';
+  try{ const j=await fetch('/api/access_log',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:ADMINKEY})}).then(r=>r.json());
+    if(!j.ok){ b.textContent = j.need_key?'Unlock with the admin key first.':(j.error||'Could not load.'); if(j.need_key)ADMINKEY=''; return; }
+    const dev=ua=>{ ua=ua||''; if(/iphone|ipad/i.test(ua))return'iPhone/iPad'; if(/android/i.test(ua))return'Android'; if(/macintosh|mac os/i.test(ua))return'Mac'; if(/windows/i.test(ua))return'Windows'; return'Other'; };
+    const ago=t=>{ const s=Math.max(0,Date.now()/1000-t); if(s<60)return'just now'; if(s<3600)return Math.floor(s/60)+'m ago'; if(s<86400)return Math.floor(s/3600)+'h ago'; return Math.floor(s/86400)+'d ago'; };
+    let h=`<div style="color:var(--muted);font-size:12.5px;margin-bottom:8px">${j.today_unique} today · ${j.unique} unique all-time · ${j.total_views} page views</div>`;
+    if((j.visitors||[]).length){
+      h+='<div style="display:flex;flex-direction:column;gap:6px">'+j.visitors.map(v=>`<div class="fxrow"><span class="fxt">${esc(v.ip)} <small>· ${dev(v.ua)} · ${esc((v.top||'').replace('/',''))}</small></span><span class="fxmeta">${v.hits} view${v.hits===1?'':'s'} · ${ago(v.last)}</span></div>`).join('')+'</div>';
+    } else h+='<div class="empty">No visits recorded yet.</div>';
+    b.innerHTML=h;
+  }catch(e){ b.textContent='Could not reach the server.'; }
+};
 document.getElementById('setRotate').onclick=async()=>{
   const m=document.getElementById('setRotateMsg');
   if(!confirm('Generate a new admin key? The current key will stop working immediately on every device.')) return;

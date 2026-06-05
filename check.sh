@@ -41,6 +41,26 @@ for f in *.html; do
   if [ "$o" = "$c" ]; then echo "  ok   $f ($o)"; else echo "  FAIL $f ($o open / $c close)"; FAIL=1; fi
 done
 
+say "Structural integrity (critical functions + routes present)"
+python3 - <<'PY'
+import ast, sys
+src = open("server.py").read()
+tree = ast.parse(src)
+fns = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+need = ["_atomic_write_json", "save_config", "load_config", "compute_assignment", "build_summary",
+        "maybe_send_daily_digest", "record_access", "access_summary", "poller", "run_auto_draw",
+        "discord_command", "_client_ip"]
+missing = [f for f in need if f not in fns]
+# every POST route should be reachable from do_POST source (guards against a str_replace eating a route)
+routes = ['"/api/setup"', '"/api/save_draw"', '"/api/start_draw"', '"/api/settings"',
+          '"/api/redraw"', '"/api/access_log"', '"/api/discord_summary"', '"/api/push_subscribe"']
+route_missing = [r for r in routes if r not in src]
+if missing or route_missing:
+    print("  FAIL  missing functions: %s | missing routes: %s" % (missing, route_missing)); sys.exit(1)
+print("  ok   %d critical functions + %d routes present" % (len(need), len(routes)))
+PY
+if [ $? -ne 0 ]; then FAIL=1; fi
+
 say "Scoring unit tests"
 if python3 test_scoring.py; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
 
