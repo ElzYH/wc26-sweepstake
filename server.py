@@ -606,11 +606,6 @@ def notify_changes(old):
                 match_event("flow",
                             [(ho, "Half-time ⏸️", sc), (ao, "Half-time ⏸️", sc)],
                             "⏸️ Half-time — %s" % sc)
-            elif st in PLAYING and was == "PAUSED":                                   # second half
-                match_event("flow",
-                            [(ho, "Second half ▶️", "%s vs %s under way" % (h, a)),
-                             (ao, "Second half ▶️", "%s vs %s under way" % (h, a))],
-                            "▶️ Second half under way — %s vs %s" % (h, a))
             elif st in FT_STATUSES and was in LIVE_STATUSES:                          # full-time (incl. a.e.t. / pens)
                 mm = nmatch.get(key) or {}
                 sc = "%s %s–%s %s" % (h, nhs, nas, a) if None not in (nhs, nas) else "%s vs %s" % (h, a)

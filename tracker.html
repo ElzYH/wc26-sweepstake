@@ -463,6 +463,10 @@ let MODE="hybrid";
 const FLAGS={"France": "🇫🇷", "Spain": "🇪🇸", "Argentina": "🇦🇷", "Brazil": "🇧🇷", "Portugal": "🇵🇹", "Germany": "🇩🇪", "Netherlands": "🇳🇱", "Morocco": "🇲🇦", "Belgium": "🇧🇪", "Croatia": "🇭🇷", "Colombia": "🇨🇴", "USA": "🇺🇸", "Senegal": "🇸🇳", "Mexico": "🇲🇽", "Uruguay": "🇺🇾", "Japan": "🇯🇵", "Switzerland": "🇨🇭", "Turkey": "🇹🇷", "Ecuador": "🇪🇨", "Iran": "🇮🇷", "Norway": "🇳🇴", "Austria": "🇦🇹", "Korea Republic": "🇰🇷", "Australia": "🇦🇺", "Egypt": "🇪🇬", "Algeria": "🇩🇿", "Canada": "🇨🇦", "Ivory Coast": "🇨🇮", "Sweden": "🇸🇪", "Panama": "🇵🇦", "Paraguay": "🇵🇾", "Czech Republic": "🇨🇿", "Tunisia": "🇹🇳", "DR Congo": "🇨🇩", "Uzbekistan": "🇺🇿", "Qatar": "🇶🇦", "Iraq": "🇮🇶", "South Africa": "🇿🇦", "Saudi Arabia": "🇸🇦", "Bosnia & Herzegovina": "🇧🇦", "Jordan": "🇯🇴", "Cape Verde": "🇨🇻", "Ghana": "🇬🇭", "Curacao": "🇨🇼", "Haiti": "🇭🇹", "New Zealand": "🇳🇿", "Bosnia-Herzegovina": "🇧🇦", "Bosnia and Herzegovina": "🇧🇦", "Cote d'Ivoire": "🇨🇮", "Côte d'Ivoire": "🇨🇮", "South Korea": "🇰🇷", "United States": "🇺🇸", "Czechia": "🇨🇿", "Curaçao": "🇨🇼", "Cape Verde Islands": "🇨🇻", "Türkiye": "🇹🇷", "Turkiye": "🇹🇷", "Congo DR": "🇨🇩", "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "Scotland": "🏴󠁧󠁢󠁳󠁣󠁴󠁿"};
 function flag(n){const f=FLAGS[n];return f?f+" ":"";}
 function isDone(s){return s==='FINISHED'||s==='AWARDED';}   // a forfeit (AWARDED) is a played, decided result
+function koNote(m){   // " a.e.t. · pens 3–5" style note for a finished knockout decided in ET / on penalties
+  if(!(isDone(m.status)&&(m.aet||m.shootout))) return '';
+  return (m.aet?'a.e.t.':'')+(m.shootout?((m.aet?' · ':'')+'pens '+(m.penHome??0)+'–'+(m.penAway??0)):'');
+}
 function esc(s){return String(s==null?'':s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));}
 function ownerOf(d,team){ for(const p of (d.players||[])){ for(const t of (p.teams||[])){ if(t.name===team) return p.name; } } return '—'; }
 function summaryLines(d){
@@ -663,9 +667,7 @@ function bracketCard(m){
   const show=done||isLive;
   const sc=home=>show?((home?m.homeScore:m.awayScore)??0):'';
   const foot=isLive?'<div class="blive"><span class="pd"></span>LIVE</div>':(done?'':`<div class="btime">${fmtTime(m.utcDate)}</div>`);
-  const konote=(done&&(m.aet||m.shootout))
-    ? `<div class="bnote">${m.aet?'a.e.t.':''}${m.shootout?(m.aet?' · ':'')+'pens '+(m.penHome??0)+'–'+(m.penAway??0):''}</div>`
-    : '';
+  const konote=koNote(m)?`<div class="bnote">${koNote(m)}</div>`:'';
   return `<div class="bcard">
     <div class="brow ${hw?'win':''} ${done&&aw?'lose':''}"><span class="bteam">${flag(m.home)}${m.home}<small>${m.homeOwner}</small></span><span class="bsc">${sc(true)}</span></div>
     <div class="brow ${aw?'win':''} ${done&&hw?'lose':''}"><span class="bteam">${flag(m.away)}${m.away}<small>${m.awayOwner}</small></span><span class="bsc">${sc(false)}</span></div>
@@ -697,10 +699,9 @@ function matchRow(m){
   const live=m.status==='IN_PLAY'||m.status==='PAUSED';
   const done=isDone(m.status);
   const score=(done||live)?`${m.homeScore??0}–${m.awayScore??0}`:'v';
-  const koNote = done && (m.aet||m.shootout)
-    ? `<div class="konote">${m.aet?'a.e.t.':''}${m.shootout?(m.aet?' · ':'')+'pens '+(m.penHome??0)+'–'+(m.penAway??0):''}</div>`
-    : '';
-  const mid=live?`<span class="live">● LIVE</span>`:(done?`<div class="sc">${score}</div>${koNote}`:`<div class="time">${fmtTime(m.utcDate)}</div>`);
+  const kn=koNote(m);
+  const knEl=kn?`<div class="konote">${kn}</div>`:'';
+  const mid=live?`<span class="live">● LIVE</span>`:(done?`<div class="sc">${score}</div>${knEl}`:`<div class="time">${fmtTime(m.utcDate)}</div>`);
   const grp=(m.group||'').replace('GROUP_','').trim();
   const left=m.stage!=='GROUP_STAGE'?`${STAGE_LABEL[m.stage]||m.stage}`:(grp?`Group ${grp}`:'');
   return `<div>${left?`<div class="mstage">${left}</div>`:''}<div class="match">
@@ -836,7 +837,8 @@ function renderOverview(d){
         const sc=scored(m)?(m.homeScore+'–'+m.awayScore):'v';
         const tag=liveN?('<span class="livedot"></span>LIVE'+(m.minute?" "+m.minute+"'":'')):(fin?'FT':(t?t+' UTC':'TBC'));
         const where=m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):('Group '+(m.group||'?'));
-        return `<div class="mdcard${liveN?' mdlive':''}${fin?' mdfin':''}"><div class="mdmeta">${where} · ${tag}</div>
+        const kn=koNote(m);
+        return `<div class="mdcard${liveN?' mdlive':''}${fin?' mdfin':''}"><div class="mdmeta">${where} · ${tag}${kn?' · '+kn:''}</div>
           <div class="mdteams"><span>${flag(m.home)}${m.home}${own(m.homeOwner)}</span><span class="mdsc">${sc}</span><span class="mdr">${flag(m.away)}${m.away}${own(m.awayOwner)}</span></div></div>`;
       }).join('')+'</div></div>';
     }
