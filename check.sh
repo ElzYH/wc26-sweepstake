@@ -74,6 +74,9 @@ if python3 test_2022.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python
 say "Result-correctness tests (exact points, champion bonus, pens, survival, defence)"
 if python3 test_results.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_results.py | tail -12; FAIL=1; fi
 
+say "Wagering engine tests (odds, payout, caps, pre-kickoff lock, settlement, balances)"
+if python3 test_wager.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_wager.py | tail -14; FAIL=1; fi
+
 say "Bot command tests"
 if python3 test_bot.py; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
 

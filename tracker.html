@@ -221,6 +221,10 @@
   .mdteams span small{display:block;color:var(--muted);font-weight:500;font-size:10.5px}
   .mdsc{font-family:'Anton';color:var(--gold);font-size:16px;flex:0 0 auto}
   .mdr{text-align:right}
+  .betodds{display:flex;gap:6px;flex-wrap:wrap}
+  .betodd{flex:1;min-width:80px;background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:7px 8px;font-size:12.5px;cursor:pointer;font-family:'Sora',sans-serif}
+  .betodd b{color:var(--gold)}
+  .betodd.on{border-color:var(--gold);background:#13301c}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
   .lmatch{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin-top:8px;
     color:var(--ink);font-weight:600;font-size:14px;letter-spacing:0}
@@ -405,6 +409,7 @@
     <div class="tab" data-s="bracket">Bracket</div>
     <div class="tab" data-s="fixtures">Fixtures</div>
     <div class="tab" data-s="odds">Odds &amp; stats</div>
+    <div class="tab" data-s="bets" id="betsTab" style="display:none">💷 Bets</div>
   </div>
 
   <section class="on" id="overview"><div id="ovBody"></div></section>
@@ -431,6 +436,7 @@
   <section id="groups"><div class="grid" id="groupsBody"></div></section>
   <section id="bracket"><div class="modesel" id="koRounds"></div><div id="bracketBody"></div></section>
   <section id="fixtures"><div class="fx" id="fixturesBody"></div></section>
+  <section id="bets"><div id="betsBody"></div></section>
   <section id="odds">
     <div class="statgrid" id="statsBody"></div>
     <div id="oddsBody"></div>
@@ -464,6 +470,86 @@ let MODE="hybrid";
 const FLAGS={"France": "🇫🇷", "Spain": "🇪🇸", "Argentina": "🇦🇷", "Brazil": "🇧🇷", "Portugal": "🇵🇹", "Germany": "🇩🇪", "Netherlands": "🇳🇱", "Morocco": "🇲🇦", "Belgium": "🇧🇪", "Croatia": "🇭🇷", "Colombia": "🇨🇴", "USA": "🇺🇸", "Senegal": "🇸🇳", "Mexico": "🇲🇽", "Uruguay": "🇺🇾", "Japan": "🇯🇵", "Switzerland": "🇨🇭", "Turkey": "🇹🇷", "Ecuador": "🇪🇨", "Iran": "🇮🇷", "Norway": "🇳🇴", "Austria": "🇦🇹", "Korea Republic": "🇰🇷", "Australia": "🇦🇺", "Egypt": "🇪🇬", "Algeria": "🇩🇿", "Canada": "🇨🇦", "Ivory Coast": "🇨🇮", "Sweden": "🇸🇪", "Panama": "🇵🇦", "Paraguay": "🇵🇾", "Czech Republic": "🇨🇿", "Tunisia": "🇹🇳", "DR Congo": "🇨🇩", "Uzbekistan": "🇺🇿", "Qatar": "🇶🇦", "Iraq": "🇮🇶", "South Africa": "🇿🇦", "Saudi Arabia": "🇸🇦", "Bosnia & Herzegovina": "🇧🇦", "Jordan": "🇯🇴", "Cape Verde": "🇨🇻", "Ghana": "🇬🇭", "Curacao": "🇨🇼", "Haiti": "🇭🇹", "New Zealand": "🇳🇿", "Bosnia-Herzegovina": "🇧🇦", "Bosnia and Herzegovina": "🇧🇦", "Cote d'Ivoire": "🇨🇮", "Côte d'Ivoire": "🇨🇮", "South Korea": "🇰🇷", "United States": "🇺🇸", "Czechia": "🇨🇿", "Curaçao": "🇨🇼", "Cape Verde Islands": "🇨🇻", "Türkiye": "🇹🇷", "Turkiye": "🇹🇷", "Congo DR": "🇨🇩", "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "Scotland": "🏴󠁧󠁢󠁳󠁣󠁴󠁿"};
 function flag(n){const f=FLAGS[n];return f?f+" ":"";}
 function isDone(s){return s==='FINISHED'||s==='AWARDED';}   // a forfeit (AWARDED) is a played, decided result
+let BETPLAYER=null, BETPICK=null, BETMSG='';
+function renderBets(){
+  const el=document.getElementById('betsBody'); if(!el) return;
+  if(!STATUS.wagering_enabled){ el.innerHTML='<div class="empty">Betting isn\'t switched on for this sweepstake.</div>'; return; }
+  const caps=STATUS.wager_caps||{min_stake:1,max_stake:25,max_return:120};
+  const players=(DATA.players||[]).map(p=>p.name);
+  if(!players.length){ el.innerHTML='<div class="empty">Bets open once the draw is done.</div>'; return; }
+  if(!BETPLAYER||!players.includes(BETPLAYER)) BETPLAYER=players[0];
+  const me=(DATA.players||[]).find(p=>p.name===BETPLAYER)||{};
+  const avail=Math.max(0,Math.round((((me.points_settled||0)+(me.wager_net||0)-(me.wager_held||0)))*10)/10);
+  const fx=(DATA.fixtures||[]).filter(m=>m.odds&&m.matchId).sort((a,b)=>(a.utcDate||'').localeCompare(b.utcDate||'')).slice(0,40);
+  const SEL={HOME:'home',DRAW:'draw',AWAY:'away'};
+  let h='';
+  h+='<div class="ovsec"><div class="ovh">💷 Place a bet</div>';
+  h+='<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--muted);line-height:1.55">Stake the points you\'ve <b style="color:var(--ink)">already earned</b> on any game. Win at the listed odds and the points are added to your total; lose and your stake is gone. Odds lock when you place — bets close at kick-off, and there\'s <b>no cash-out</b>. Max stake <b>'+caps.max_stake+'</b>, max return <b>'+caps.max_return+'</b> per bet.</div>';
+  h+='<div style="margin:12px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap">Betting as <select id="betWho" style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:14px">'+players.map(p=>`<option${p===BETPLAYER?' selected':''}>${esc(p)}</option>`).join('')+'</select> <span style="font-family:\'Anton\';color:var(--gold);font-size:20px">'+avail+'</span> points to stake</div>';
+  if(BETMSG) h+='<div style="margin:0 0 10px;padding:8px 12px;border-radius:8px;background:'+(BETMSG[0]==='✓'?'#10240f':'#2a1414')+';color:'+(BETMSG[0]==='✓'?'#7ee787':'#ff9a9a')+';font-size:13px">'+esc(BETMSG)+'</div>';
+  if(!fx.length) h+='<div class="empty">No upcoming games to bet on right now — check back before kick-off.</div>';
+  else h+='<div class="mdgrid">'+fx.map(m=>{
+    const ko=m.stage&&m.stage!=='GROUP_STAGE';
+    const when=new Date(m.utcDate).toLocaleString(undefined,{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+    const sels=[['HOME',m.home],['DRAW','Draw'],['AWAY',m.away]].filter(s=>!(ko&&s[0]==='DRAW'));  // no draw market on knockouts
+    const btns=sels.map(([k,lbl])=>{
+      const o=m.odds[k]; const on=(BETPICK&&BETPICK.matchId===m.matchId&&BETPICK.sel===k);
+      return `<button class="betodd${on?' on':''}" data-mid="${m.matchId}" data-sel="${k}" data-frac="${o.frac}">${esc(lbl)} <b>${o.frac}</b></button>`;
+    }).join('');
+    return `<div class="mdcard"><div class="mdmeta">${ko?(STAGE_LABEL[m.stage]||m.stage):'Group '+(m.group||'?')} · ${esc(when)}</div>
+      <div class="mdteams" style="margin-bottom:8px"><span>${flag(m.home)}${m.home}</span><span style="color:var(--muted)">v</span><span class="mdr">${flag(m.away)}${m.away}</span></div>
+      <div class="betodds">${btns}</div></div>`;
+  }).join('')+'</div>';
+  if(BETPICK){
+    const fxp=fx.find(m=>m.matchId===BETPICK.matchId);
+    if(fxp){ const o=fxp.odds[BETPICK.sel], who=BETPICK.sel==='HOME'?fxp.home:(BETPICK.sel==='AWAY'?fxp.away:'Draw');
+      h+='<div style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
+        +'<div style="font-size:13.5px;margin-bottom:8px">Bet on <b>'+esc(who)+'</b> @ <b style="color:var(--gold)">'+o.frac+'</b></div>'
+        +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="betStake" type="number" min="'+caps.min_stake+'" max="'+Math.min(caps.max_stake,avail)+'" step="0.5" placeholder="stake (pts)" style="width:120px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px">'
+        +'<span id="betReturn" style="color:var(--muted);font-size:13px"></span>'
+        +'<button id="betPlace" class="mini cta">Place bet</button></div></div>';
+    }
+  }
+  h+='</div>';
+  // your bets
+  h+='<div class="ovsec"><div class="ovh">Your bets</div><div id="myBets"><div class="empty">Loading…</div></div></div>';
+  el.innerHTML=h;
+  const ws=document.getElementById('betWho'); if(ws) ws.onchange=()=>{ BETPLAYER=ws.value; BETPICK=null; BETMSG=''; renderBets(); loadMyBets(); };
+  el.querySelectorAll('.betodd').forEach(b=>b.onclick=()=>{ BETPICK={matchId:b.dataset.mid,sel:b.dataset.sel,frac:b.dataset.frac}; BETMSG=''; renderBets(); });
+  const st=document.getElementById('betStake'), rt=document.getElementById('betReturn');
+  if(st&&rt&&BETPICK){ const upd=()=>{ const s=parseFloat(st.value)||0; const [n,d]=BETPICK.frac.split('/').map(Number); rt.textContent=s>0?('returns '+(Math.round(s*(1+n/d)*10)/10)+' if it wins'):''; }; st.oninput=upd; upd(); }
+  const pb=document.getElementById('betPlace'); if(pb) pb.onclick=placeBet;
+  loadMyBets();
+}
+async function placeBet(){
+  if(!BETPICK) return;
+  const st=document.getElementById('betStake'); const stake=parseFloat(st&&st.value);
+  if(!(stake>0)){ BETMSG='Enter a stake.'; renderBets(); return; }
+  const pb=document.getElementById('betPlace'); if(pb){ pb.disabled=true; pb.textContent='Placing…'; }
+  try{
+    const j=await fetch('/api/place_wager',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({player:BETPLAYER,matchId:BETPICK.matchId,selection:BETPICK.sel,stake:stake})}).then(r=>r.json());
+    if(j.ok){ BETMSG='✓ Bet placed: '+stake+' @ '+j.wager.frac+' (returns '+j.wager.return+' if it wins).'; BETPICK=null; await load(); renderBets(); }
+    else { BETMSG=j.error||'Could not place that bet.'; renderBets(); }
+  }catch(e){ BETMSG='Could not reach the server.'; renderBets(); }
+}
+async function loadMyBets(){
+  const box=document.getElementById('myBets'); if(!box) return;
+  try{
+    const j=await fetch('/api/wagers?player='+encodeURIComponent(BETPLAYER)).then(r=>r.json());
+    const ws=(j.wagers||[]).slice().reverse();
+    if(!ws.length){ box.innerHTML='<div class="empty">No bets yet.</div>'; return; }
+    const tag={pending:['#ffc83d','OPEN'],won:['#7ee787','WON'],lost:['#ff7a7a','LOST'],void:['#9aa','VOID']};
+    box.innerHTML=ws.map(w=>{ const t=tag[w.status]||['#9aa',w.status.toUpperCase()];
+      const pick=w.selection==='HOME'?w.home:(w.selection==='AWAY'?w.away:'Draw');
+      const outcome=w.status==='won'?('+'+Math.round((w.return-w.stake)*10)/10):(w.status==='lost'?('−'+w.stake):(w.status==='void'?'refunded':'staked '+w.stake));
+      return `<div style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:6px">
+        <div><div style="font-weight:600;font-size:13.5px">${esc(w.home)} v ${esc(w.away)}</div><div style="color:var(--muted);font-size:12px">${esc(pick)} @ ${w.frac} · stake ${w.stake}</div></div>
+        <div style="text-align:right"><span style="color:${t[0]};font-weight:700;font-size:12px">${t[1]}</span><div style="color:${t[0]};font-size:13px;font-weight:600">${outcome}</div></div></div>`;
+    }).join('');
+  }catch(e){ box.innerHTML='<div class="empty">Could not load your bets.</div>'; }
+}
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 function koNote(m){   // " a.e.t. · pens 3–5" style note for a finished knockout decided in ET / on penalties
   if(!(isDone(m.status)&&(m.aet||m.shootout))) return '';
   return (m.aet?'a.e.t.':'')+(m.shootout?((m.aet?' · ':'')+'pens '+(m.penHome??0)+'–'+(m.penAway??0)):'');
@@ -576,6 +662,8 @@ function render(d){
   renderLive(d);
   renderH2H(d);
   renderScoringRules(d);
+  if(STATUS.wagering_enabled){ const t=document.getElementById('betsTab'); if(t) t.style.display=''; renderBets(); }
+  else { const t=document.getElementById('betsTab'); if(t) t.style.display='none'; }
   // leaderboard for the active mode
   MODE=d.default_mode||'hybrid';
   const sm=STATUS.scoring_mode||MODE||'hybrid';
@@ -1028,9 +1116,14 @@ function simWinOdds(d,N){
   const players=[...new Set(teamArr.map(t=>t.owner))].filter(o=>o&&o!=='—'&&o!=='-');
   if(!players.length) return null;
   const wS={},wP={},wB={},sumPts={}; players.forEach(p=>{wS[p]=0;wP[p]=0;wB[p]=0;sumPts[p]=0;});
+  // deterministic seed from the actual state, so identical data always gives identical odds
+  // (no run-to-run wobble) and the forecast only moves once a real result changes the state.
+  let seed=(((d.stats&&d.stats.matches_played)||0)*100003 + teamArr.length)>>>0;
+  teamArr.forEach((t,i)=>{ seed=((seed*31 + (t.basePts|0)*7 + (t.gp|0)*3 + (t.out?1:0) + i)>>>0); });
+  const rand=mulberry32(seed);
   const KOSEQ=['LAST_32','LAST_16','QUARTER_FINALS','SEMI_FINALS','FINAL'];
   const eg=n=>0.55+(by[n].comp||0)/55;
-  const pois=l=>{let L=Math.exp(-l),k=0,p=1;do{k++;p*=Math.random();}while(p>L);return k-1;};
+  const pois=l=>{let L=Math.exp(-l),k=0,p=1;do{k++;p*=rand();}while(p>L);return k-1;};
   // groups are settled once any knockout fixture has both teams set
   const koStarted=fx.some(m=>m.stage!=='GROUP_STAGE'&&m.home&&m.away);
   // group games already played (skip simulating those — their points are in basePts)
@@ -1074,11 +1167,11 @@ function simWinOdds(d,N){
     for(let si=startIdx; si<KOSEQ.length; si++){
       const stage=KOSEQ[si], nextStage=KOSEQ[si+1]||'WINNER';
       let field=(atStage[stage]||[]).concat(carried); carried=[];
-      for(let i=field.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[field[i],field[j]]=[field[j],field[i]];}
+      for(let i=field.length-1;i>0;i--){const j=(rand()*(i+1))|0;[field[i],field[j]]=[field[j],field[i]];}
       for(let k=0;k<field.length;k+=2){
         const a=field[k],b=field[k+1];
         if(b===undefined){ carried.push(a); continue; }
-        const ca=(by[a].comp||0)+1,cb=(by[b].comp||0)+1,aw=Math.random()<ca/(ca+cb);
+        const ca=(by[a].comp||0)+1,cb=(by[b].comp||0)+1,aw=rand()<ca/(ca+cb);
         const w=aw?a:b,l=aw?b:a;
         pts[w]+=2*pg+pw+pc; pts[l]+=1*pg;
         const wb=(SB[nextStage]||0)-(SB[stageReached[w]]||0); if(wb>0)pts[w]+=wb;

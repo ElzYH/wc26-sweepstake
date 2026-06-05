@@ -13,6 +13,10 @@ import json
 import os
 from collections import defaultdict
 from datetime import datetime, timezone
+try:
+    import wager                       # optional wagering engine; tracker works fine without it
+except Exception:
+    wager = None
 
 SCORING = {
     "per_goal": 1, "win": 3, "draw": 1, "clean_sheet": 1,
@@ -92,7 +96,7 @@ def _build_history(finished, teams, owner, players):
 
 
 def compute(teams_path="teams.json", draw_path="draw_result.json",
-            results_path="results.json", out="tracker_data.json", default_mode="hybrid"):
+            results_path="results.json", out="tracker_data.json", default_mode="hybrid", wagers=None):
     teams = {t["name"]: t for t in _load(teams_path)["teams"]}
     draw = _load(draw_path)
     results = _load(results_path)
@@ -199,14 +203,38 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                             "alive_teams": sum(1 for x in teams_out if x["status"] == "alive"),
                             "total_teams": len(teams_out), "teams": teams_out})
 
+    # ---- wagering (optional, off by default): adjust each player's POINTS by settled bet profit/loss
+    #      minus points held in open bets. Survival is never affected. Wrapped so a bug here can't break the tracker.
+    if wagers is not None and wager is not None:
+        try:
+            pdel = wager.player_deltas(wagers)
+            for p in players_out:
+                p["points_settled"] = round(p["points"] - p.get("live", 0), 1)   # finished-game points, before bets — the bettable balance
+                d = pdel.get(p["name"], {})
+                net = round(d.get("settled_net", 0.0), 1)
+                held = round(d.get("pending_stake", 0.0), 1)
+                p["wager_net"] = net
+                p["wager_held"] = held
+                p["bets_open"] = d.get("pending_count", 0)
+                if net or held:
+                    newp = max(0.0, round(p["points"] + net - held, 1))
+                    p["points"] = newp
+                    p["hybrid"] = round(newp + p["survival"], 1)
+        except Exception:
+            pass
+
     def board(key):
         if key == "survival":
             rows = sorted(players_out, key=lambda p: (-p["alive_teams"], -p["survival"]))
             return [{"name": p["name"], "score": p["alive_teams"], "alive_teams": p["alive_teams"],
-                     "live": p["live"], "total_teams": p["total_teams"]} for p in rows]
+                     "live": p["live"], "total_teams": p["total_teams"],
+                     "wager_held": p.get("wager_held", 0), "wager_net": p.get("wager_net", 0),
+                     "bets_open": p.get("bets_open", 0), "points_settled": p.get("points_settled")} for p in rows]
         rows = sorted(players_out, key=lambda p: (-p[key], -p["alive_teams"]))
         return [{"name": p["name"], "score": p[key], "alive_teams": p["alive_teams"],
-                 "live": p["live"], "total_teams": p["total_teams"]} for p in rows]
+                 "live": p["live"], "total_teams": p["total_teams"],
+                 "wager_held": p.get("wager_held", 0), "wager_net": p.get("wager_net", 0),
+                 "bets_open": p.get("bets_open", 0), "points_settled": p.get("points_settled")} for p in rows]
 
     # live "odds to own the champion" from bookmaker implied probabilities, alive-aware
     def implied(name):
@@ -376,6 +404,19 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                           "aet": m.get("aet"), "shootout": m.get("shootout"),
                           "penHome": m.get("penHome"), "penAway": m.get("penAway"),
                           "winner": _winner_side(m)} for m in matches]}
+    # odds on still-to-play fixtures (only when wagering is active; guarded)
+    if wagers is not None and wager is not None:
+        try:
+            for f in data["fixtures"]:
+                m = next((x for x in matches if x.get("home") == f["home"] and x.get("away") == f["away"]
+                          and (x.get("utcDate") or "")[:16] == (f.get("utcDate") or "")[:16]), None)
+                if m and wager.can_bet_on(f):
+                    ch = teams.get(f["home"], {}).get("composite", 0)
+                    ca = teams.get(f["away"], {}).get("composite", 0)
+                    f["odds"] = wager.match_odds(ch, ca)
+                    f["matchId"] = wager.match_id(m)
+        except Exception:
+            pass
     data["history"] = _build_history(finished, teams, owner, [p["name"] for p in draw["players"]])
     if out:
         tmp = out + ".tmp"                      # write-then-rename: a crash can't leave a half-written tracker

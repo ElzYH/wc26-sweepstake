@@ -414,6 +414,26 @@ def _save_push(d):
     _atomic_write_json(PUSH_FILE, d)
 
 
+try:
+    import wager as wager_mod                 # optional wagering engine
+except Exception:
+    wager_mod = None
+WAGERS_FILE = "wagers.json"
+
+
+def load_wagers():
+    try:
+        with open(WAGERS_FILE) as f:
+            d = json.load(f)
+            return d if isinstance(d, list) else []
+    except Exception:
+        return []
+
+
+def save_wagers(w):
+    _atomic_write_json(WAGERS_FILE, w)
+
+
 def _entry_sub(e):
     return e.get("sub", e) if isinstance(e, dict) else e
 
@@ -1055,7 +1075,16 @@ def update_now(cfg):
                 # otherwise keep the last good results.json untouched
         else:
             _write_pretournament(cfg.get("competition", "WC"))
-        scoring_mod.compute(out="tracker_data.json", default_mode=cfg.get("scoring_mode", "hybrid"))
+        wlist = None
+        if cfg.get("wagering_enabled") and wager_mod is not None:
+            wlist = load_wagers()
+            try:
+                _res = json.load(open("results.json"))
+                if wager_mod.settle_all(wlist, _res.get("matches", [])):
+                    save_wagers(wlist)
+            except Exception as e:
+                log("wager settle failed:", e)
+        scoring_mod.compute(out="tracker_data.json", default_mode=cfg.get("scoring_mode", "hybrid"), wagers=wlist)
         cfg["last_update"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         save_config(cfg)
         notify_changes(old_snapshot)        # personalised alerts (if any subscribers)
@@ -1344,6 +1373,16 @@ class Handler(BaseHTTPRequestHandler):
                 "configured": bool(_tg_token()), "bot_username": bot_username(),
                 "players": [{"name": nm, "code": "p%d" % i, "subscribed": len(subs.get(nm, []))}
                             for i, nm in enumerate(players)]}))
+        if path == "/api/wagers":                  # OPEN read: list bets (optionally ?player=Name)
+            who = (self.path.split("player=", 1)[1].split("&")[0] if "player=" in self.path else "").strip()
+            try:
+                who = urllib.parse.unquote_plus(who)
+            except Exception:
+                pass
+            wl = load_wagers()
+            if who:
+                wl = [w for w in wl if w.get("player") == who]
+            return self._send(200, json.dumps({"ok": True, "wagers": wl[-200:]}))
         if path == "/api/status":
             cfg = load_config()
             return self._send(200, json.dumps({
@@ -1364,6 +1403,11 @@ class Handler(BaseHTTPRequestHandler):
                 "bot_ready": bool(cfg.get("discord_pubkey") and cfg.get("discord_app_id")),
                 "digest_enabled": bool(cfg.get("digest_enabled")),
                 "digest_hour": cfg.get("digest_hour", 9),
+                "wagering_enabled": bool(cfg.get("wagering_enabled")) and wager_mod is not None,
+                "wager_locked": bool(cfg.get("wager_locked")),
+                "wager_caps": ({"min_stake": wager_mod.MIN_STAKE, "max_stake": wager_mod.MAX_STAKE,
+                                "max_return": wager_mod.MAX_RETURN, "max_pending": wager_mod.MAX_PENDING}
+                               if wager_mod is not None else None),
                 "site_url": cfg.get("site_url", "")}))
         return self._file(path.lstrip("/"))
 
@@ -1543,6 +1587,10 @@ class Handler(BaseHTTPRequestHandler):
                 cfg["site_url"] = s if (s == "" or s.startswith("https://")) else cfg.get("site_url", "")
             if "digest_enabled" in body:
                 cfg["digest_enabled"] = bool(body["digest_enabled"])
+            if "wagering_enabled" in body:
+                cfg["wagering_enabled"] = bool(body["wagering_enabled"])
+            if "wager_locked" in body:
+                cfg["wager_locked"] = bool(body["wager_locked"])
             if "digest_hour" in body:
                 try:
                     cfg["digest_hour"] = max(0, min(23, int(body["digest_hour"])))
@@ -1670,6 +1718,48 @@ class Handler(BaseHTTPRequestHandler):
                 _save_push(subs)
             log("push subscribe:", player)
             return self._send(200, json.dumps({"ok": True}))
+        if path == "/api/place_wager":             # OPEN: a player stakes their points on a fixture (before kickoff)
+            cfg = load_config()
+            if not cfg.get("wagering_enabled") or wager_mod is None:
+                return self._send(400, json.dumps({"ok": False, "error": "Betting isn't switched on."}))
+            if cfg.get("wager_locked") and not key_ok(body):     # optional: lock betting behind the admin key
+                return self._send(403, json.dumps({"ok": False, "need_key": True, "error": "Betting is locked to the organiser."}))
+            players = [(p if isinstance(p, str) else p.get("name", "")) for p in cfg.get("players", [])]
+            player = str(body.get("player", "")).strip()
+            selection = str(body.get("selection", "")).strip().upper()
+            match_id = str(body.get("matchId", "")).strip()
+            stake = body.get("stake")
+            if player not in players:
+                return self._send(400, json.dumps({"ok": False, "error": "Pick a valid player."}))
+            try:
+                td = _load_tracker() or {}
+                results = json.load(open("results.json"))
+            except Exception:
+                return self._send(400, json.dumps({"ok": False, "error": "No data yet."}))
+            match = next((m for m in results.get("matches", []) if wager_mod.match_id(m) == match_id), None)
+            if not match:
+                return self._send(400, json.dumps({"ok": False, "error": "That game could not be found."}))
+            teams = {}
+            try:
+                teams = {t["name"]: t for t in json.load(open("teams.json"))["teams"]}
+            except Exception:
+                pass
+            ch = (teams.get(match.get("home"), {}) or {}).get("composite", 0)
+            ca = (teams.get(match.get("away"), {}) or {}).get("composite", 0)
+            prow = next((p for p in (td.get("players") or []) if p.get("name") == player), {})
+            settled = prow.get("points_settled")
+            if settled is None:
+                settled = round((prow.get("points", 0) or 0) - (prow.get("live", 0) or 0), 1)
+            with _lock:
+                wlist = load_wagers()
+                ok, res = wager_mod.place(wlist, player, match, selection, stake, settled, ch, ca)
+                if ok:
+                    save_wagers(wlist)
+            if ok:
+                update_now(load_config())          # recompute so the held stake shows immediately
+                log("wager placed:", player, selection, "on", match_id)
+                return self._send(200, json.dumps({"ok": True, "wager": res}))
+            return self._send(400, json.dumps({"ok": False, "error": res}))
         if path == "/api/push_prefs":               # OPEN: update which events this device wants
             ep = str(body.get("endpoint", "")).strip()
             prefs = body.get("prefs") if isinstance(body.get("prefs"), dict) else {}
