@@ -95,8 +95,10 @@ def run():
         st, body = req("POST", "/api/settings", {"competition": "WC"})   # configured + no key
         check("settings without key -> 403 (gated when configured)", st == 403, f"{st} {body[:80]}")
 
-        st, body = req("POST", "/api/redraw", {})                        # not locked, no key needed
-        check("redraw responds ok", st == 200, str(st))
+        st, body = req("POST", "/api/redraw", {})                        # now always key-gated
+        check("redraw without key -> 403", st == 403, str(st))
+        st, body = req("POST", "/api/redraw", {"admin_key": KEY})
+        check("redraw with key responds ok", st == 200, str(st))
 
         st, body = req("GET", "/api/telegram_links")                     # dead but must not 500
         check("telegram_links doesn't 500 on string players", st == 200, str(st))

@@ -1388,9 +1388,9 @@ class Handler(BaseHTTPRequestHandler):
                 live_save(st)
             return self._send(200, json.dumps({"ok": True}))
         if path == "/api/redraw":
-            if draw_locked() and not key_ok(body):
+            if not key_ok(body):                       # always key-gated: nobody can wipe/interrupt a draw without it
                 return self._send(403, json.dumps({"ok": False, "need_key": True,
-                    "error": "Enter the admin key to reset the locked draw."}))
+                    "error": "Enter the admin key to reset the draw."}))
             with _lock:
                 reset_draw()
             log("draw reset (redraw)")
