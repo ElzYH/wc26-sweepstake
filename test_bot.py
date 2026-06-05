@@ -22,6 +22,13 @@ payload = {"mode": "fair", "leftover": "pool",
            "bonus_pool": [t["name"] for t in bonus]}
 json.dump(server.build_draw_result(payload), open("draw_result.json", "w"))
 
+# draw announcement: round-by-round + final squads, chunked for Discord
+_da = "\n".join(server.build_draw_announcement())
+_need_da = ["The WC26 draw is in", "Round 1", "Round 9", "Final squads"] + PLAYERS
+_miss_da = [w for w in _need_da if w not in _da]
+assert not _miss_da, "draw announcement missing: %s" % _miss_da
+print("[draw-announce] round-by-round + final squads built OK")
+
 
 def owned_first():
     return next(iter(assign.values()))[0]["name"]

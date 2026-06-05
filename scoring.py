@@ -6,8 +6,8 @@ Compute sweepstake standings in three modes from match results.
   hybrid    - both
 
 Knockout advancement/elimination uses each match's `winner` field, so games
-decided on penalties (a draw at full time) resolve correctly. Match points
-still come from the full-time score (a shootout game scores as a draw).
+decided on penalties resolve correctly — and a knockout tie won on penalties
+counts as a WIN for the advancing team (the loser takes the loss).
 """
 import json
 import os
@@ -17,13 +17,14 @@ from datetime import datetime, timezone
 SCORING = {
     "per_goal": 1, "win": 3, "draw": 1, "clean_sheet": 1,
     "stage_bonus": {"LAST_32": 4, "LAST_16": 6, "QUARTER_FINALS": 9,
-                    "SEMI_FINALS": 12, "THIRD_PLACE": 14, "FINAL": 16, "WINNER": 20},
+                    "SEMI_FINALS": 12, "THIRD_PLACE": 14, "FINAL": 30, "WINNER": 85},
 }
 SURVIVAL_VALUE = {"LAST_32": 18, "LAST_16": 26, "QUARTER_FINALS": 34,
-                  "SEMI_FINALS": 44, "THIRD_PLACE": 50, "FINAL": 56, "WINNER": 70}
+                  "SEMI_FINALS": 44, "FINAL": 85, "WINNER": 135}
 KO_ORDER = ["LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "FINAL"]
-# The 3rd-place play-off isn't on the path to the final — both teams already lost their semi.
-# It only awards a bonus to its WINNER (bronze); it must not affect bracket advancement/elimination.
+# The 3rd-place play-off isn't on the path to the final — both teams already lost their semi, so for SURVIVAL
+# they're eliminated (capped at the semi-final value; no THIRD_PLACE survival). It still awards a POINTS bonus to
+# its WINNER (bronze) and its goals/win count for points/hybrid, but it must not affect bracket advancement/survival.
 BRACKET_KO = ("LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "FINAL")
 # A match counts as decided when FINISHED or AWARDED (a walkover/forfeit — the API gives it a winner + score).
 FINAL_STATUSES = ("FINISHED", "AWARDED")
@@ -119,6 +120,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
         h, a, hs, as_ = m["home"], m["away"], m["homeScore"], m["awayScore"]
         if hs is None or as_ is None:
             continue
+        side = _winner_side(m)                         # HOME / AWAY / DRAW — reflects penalties + walkovers
         for team, scored, conceded in ((h, hs, as_), (a, as_, hs)):
             if team not in teams:
                 continue
@@ -126,12 +128,13 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
             gf[team] += scored; ga[team] += conceded
             if conceded == 0:
                 pts[team] += SCORING["clean_sheet"]; cs[team] += 1
-            if scored > conceded:
-                pts[team] += SCORING["win"]; record[team][0] += 1
-            elif scored == conceded:
-                pts[team] += SCORING["draw"]; record[team][1] += 1
+            won = (side == "HOME" and team == h) or (side == "AWAY" and team == a)
+            if won:
+                pts[team] += SCORING["win"]; record[team][0] += 1          # incl. a knockout tie won on penalties
+            elif side in ("HOME", "AWAY"):
+                record[team][2] += 1                                       # lost (incl. on penalties)
             else:
-                record[team][2] += 1
+                pts[team] += SCORING["draw"]; record[team][1] += 1         # genuine draw (group stage)
 
     for m in [x for x in finished if x["stage"] in BRACKET_KO]:   # KO resolution (pens-aware)
         side = _winner_side(m)
@@ -157,8 +160,9 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
         pts[team] += max((SCORING["stage_bonus"].get(st, 0) for st in stages), default=0)
 
     def furthest_stage(team):
-        ko = [s for s in reached[team] if s in KO_ORDER]
-        return max(ko, key=lambda s: KO_ORDER.index(s)) if ko else "GROUP_STAGE"
+        prog = KO_ORDER + ["WINNER"]
+        ko = [s for s in reached[team] if s in prog]
+        return max(ko, key=lambda s: prog.index(s)) if ko else "GROUP_STAGE"
 
     def survival_pts(team):
         return max((SURVIVAL_VALUE.get(s, 0) for s in reached[team]), default=0)
@@ -288,7 +292,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
         prk = {n: i for i, n in enumerate(bp)}; srk = {n: i for i, n in enumerate(bs)}
         res = {n: srk[n] - prk[n] for n in played}                  # +ve = beating its rating
         over_t, under_t = max(res, key=res.get), min(res, key=res.get)
-        best_def = min(played, key=lambda n: ga[n])
+        best_def = max(played, key=lambda n: (cs[n], -ga[n]))   # most clean sheets (fewest conceded breaks ties)
         pp = sorted(players_out, key=lambda p: -p["points"]); psr = sorted(players_out, key=lambda p: -p["squad_strength"])
         prkp = {p["name"]: i for i, p in enumerate(pp)}; srkp = {p["name"]: i for i, p in enumerate(psr)}
         presid = {p["name"]: srkp[p["name"]] - prkp[p["name"]] for p in players_out}
@@ -328,6 +332,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
              "over_player": over_p, "under_player": under_p,
              "over_team": over_t, "under_team": under_t,
              "best_defence_team": best_def, "best_defence_conceded": (ga[best_def] if best_def else 0),
+             "best_defence_cs": (cs[best_def] if best_def else 0),
              "group_leaders_player": gl,
              "proj_points_player": (by_proj[0]["name"] if by_proj else None),
              "proj_points_value": (by_proj[0]["projected_points"] if by_proj else 0)}

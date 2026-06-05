@@ -74,6 +74,9 @@ if python3 test_2022.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python
 say "Bot command tests"
 if python3 test_bot.py; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
 
+say "Win-odds forecast (live-aware sim) tests"
+if node test_sim.js; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
+
 say "Live smoke + security tests"
 if python3 smoke_test.py; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
 

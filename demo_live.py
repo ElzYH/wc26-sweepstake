@@ -153,7 +153,7 @@ def setup_dir(d):
             shutil.copy2(src, os.path.join(d, f))
     # serve a copy of the tracker that refreshes fast, so the demo feels live
     html = open(os.path.join(REPO, "tracker.html")).read()
-    html = html.replace("setInterval(load,60000)", "setInterval(load,2500)")
+    html = html.replace("setInterval(load,30000)", "setInterval(load,2500)")
     open(os.path.join(d, "tracker.html"), "w").write(html)
 
 

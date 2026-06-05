@@ -332,6 +332,17 @@ def discord_send(text):
         log("discord send failed:", e)
 
 
+def discord_send_lines(lines):
+    """Post a long list of lines as several Discord messages, each under the size limit."""
+    buf, size = [], 0
+    for ln in lines:
+        if buf and size + len(ln) + 1 > 1700:
+            discord_send("\n".join(buf)); buf, size = [], 0
+        buf.append(ln); size += len(ln) + 1
+    if buf:
+        discord_send("\n".join(buf))
+
+
 # ---------------- Web Push (Path A) — needs pywebpush; guarded so missing lib is harmless ----------------
 PUSH_FILE = "push_subs.json"          # {player: [{"sub": <subscription>, "prefs": {etype: bool}}, ...]}
 EVENT_TYPES = ("goal", "kickoff", "flow", "knockout", "leader", "winner", "rivalry")
@@ -766,6 +777,36 @@ def build_wrapup():
                      % (stats["top_team"], _owner_of(d, stats["top_team"]), stats.get("top_team_goals", 0)))
     lines.append("📅 %s games · %s goals (%s/game)"
                  % (stats.get("matches_played", 0), stats.get("goals", 0), stats.get("goals_per_match", 0)))
+    return lines
+
+
+def build_draw_announcement():
+    """Round-by-round picks + each player's final squad, posted to Discord when the draw locks."""
+    try:
+        dr = json.load(open("draw_result.json"))
+    except Exception:
+        return []
+    players = dr.get("players") or []
+    if not players:
+        return []
+    maxr = max((len(p.get("teams", [])) for p in players), default=0)
+    lines = ["🎲 **The WC26 draw is in!**"]
+    for r in range(maxr):
+        picks = ["• %s → %s" % (p["name"], p["teams"][r]["name"])
+                 for p in players if r < len(p.get("teams", []))]
+        if picks:
+            lines.append("")
+            lines.append("**Round %d**" % (r + 1))
+            lines += picks
+    lines.append("")
+    lines.append("**Final squads**")
+    for p in players:
+        lines.append("**%s** (%d): %s" % (p["name"], len(p.get("teams", [])),
+                                          ", ".join(t["name"] for t in p.get("teams", []))))
+    pool = dr.get("bonus_pool") or []
+    if pool:
+        lines.append("")
+        lines.append("Leftover pool: %s" % ", ".join(t["name"] for t in pool))
     return lines
 
 
@@ -1381,6 +1422,7 @@ class Handler(BaseHTTPRequestHandler):
             log("draw locked" if ok else "draw save FAILED:", err or "")
             if ok:
                 tg_broadcast("🏆 The WC26 draw is locked — open the tracker to see your teams!")
+                discord_send_lines(build_draw_announcement())     # round-by-round + final squads to Discord
             return self._send(200 if ok else 500, json.dumps({"ok": ok, "error": err}))
         if path == "/api/start_draw":
             if not key_ok(body):

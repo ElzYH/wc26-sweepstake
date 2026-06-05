@@ -140,6 +140,7 @@
   .brow.win{background:#11301f}.brow.win .bteam{font-weight:700}.brow.win .bsc{color:var(--gold)}
   .brow.lose{opacity:.45}
   .bsc{font-family:'Anton';font-size:20px;min-width:24px;text-align:right}
+  .bnote{font-size:10px;color:var(--gold);text-align:center;padding:2px 6px 0;letter-spacing:.03em}
   .btime{padding:6px 14px;color:var(--muted);font-size:11px;text-align:center}
   .blive{padding:5px 14px;text-align:center;font-size:10.5px;font-weight:700;letter-spacing:.1em;color:var(--live)}
   .blive .pd{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--live);margin-right:5px;animation:pulse 1.4s infinite}
@@ -163,6 +164,8 @@
   .menu .mini{width:100%;text-align:left}
   .mini{font-family:'Sora';font-weight:700;font-size:12px;padding:7px 13px;border-radius:999px;cursor:pointer;background:#10301f;border:1px solid var(--line);color:var(--ink)}
   .mini:hover{background:#143a26}
+  .ctrls .cta{background:var(--gold);border-color:var(--gold);color:#04140d}
+  .ctrls .cta:hover{filter:brightness(1.07);background:var(--gold)}
   .panel{background:linear-gradient(180deg,var(--panel),#0a1e15);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-top:12px}
   .panel h4{font-family:'Anton';font-weight:400;color:var(--gold);text-transform:uppercase;font-size:16px;margin-bottom:8px}
   .panel p,.panel li{color:var(--muted);font-size:13.5px;line-height:1.6}.panel ul{margin:6px 0 0 18px}.panel b{color:var(--ink)}
@@ -180,7 +183,7 @@
   .wp{display:flex;height:6px;border-radius:4px;overflow:hidden;margin:3px 2px 0;background:#0a1f15}
   .wp i{display:block}
   .wppct{display:flex;font-size:11px;color:var(--muted);margin:2px 4px 0}
-  .wppct span{overflow:hidden;white-space:nowrap}
+  .wppct span{flex:1;white-space:nowrap}
   .winrow{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
   .wcard{background:#0a1f15;border:1px solid var(--line);border-radius:14px;padding:15px 16px;text-align:left}
   .wcard .l{color:var(--muted);font-size:12px;letter-spacing:.06em;text-transform:uppercase;line-height:1.3}
@@ -254,10 +257,10 @@
   <div class="subbar">
     <div class="badges" id="badges"></div>
     <div class="ctrls">
+      <button class="mini cta" id="alertsBtn">🔔 Get alerts</button>
       <button class="mini" id="menuBtn">⋯ Menu</button>
       <div class="menu" id="menuDrop">
         <button class="mini" id="refreshBtn">↻ Refresh now</button>
-        <button class="mini" id="alertsBtn">🔔 Get alerts</button>
         <button class="mini" id="helpBtn">What am I looking at?</button>
         <button class="mini" id="setBtn">⚙ Settings</button>
       </div>
@@ -456,7 +459,7 @@ let COMP={};
 let LBMODE=null;
 const TIER={1:cv('--t1'),2:cv('--t2'),3:cv('--t3'),4:cv('--t4')};
 function cv(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
-const STAGE_LABEL={GROUP_STAGE:"Group",LAST_32:"R32",LAST_16:"R16",QUARTER_FINALS:"QF",SEMI_FINALS:"SF",THIRD_PLACE:"3rd",FINAL:"Final"};
+const STAGE_LABEL={GROUP_STAGE:"Group",LAST_32:"R32",LAST_16:"R16",QUARTER_FINALS:"QF",SEMI_FINALS:"SF",THIRD_PLACE:"3rd",FINAL:"Final",WINNER:"🏆 Champion"};
 const KO_STAGES=["LAST_32","LAST_16","QUARTER_FINALS","SEMI_FINALS","THIRD_PLACE","FINAL"];
 let KOROUND=null, KO_USER_SET=false;
 
@@ -637,10 +640,14 @@ function bracketCard(m){
   const show=done||isLive;
   const sc=home=>show?((home?m.homeScore:m.awayScore)??0):'';
   const foot=isLive?'<div class="blive"><span class="pd"></span>LIVE</div>':(done?'':`<div class="btime">${fmtTime(m.utcDate)}</div>`);
+  const konote=(done&&(m.aet||m.shootout))
+    ? `<div class="bnote">${m.aet?'a.e.t.':''}${m.shootout?(m.aet?' · ':'')+'pens '+(m.penHome??0)+'–'+(m.penAway??0):''}</div>`
+    : '';
   return `<div class="bcard">
     <div class="brow ${hw?'win':''} ${done&&aw?'lose':''}"><span class="bteam">${flag(m.home)}${m.home}<small>${m.homeOwner}</small></span><span class="bsc">${sc(true)}</span></div>
     <div class="brow ${aw?'win':''} ${done&&hw?'lose':''}"><span class="bteam">${flag(m.away)}${m.away}<small>${m.awayOwner}</small></span><span class="bsc">${sc(false)}</span></div>
-    ${(!done&&m.home&&m.away)?(()=>{const p=winProb(m.home,m.away,m.homeScore,m.awayScore,isLive),h=p.h/(p.h+p.a),R=Math.round(h*100);return `<div class="wp" title="${m.home} ${R}% · ${m.away} ${100-R}%"><i style="width:${h*100}%;background:var(--t2)"></i><i style="width:${(1-h)*100}%;background:var(--gold)"></i></div><div class="wppct"><span style="width:${R}%">${R}%</span><span style="width:${100-R}%;text-align:right">${100-R}%</span></div>`;})():''}
+    ${konote}
+    ${wpBar3(m,isLive)}
     ${foot}
   </div>`;
 }
@@ -661,7 +668,7 @@ function winProb(h,a,hs,as_,inplay){
 function wpBar3(m,live){
   if(m.status==='FINISHED'||!m.home||!m.away||(COMP[m.home]==null&&COMP[m.away]==null))return '';
   const p=winProb(m.home,m.away,m.homeScore,m.awayScore,live), R=x=>Math.round(x*100);
-  return `<div class="wp" title="${live?'live ':''}win chance — ${m.home} ${R(p.h)}% · draw ${R(p.d)}% · ${m.away} ${R(p.a)}%"><i style="width:${p.h*100}%;background:var(--t2)"></i><i style="width:${p.d*100}%;background:#3a4a40"></i><i style="width:${p.a*100}%;background:var(--gold)"></i></div><div class="wppct"><span style="width:${p.h*100}%">${R(p.h)}%</span><span style="width:${p.d*100}%;text-align:center">draw ${R(p.d)}%</span><span style="width:${p.a*100}%;text-align:right">${R(p.a)}%</span></div>`;
+  return `<div class="wp" title="${live?'live ':''}win chance — ${m.home} ${R(p.h)}% · draw ${R(p.d)}% · ${m.away} ${R(p.a)}%"><i style="width:${p.h*100}%;background:var(--t2)"></i><i style="width:${p.d*100}%;background:#3a4a40"></i><i style="width:${p.a*100}%;background:var(--gold)"></i></div><div class="wppct"><span>${R(p.h)}%</span><span style="text-align:center">draw ${R(p.d)}%</span><span style="text-align:right">${R(p.a)}%</span></div>`;
 }
 function matchRow(m){
   const live=m.status==='IN_PLAY'||m.status==='PAUSED';
@@ -836,7 +843,7 @@ function winOddsRows(d,mode){
   }
   if(!SIMRES){ ensureSim(); return '<div class="empty" style="margin:6px 0">Calculating '+(mode==='pts'?'Points':'Both')+' odds…</div>'; }
   const rows=SIMRES.slice().sort((a,b)=>(b[mode]||0)-(a[mode]||0)), max=Math.max(1,...rows.map(r=>r[mode]||0));
-  return '<div style="color:var(--muted);font-size:12.5px;margin:0 0 8px">Pre-tournament forecast from team strength — it doesn\'t use live results, so trust the leaderboard once games are under way.</div>'
+  return '<div style="color:var(--muted);font-size:12.5px;margin:0 0 8px">Current forecast — eliminated teams are out, results so far are locked in, and only the remaining games are simulated. Updates as games finish.</div>'
     +rows.map(r=>oddBar(r.name,+(r[mode]||0).toFixed(1),max)).join('');
 }
 function renderOdds(d){
@@ -863,7 +870,7 @@ function renderOdds(d){
   cards+=`<div class="statcard"><div class="l">UNDER-PERFORMER · PLAYER</div><div class="v">${st.under_player||'—'}</div><div class="l">below their squad rating</div></div>`;
   cards+=`<div class="statcard"><div class="l">OVER-PERFORMER · TEAM</div><div class="v">${st.over_team?flag(st.over_team)+st.over_team:'—'}</div><div class="l">punching above its odds</div></div>`;
   cards+=`<div class="statcard"><div class="l">UNDER-PERFORMER · TEAM</div><div class="v">${st.under_team?flag(st.under_team)+st.under_team:'—'}</div><div class="l">below its odds</div></div>`;
-  cards+=`<div class="statcard"><div class="l">BEST DEFENCE</div><div class="v">${st.best_defence_team?flag(st.best_defence_team)+st.best_defence_team:'—'} <small>${st.best_defence_team?st.best_defence_conceded+' conceded':''}</small></div><div class="l">${soon}</div></div>`;
+  cards+=`<div class="statcard"><div class="l">BEST DEFENCE</div><div class="v">${st.best_defence_team?flag(st.best_defence_team)+st.best_defence_team:'—'} <small>${st.best_defence_team?(st.best_defence_cs||0)+' clean sheets':''}</small></div><div class="l">${soon}</div></div>`;
   cards+=`<div class="statcard"><div class="l">MOST CLEAN SHEETS · PLAYER</div><div class="v">${st.clean_sheets_player||'—'} <small>${st.clean_sheets_player?st.clean_sheets_value:''}</small></div><div class="l">${st.clean_sheets_player?'shutouts across their teams':soon}</div></div>`;
   cards+=`<div class="statcard"><div class="l">MOST GROUP LEADERS</div><div class="v">${st.group_leaders_player||'—'}</div><div class="l">teams topping their group</div></div>`;
   document.getElementById('statsBody').innerHTML=cards;
@@ -947,49 +954,85 @@ function renderChart(d){
 
 // ---- Monte Carlo: win % per scoring mode ----
 function simWinOdds(d,N){
-  const teams=[], gmap={};
-  (d.groups||[]).forEach(g=>{ gmap[g.group]=g.table.map(r=>r.team);
-    g.table.forEach(r=>teams.push({name:r.team,group:g.group,owner:r.owner,comp:r.composite||0})); });
-  if(teams.length<40) return null;
+  // CURRENT forecast: seeded from the actual state. Finished games are locked (carried as base points),
+  // eliminated teams can't win, and only the remaining games are simulated — so odds sharpen as results come in.
+  const groups=d.groups||[], fx=d.fixtures||[], by={}, teamArr=[];
+  groups.forEach(g=>g.table.forEach(r=>{ const t={name:r.team,group:g.group,owner:r.owner,comp:r.composite||0,
+        gp:r.points||0,gd:r.goalDifference||0,gf:r.goalsFor||0,
+        basePts:0,baseStage:'GROUP_STAGE',out:false,outStage:'GROUP_STAGE'};
+    teamArr.push(t); by[r.team]=t; }));
+  if(teamArr.length<40) return null;
+  (d.players||[]).forEach(p=>(p.teams||[]).forEach(t=>{const b=by[t.name]; if(b){
+    b.basePts=t.points||0; b.baseStage=t.stage||'GROUP_STAGE'; b.out=(t.status==='out'); b.outStage=t.stage||'GROUP_STAGE'; }}));
   const SC=(d.scoring&&d.scoring.points)||{}, SV=(d.scoring&&d.scoring.survival)||{};
-  const pg=SC.per_goal||1, pw=SC.win||3, pd=SC.draw||1, pc=SC.clean_sheet||1, SB=SC.stage_bonus||{};
-  const by={}; teams.forEach(t=>by[t.name]=t);
-  const players=[...new Set(teams.map(t=>t.owner))].filter(o=>o&&o!=='—'&&o!=='-');
+  const pg=SC.per_goal||1, pw=SC.win||3, pdr=SC.draw||1, pc=SC.clean_sheet||1, SB=SC.stage_bonus||{};
+  const players=[...new Set(teamArr.map(t=>t.owner))].filter(o=>o&&o!=='—'&&o!=='-');
+  if(!players.length) return null;
   const wS={},wP={},wB={},sumPts={}; players.forEach(p=>{wS[p]=0;wP[p]=0;wB[p]=0;sumPts[p]=0;});
+  const KOSEQ=['LAST_32','LAST_16','QUARTER_FINALS','SEMI_FINALS','FINAL'];
   const eg=n=>0.55+(by[n].comp||0)/55;
   const pois=l=>{let L=Math.exp(-l),k=0,p=1;do{k++;p*=Math.random();}while(p>L);return k-1;};
+  // groups are settled once any knockout fixture has both teams set
+  const koStarted=fx.some(m=>m.stage!=='GROUP_STAGE'&&m.home&&m.away);
+  // group games already played (skip simulating those — their points are in basePts)
+  const grpDone=new Set();
+  fx.filter(m=>m.stage==='GROUP_STAGE'&&(m.status==='FINISHED'||m.status==='AWARDED')&&m.home&&m.away)
+    .forEach(m=>grpDone.add([m.home,m.away].sort().join('|')));
+  const aliveKO=teamArr.filter(t=>!t.out);
+
   for(let s=0;s<N;s++){
-    const pts={},reached={},alive={};
-    teams.forEach(t=>{pts[t.name]=0;reached[t.name]=new Set();alive[t.name]=true;});
-    const rank={};
-    for(const g in gmap){ const gt=gmap[g],tp={}; gt.forEach(n=>tp[n]={p:0,gd:0,gf:0});
-      for(let i=0;i<gt.length;i++)for(let j=i+1;j<gt.length;j++){
-        const a=gt[i],b=gt[j],ga=pois(eg(a)),gb=pois(eg(b));
-        pts[a]+=ga*pg; pts[b]+=gb*pg; tp[a].gf+=ga;tp[b].gf+=gb;tp[a].gd+=ga-gb;tp[b].gd+=gb-ga;
-        if(gb===0)pts[a]+=pc; if(ga===0)pts[b]+=pc;
-        if(ga>gb){pts[a]+=pw;tp[a].p+=3;} else if(gb>ga){pts[b]+=pw;tp[b].p+=3;} else {pts[a]+=pd;pts[b]+=pd;tp[a].p++;tp[b].p++;}
+    const pts={},stageReached={},alive={};
+    teamArr.forEach(t=>{ pts[t.name]=t.basePts; stageReached[t.name]=t.baseStage; alive[t.name]=!t.out; });
+    let bracket, startIdx;
+
+    if(koStarted){
+      bracket=aliveKO.map(t=>t.name);                 // actual remaining field
+      startIdx=Math.min.apply(null, bracket.map(n=>{const i=KOSEQ.indexOf(stageReached[n]);return i<0?0:i;}).concat([KOSEQ.length-1]));
+    } else {
+      // simulate only the UNPLAYED group games on top of the current table
+      const tp={}; teamArr.forEach(t=>tp[t.name]={p:t.gp,gd:t.gd,gf:t.gf});
+      groups.forEach(g=>{ const gt=g.table.map(r=>r.team);
+        for(let i=0;i<gt.length;i++)for(let j=i+1;j<gt.length;j++){
+          const a=gt[i],b=gt[j]; if(grpDone.has([a,b].sort().join('|')))continue;
+          const ga=pois(eg(a)),gb=pois(eg(b));
+          pts[a]+=ga*pg;pts[b]+=gb*pg; tp[a].gf+=ga;tp[b].gf+=gb;tp[a].gd+=ga-gb;tp[b].gd+=gb-ga;
+          if(gb===0)pts[a]+=pc; if(ga===0)pts[b]+=pc;
+          if(ga>gb){pts[a]+=pw;tp[a].p+=3;}else if(gb>ga){pts[b]+=pw;tp[b].p+=3;}else{pts[a]+=pdr;pts[b]+=pdr;tp[a].p++;tp[b].p++;}
+        }});
+      const top2=[],thirds=[];
+      groups.forEach(g=>{ const gt=g.table.map(r=>r.team).sort((x,y)=>tp[y].p-tp[x].p||tp[y].gd-tp[x].gd||tp[y].gf-tp[x].gf);
+        top2.push(gt[0],gt[1]); if(gt[2])thirds.push(gt[2]); });
+      thirds.sort((x,y)=>by[y].comp-by[x].comp);
+      bracket=top2.concat(thirds.slice(0,8));
+      const inSet=new Set(bracket); teamArr.forEach(t=>{ if(!inSet.has(t.name))alive[t.name]=false; });
+      startIdx=0;
+    }
+
+    // single-elim from startIdx, advancing stage by stage so mid-round states stay consistent
+    const atStage={}; KOSEQ.forEach(st=>atStage[st]=[]);
+    bracket.forEach(n=>{ let st=stageReached[n]; if(KOSEQ.indexOf(st)<startIdx||KOSEQ.indexOf(st)<0) st=KOSEQ[startIdx]; atStage[st].push(n); });
+    let carried=[];
+    for(let si=startIdx; si<KOSEQ.length; si++){
+      const stage=KOSEQ[si], nextStage=KOSEQ[si+1]||'WINNER';
+      let field=(atStage[stage]||[]).concat(carried); carried=[];
+      for(let i=field.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[field[i],field[j]]=[field[j],field[i]];}
+      for(let k=0;k<field.length;k+=2){
+        const a=field[k],b=field[k+1];
+        if(b===undefined){ carried.push(a); continue; }
+        const ca=(by[a].comp||0)+1,cb=(by[b].comp||0)+1,aw=Math.random()<ca/(ca+cb);
+        const w=aw?a:b,l=aw?b:a;
+        pts[w]+=2*pg+pw+pc; pts[l]+=1*pg;
+        const wb=(SB[nextStage]||0)-(SB[stageReached[w]]||0); if(wb>0)pts[w]+=wb;
+        const lb=(SB[stage]||0)-(SB[stageReached[l]]||0); if(lb>0)pts[l]+=lb;
+        stageReached[w]=nextStage; stageReached[l]=stage; alive[l]=false;
+        carried.push(w);
       }
-      rank[g]=gt.slice().sort((x,y)=>tp[y].p-tp[x].p||tp[y].gd-tp[x].gd||tp[y].gf-tp[x].gf);
     }
-    const top2=[],thirds=[];
-    for(const g in rank){ top2.push(rank[g][0],rank[g][1]); if(rank[g][2])thirds.push(rank[g][2]); }
-    thirds.sort((x,y)=>by[y].comp-by[x].comp);
-    let br=top2.concat(thirds.slice(0,8));
-    const inSet=new Set(br); teams.forEach(t=>{if(!inSet.has(t.name))alive[t.name]=false;});
-    br.forEach(n=>reached[n].add('LAST_32'));
-    for(let i=br.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[br[i],br[j]]=[br[j],br[i]];}
-    const names=['LAST_16','QUARTER_FINALS','SEMI_FINALS','FINAL']; let si=0;
-    while(br.length>1){ const nx=[],stage=names[si++]||'FINAL';
-      for(let k=0;k<br.length;k+=2){ const a=br[k],b=br[k+1],ca=(by[a].comp||0)+1,cb=(by[b].comp||0)+1,aw=Math.random()<ca/(ca+cb);
-        const w=aw?a:b,l=aw?b:a; pts[w]+=2*pg+pw+pc; pts[l]+=1*pg;
-        reached[w].add(stage); reached[l].add(stage); alive[l]=false; nx.push(w); }
-      br=nx;
-    }
-    reached[br[0]].add('WINNER');
-    teams.forEach(t=>reached[t.name].forEach(stg=>{pts[t.name]+=(SB[stg]||0);}));
-    const svp=n=>{let m=0;reached[n].forEach(stg=>{m=Math.max(m,SV[stg]||0);});return m;};
+    if(carried.length===1){ const c=carried[0]; stageReached[c]='WINNER'; const cb=(SB['WINNER']||0)-(SB['FINAL']||0); if(cb>0)pts[c]+=cb; }
+
+    const svp=n=>SV[by[n].out?by[n].outStage:stageReached[n]]||0;
     const P={},PT={},AL={}; players.forEach(p=>{P[p]=0;PT[p]=0;AL[p]=0;});
-    teams.forEach(t=>{const o=t.owner; if(PT[o]===undefined)return; PT[o]+=pts[t.name]; P[o]+=svp(t.name); if(alive[t.name])AL[o]++;});
+    teamArr.forEach(t=>{const o=t.owner; if(PT[o]===undefined)return; PT[o]+=pts[t.name]; P[o]+=svp(t.name); if(alive[t.name])AL[o]++;});
     players.forEach(p=>sumPts[p]+=PT[p]);
     wP[players.slice().sort((a,b)=>PT[b]-PT[a])[0]]++;
     wS[players.slice().sort((a,b)=>AL[b]-AL[a]||P[b]-P[a])[0]]++;
@@ -997,14 +1040,16 @@ function simWinOdds(d,N){
   }
   return players.map(p=>({name:p,surv:100*wS[p]/N,pts:100*wP[p]/N,both:100*wB[p]/N,proj:sumPts[p]/N})).sort((a,b)=>b.both-a.both);
 }
-let SIMRES=null, SIMSORT='both', SIM_STARTED=false;
-function ensureSim(){                          // auto-run the forecast once (no button) when group data is in
-  if(SIMRES || SIM_STARTED) return;
-  const done=(DATA.stats&&DATA.stats.teams_remaining<=1&&DATA.stats.matches_played>0);
+let SIMRES=null, SIMSORT='both', SIM_STARTED=false, SIM_AT=-1;
+function ensureSim(){                          // auto-run the forecast; re-runs when a game finishes so odds stay current
+  const mp=(DATA.stats&&DATA.stats.matches_played)||0;
+  const done=(DATA.stats&&DATA.stats.teams_remaining<=1&&mp>0);
   if(done) return;                             // tournament over -> the real result is shown instead
-  SIM_STARTED=true;                            // one attempt; don't re-run on every refresh (forecast is static)
+  if(SIM_STARTED || (SIMRES && SIM_AT===mp)) return;   // already current for this match count
+  SIM_STARTED=true;
   setTimeout(()=>{
-    try{ SIMRES=simWinOdds(DATA,2000); }catch(e){ SIMRES=null; }
+    try{ SIMRES=simWinOdds(DATA,1500); SIM_AT=mp; }catch(e){ SIMRES=null; }
+    SIM_STARTED=false;
     if(SIMRES){
       const mode=STATUS.scoring_mode||'hybrid';
       SIMSORT = mode==='points'?'pts':(mode==='survival'?'surv':'both');
@@ -1035,7 +1080,7 @@ function renderSim(sortKey){
   const note=document.getElementById('simNote');
   if(note) note.innerHTML = done
     ? '<b style="color:var(--gold)">Tournament over.</b> Hypothetical re-simulations, not the real result — see the leaderboard for who actually won.'
-    : 'From 2,000 simulated tournaments — a forecast from team strength, not live results. Tap a column header to sort.';
+    : 'A current forecast from 1,500 simulations — results so far locked in, eliminated teams out, only remaining games simulated. Tap a column header to sort.';
 }
 let STATUS={};
 async function refreshStatus(){
@@ -1420,7 +1465,7 @@ document.getElementById('setImportFile').onchange=async(ev)=>{
 };
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(function(){}); }
 load();
-setInterval(load,60000);                       // auto-refresh every 60s
+setInterval(load,30000);                       // auto-refresh every 30s
 document.getElementById('auto').innerHTML='<span class="dot-live"></span>auto-refresh on';
 
 window.addEventListener('pageshow',function(e){ if(e.persisted) location.reload(); });

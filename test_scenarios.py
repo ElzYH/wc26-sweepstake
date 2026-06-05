@@ -152,26 +152,30 @@ def run():
               team_status(koB, "Spain") == "alive" and team_status(koB, "Brazil") == "out",
               (team_status(koB, "Spain"), team_status(koB, "Brazil")))
 
-        # 9) PENALTY SHOOTOUT: on-field draw scores as a draw, but the KO loser is still eliminated
+        # 9) PENALTY SHOOTOUT: a knockout tie won on penalties counts as a WIN for the advancing team; loser eliminated
         sh = [M(10, "Brazil", "Spain", "FINISHED", stage="FINAL", hs=1, as_=1, winner="HOME",
                 duration="PENALTY_SHOOTOUT", penH=4, penA=2)]
         d = run_compute(sh, tmp)
         brec = next((t["record"] for p in d["players"] for t in p["teams"] if t["name"] == "Brazil"), None)
-        check("shootout scores as an on-field draw (record 0-1-0, not a win)", brec == "0-1-0", brec)
+        srec = next((t["record"] for p in d["players"] for t in p["teams"] if t["name"] == "Spain"), None)
+        check("penalty-shootout win counts as a win (Brazil 1-0-0)", brec == "1-0-0", brec)
+        check("penalty-shootout loss counts as a loss (Spain 0-0-1)", srec == "0-0-1", srec)
         check("shootout loser eliminated", team_status(d, "Spain") == "out", team_status(d, "Spain"))
         check("shootout winner is champion", (d.get("champion_decided") or {}).get("team") == "Brazil",
               d.get("champion_decided"))
 
-        # 11) THIRD-PLACE PLAY-OFF: only the winner gets the bronze bonus; both stay 'out at the semi'
+        # 11) THIRD-PLACE PLAY-OFF: both semi losers are OUT for survival (capped at the semi value, no bronze
+        #     survival bump), but the bronze game still earns POINTS so the winner is "seen in points/hybrid"
         tp = [M(20, "Brazil", "Japan", "FINISHED", stage="SEMI_FINALS", hs=1, as_=0, winner="HOME"),
               M(21, "Spain", "Ghana", "FINISHED", stage="SEMI_FINALS", hs=1, as_=0, winner="HOME"),
               M(22, "Japan", "Ghana", "FINISHED", stage="THIRD_PLACE", hs=2, as_=1, winner="HOME")]
         d = run_compute(tp, tmp)
         jp = next(t for p in d["players"] for t in p["teams"] if t["name"] == "Japan")
         gh = next(t for p in d["players"] for t in p["teams"] if t["name"] == "Ghana")
-        check("3rd-place winner earns the bronze survival value (50 > semi 44)", jp["survival"] == 50, jp["survival"])
-        check("4th place stays at the semi value (44)", gh["survival"] == 44, gh["survival"])
-        check("both semi losers stay 'out' (the play-off doesn't revive anyone)",
+        check("3rd-place gives NO survival bump — bronze winner capped at the semi value (44)", jp["survival"] == 44, jp["survival"])
+        check("4th place also stays at the semi value (44)", gh["survival"] == 44, gh["survival"])
+        check("bronze game still earns points — winner outscores the loser", jp["points"] > gh["points"], (jp["points"], gh["points"]))
+        check("both semi losers stay 'out' for survival (no chance to win survival)",
               team_status(d, "Japan") == "out" and team_status(d, "Ghana") == "out",
               (team_status(d, "Japan"), team_status(d, "Ghana")))
 
