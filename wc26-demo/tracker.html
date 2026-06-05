@@ -258,6 +258,7 @@
     <div class="badges" id="badges"></div>
     <div class="ctrls">
       <button class="mini cta" id="alertsBtn">🔔 Get alerts</button>
+      <a class="mini" id="discordBtn" target="_blank" rel="noopener" style="display:none;text-decoration:none">💬 Discord</a>
       <button class="mini" id="menuBtn">⋯ Menu</button>
       <div class="menu" id="menuDrop">
         <button class="mini" id="refreshBtn">↻ Refresh now</button>
@@ -418,7 +419,7 @@
     <div class="panel" style="margin-top:20px">
       <h4>Points &amp; position over time</h4>
       <p>How each player's <b>points</b> and <b>league position</b> have moved as matches are played — one line per player. Builds up over the tournament.</p>
-      <div class="modesel" id="chartSel" style="margin:10px 0"><button data-c="pts" class="on">Points</button><button data-c="pos">Position</button></div>
+      <div class="modesel" id="chartSel" style="margin:10px 0"><button data-c="pts" class="on">Points</button><button data-c="both">Both</button><button data-c="surv">Survival</button><button data-c="pos">Position</button></div>
       <div id="chartBody"></div>
     </div>
     <div class="panel" style="margin-top:20px">
@@ -560,7 +561,7 @@ function render(d){
     b.classList.toggle('on', b.dataset.m===lbm);
   });
   const CAP={
-    points:"<b>Points</b> — teams earn points for goals, wins, clean sheets and bonuses for reaching each knockout round. Rewards teams that perform, even ones knocked out early.",
+    points:"<b>Points</b> — teams earn points for goals, wins (a penalty-shootout win counts), clean sheets, and escalating bonuses for each knockout round. Reaching the final and <b>winning the World Cup are worth by far the most</b>, but early goals and wins still count even for teams knocked out early.",
     survival:"<b>Survival</b> — ranked on how many of your teams are still alive and how far they go. Rewards backing teams that last.",
     hybrid:"<b>Both</b> — Points and Survival added into one number. A single winner: the squad that racks up points <b>and</b> survives deep.",
     fair:"<b>Fair</b> — points scored <b>above or below what your squad was expected to score</b> (from the group + run model). Levels out lucky vs tough draws: beat your number to climb, no matter who you drew. Kicks in once games start."
@@ -715,7 +716,7 @@ function leaderCells(lb,done){
     return `<div class="wcard"><div class="l">${label} ${done?'WINNER 🏆':'LEADER'}</div><div class="nm">${w?w.name:'—'}</div><div class="sc">${w?w.score+' '+unit:''}</div></div>`;};
   if(sm==='points') return [cell('POINTS','points','pts')];
   if(sm==='survival') return [cell('SURVIVAL','survival','in')];
-  return [cell('POINTS','points','pts'),cell('SURVIVAL','survival','in'),cell('BOTH','hybrid','total')];
+  return [cell('POINTS','points','pts'),cell('BOTH','hybrid','total'),cell('SURVIVAL','survival','in')];
 }
 function renderScoringRules(d){
   const el=document.getElementById('scoringRules'); if(!el) return;
@@ -737,7 +738,7 @@ function renderScoringRules(d){
     +'<table style="width:100%;font-size:12.5px;border-collapse:collapse">'
     +order.filter(k=>SV[k]).map(k=>row(LBL[k]||k,SV[k])).join('')
     +'</table></div></div>'
-    +'<div style="color:var(--muted);font-size:11.5px;margin-top:10px">Bonuses count your <b>furthest</b> round only — they don\'t stack per round. A penalty shootout scores as a <b>draw</b> for points, but the winner still advances. <b>Survival</b> takes your furthest stage\'s value and also ranks on teams still alive. <b>Both</b> = Points + Survival added together.</div>'
+    +'<div style="color:var(--muted);font-size:11.5px;margin-top:10px">Bonuses count your <b>furthest</b> round only — they don\'t stack per round, and winning the tournament is worth by far the most. A knockout tie won on <b>penalties counts as a win</b> (the loser takes the loss). The <b>3rd-place play-off</b> earns points but no extra survival — both teams are already out at the semi. <b>Survival</b> takes your furthest stage\'s value and also ranks on teams still alive. <b>Both</b> = Points + Survival added together.</div>'
     +'</div>';
 }
 function renderWinners(d){  const lb=d.leaderboards||{}, done=(d.stats&&d.stats.teams_remaining<=1&&d.stats.matches_played>0);
@@ -769,8 +770,8 @@ function renderOverview(d){
       <div class="wbnav">${multi?'<button class="warrow" id="winPrev">‹</button>':'<span></span>'}
         <div class="wbk">🏆 ${s.label} winner</div>
         ${multi?'<button class="warrow" id="winNext">›</button>':'<span></span>'}</div>
-      ${s.team?`<div class="wbteam">${flag(s.team.t)}${s.team.t}</div><div class="wbsub">World Cup champion${s.team.o&&s.team.o!=='—'?' · owned by <b>'+s.team.o+'</b>':''}</div>`:''}
-      <div class="wbwin">${s.player}<span style="color:var(--gold)"> · ${s.score}</span></div>${dots}</div>`;
+      <div class="wbteam">${s.player}</div>
+      <div class="wbwin" style="color:var(--gold)">${s.score}</div>${dots}</div>`;
   }
   // SUMMARY digest (mirrors the Discord 'post summary')
   {
@@ -795,7 +796,7 @@ function renderOverview(d){
   {
     const sm=STATUS.scoring_mode||'hybrid';
     const opts = sm==='points' ? [['pts','Points']] : sm==='survival' ? [['surv','Survival']]
-               : [['both','Both'],['pts','Points'],['surv','Survival']];
+               : [['pts','Points'],['both','Both'],['surv','Survival']];
     if(!WINODDSMODE || !opts.some(o=>o[0]===WINODDSMODE)) WINODDSMODE=opts[0][0];
     const toggle = opts.length>1 ? '<div class="modesel" id="ovOddsSel" style="margin:0 0 10px">'
         +opts.map(o=>`<button data-c="${o[0]}"${o[0]===WINODDSMODE?' class="on"':''}>${o[1]}</button>`).join('')+'</div>' : '';
@@ -819,12 +820,11 @@ function renderOverview(d){
 }
 let WINSLIDE=0, WINODDSMODE=null;
 function winSlides(d){
-  const lb=d.leaderboards||{}, fx=d.fixtures||[], sm=STATUS.scoring_mode||'hybrid';
-  const champTeam=fx.filter(m=>m.stage==='FINAL'&&m.winner).map(m=>m.winner==='HOME'?{t:m.home,o:m.homeOwner}:{t:m.away,o:m.awayOwner})[0];
-  const defs = sm==='points'?[['Points','points','pts']] : sm==='survival'?[['Survival','survival','in']]
-             : [['Both','hybrid','total'],['Points','points','pts'],['Survival','survival','in']];
+  const lb=d.leaderboards||{}, sm=STATUS.scoring_mode||'hybrid';
+  const defs = sm==='points'?[['Points','points','pts']] : sm==='survival'?[['Survival','survival','teams still in']]
+             : [['Points','points','pts'],['Both','hybrid','total'],['Survival','survival','teams still in']];
   return defs.map(([label,mode,unit])=>{ const w=(lb[mode]||[])[0];
-    return {label, team:champTeam, player:w?w.name:'—', score:w?w.score+' '+unit:''}; });
+    return {label, player:w?w.name:'—', score:w?w.score+' '+unit:''}; });
 }
 const oddBar=(name,val,max)=>`<div class="oddrow"><div class="nm">${name}</div><div class="oddbar"><i style="width:${Math.round(100*val/(max||1))}%"></i></div><div class="pct">${val}%</div></div>`;
 function winOddsRows(d,mode){
@@ -896,11 +896,13 @@ function buildHistory(d){
     .slice().sort((a,b)=>String(a.utcDate||'').localeCompare(String(b.utcDate||'')));
   const base={}, reached={}, hist=[];
   fin.forEach((m,i)=>{
-    [[m.home,m.homeScore,m.awayScore],[m.away,m.awayScore,m.homeScore]].forEach(([tm,sc,co])=>{
+    const side=m.winner||(m.homeScore>m.awayScore?'HOME':(m.awayScore>m.homeScore?'AWAY':'DRAW'));
+    [[m.home,m.homeScore,m.awayScore,'HOME'],[m.away,m.awayScore,m.homeScore,'AWAY']].forEach(([tm,sc,co,which])=>{
       if(!(tm in owner)) return;
       base[tm]=(base[tm]||0)+sc*pg;
       if(co===0) base[tm]+=pc;
-      if(sc>co) base[tm]+=pw; else if(sc===co) base[tm]+=pdr;
+      if(side===which) base[tm]+=pw;          // win — including a knockout tie won on penalties
+      else if(side==='DRAW') base[tm]+=pdr;    // genuine draw (group stage)
     });
     if(m.stage&&m.stage!=='GROUP_STAGE'){
       [m.home,m.away].forEach(tm=>{ if(tm in owner)(reached[tm]=reached[tm]||new Set()).add(m.stage); });
@@ -920,13 +922,14 @@ function renderChart(d){
   if(hist.length<2){ el.innerHTML='<div class="empty">Fills in as matches are played — one point per match. Come back once the tournament is under way.</div>'; return; }
   const names=Object.keys(hist[hist.length-1].p);
   const n=hist.length, pos=(CHARTMETRIC==='pos');
+  const key = CHARTMETRIC==='both'?'hyb':(CHARTMETRIC==='surv'?'srv':'pts');
   const series={}; names.forEach(nm=>series[nm]=[]);
   hist.forEach(h=>{
     if(pos){
       const ranked=names.slice().sort((a,b)=>((h.p[b]||{}).hyb||0)-((h.p[a]||{}).hyb||0));
       ranked.forEach((nm,idx)=>series[nm].push(idx+1));
     } else {
-      names.forEach(nm=>series[nm].push((h.p[nm]||{}).pts||0));
+      names.forEach(nm=>series[nm].push((h.p[nm]||{})[key]||0));
     }
   });
   let ymin,ymax;
@@ -1067,7 +1070,7 @@ function renderSim(sortKey){
   let cols;
   if(mode==='points') cols=[{k:'pts',label:'Points %'},{k:'proj',label:'Proj pts'}];
   else if(mode==='survival') cols=[{k:'surv',label:'Survival %'}];
-  else cols=[{k:'pts',label:'Points %'},{k:'surv',label:'Survival %'},{k:'both',label:'Both %'},{k:'proj',label:'Proj pts'}];
+  else cols=[{k:'pts',label:'Points %'},{k:'both',label:'Both %'},{k:'surv',label:'Survival %'},{k:'proj',label:'Proj pts'}];
   let sk=sortKey||SIMSORT; if(!cols.some(c=>c.k===sk)) sk=(mode==='points'?'pts':mode==='survival'?'surv':'both'); SIMSORT=sk;
   const rows=SIMRES.slice().sort((a,b)=>(b[sk]||0)-(a[sk]||0));
   const head='<tr style="color:var(--muted);text-align:left"><th style="padding:6px 8px">Player</th>'+
@@ -1099,6 +1102,8 @@ async function refreshStatus(){
   const ps=document.getElementById('setPushState'); if(ps) ps.textContent=STATUS.push_enabled?'on ✅':'off (pywebpush not installed)';
   const dw=document.getElementById('setDiscord'); if(dw && STATUS.discord) dw.placeholder='webhook saved ✅ (paste to replace, or clear to remove)';
   if(STATUS.has_invite){ const iv=document.getElementById('setInvite'); if(iv) iv.placeholder='invite saved ✅ (paste to replace)'; }
+  const db=document.getElementById('discordBtn');
+  if(db){ if(STATUS.invite){ db.href=STATUS.invite; db.style.display=''; } else { db.style.display='none'; } }
   const su=document.getElementById('setSite'); if(su && STATUS.site_url) su.value=STATUS.site_url;
   const dg=document.getElementById('setDigest'); if(dg) dg.checked=!!STATUS.digest_enabled;
   const dh=document.getElementById('setDigestHour'); if(dh) dh.value=(STATUS.digest_hour!=null?STATUS.digest_hour:9);
@@ -1275,10 +1280,9 @@ function renderAlerts(){
   }
   const showPrefs = pushOn || (supported && perm==='granted' && !pushCap);
   if(showPrefs) h+=prefRows();
-  if(STATUS.discord||STATUS.has_invite){
+  if(STATUS.discord){
     h+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">';
-    if(STATUS.discord) h+='<div style="color:var(--muted);font-size:12px;margin-bottom:8px">💬 Group alerts also post to the Discord channel.</div>';
-    if(STATUS.invite) h+='<a class="mini" id="alJoin" href="'+STATUS.invite+'" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none">💬 Join the group chat</a>';
+    h+='<div style="color:var(--muted);font-size:12px">💬 These alerts also post to the group Discord. Use the <b>Discord</b> button at the top to join.</div>';
     h+='</div>';
   }
   h+='<details style="margin-top:14px"><summary style="cursor:pointer;color:var(--t2);font-size:12.5px">How do I get alerts on my phone?</summary>'

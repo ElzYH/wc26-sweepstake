@@ -71,6 +71,9 @@ if python3 test_scenarios.py >/dev/null; then echo "  ok"; else echo "  FAIL"; p
 say "Full-tournament replay (2022: knockouts, penalties, champion)"
 if python3 test_2022.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_2022.py | tail -8; FAIL=1; fi
 
+say "Result-correctness tests (exact points, champion bonus, pens, survival, defence)"
+if python3 test_results.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_results.py | tail -12; FAIL=1; fi
+
 say "Bot command tests"
 if python3 test_bot.py; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
 

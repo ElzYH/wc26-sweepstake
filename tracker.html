@@ -258,7 +258,7 @@
     <div class="badges" id="badges"></div>
     <div class="ctrls">
       <button class="mini cta" id="alertsBtn">🔔 Get alerts</button>
-      <a class="mini" id="discordBtn" target="_blank" rel="noopener" style="display:none;text-decoration:none">💬 Discord</a>
+      <button class="mini" id="discordBtn">💬 Discord</button>
       <button class="mini" id="menuBtn">⋯ Menu</button>
       <div class="menu" id="menuDrop">
         <button class="mini" id="refreshBtn">↻ Refresh now</button>
@@ -306,8 +306,8 @@
       <div class="hint" style="color:var(--muted);font-size:12px;margin:4px 0 0">On a live-scores plan set <b>refresh = 1</b> so scores and alerts update every minute (the free plan delays scores, so a higher number is fine there).</div>
       <button id="setSave" style="margin-top:8px">Save settings</button>
       <div class="hint" id="setMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
-      <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
-        <p style="margin:0 0 8px"><b>Alerts.</b> Two ways to get notified — players switch them on via <b>🔔 Get alerts</b> in the menu.</p>
+      <div id="discordSetup" style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
+        <p style="margin:0 0 8px"><b>💬 Discord & alerts.</b> Two ways to get notified — players switch them on via <b>🔔 Get alerts</b> (top bar).</p>
         <p style="margin:0 0 8px;color:var(--muted);font-size:12.5px">• <b>Phone &amp; desktop push</b> — arrives even when the app is closed. On iPhone each person taps Share → <b>Add to Home Screen</b> first. Needs <code>pip install pywebpush</code> on the server, then restart. Status: <b id="setPushState">—</b></p>
         <p style="margin:0 0 8px;color:var(--muted);font-size:12.5px">• <b>Discord (group)</b> — paste a channel webhook and every kickoff / goal / knockout / lead change posts there. Most reliable on phones.</p>
         <input id="setDiscord" type="text" placeholder="https://discord.com/api/webhooks/…">
@@ -366,6 +366,15 @@
       <div id="alertsBody"></div>
     </div>
   </div>
+  <div id="discordModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:200;padding:20px;overflow:auto">
+    <div style="max-width:460px;margin:6vh auto;background:#0c1f15;border:1px solid var(--gold);border-radius:18px;padding:22px;box-shadow:0 18px 50px rgba(0,0,0,.6);color:var(--ink)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-family:'Anton';font-size:22px;color:var(--gold);text-transform:uppercase">💬 Discord</div>
+        <button class="mini" id="discordClose">✕ Close</button>
+      </div>
+      <div id="discordBody"></div>
+    </div>
+  </div>
   <div id="gate" style="display:none;text-align:center;padding:60px 24px;border:1px solid var(--line);border-radius:20px;margin-top:14px;background:linear-gradient(180deg,#0c2117,#0a1b12)">
     <div style="font-size:52px;line-height:1">⚽</div>
     <div style="font-family:'Anton';font-size:clamp(26px,5vw,38px);color:var(--gold);text-transform:uppercase;margin-top:10px">The draw hasn't run yet</div>
@@ -419,7 +428,8 @@
     <div class="panel" style="margin-top:20px">
       <h4>Points &amp; position over time</h4>
       <p>How each player's <b>points</b> and <b>league position</b> have moved as matches are played — one line per player. Builds up over the tournament.</p>
-      <div class="modesel" id="chartSel" style="margin:10px 0"><button data-c="pts" class="on">Points</button><button data-c="both">Both</button><button data-c="surv">Survival</button><button data-c="pos">Position</button></div>
+      <div class="modesel" id="chartView" style="margin:10px 0 6px"><button data-v="val" class="on">Over time</button><button data-v="pos">Position</button></div>
+      <div class="modesel" id="chartMetric" style="margin:0 0 10px"><button data-c="pts" class="on">Points</button><button data-c="both">Both</button><button data-c="surv">Survival</button></div>
       <div id="chartBody"></div>
     </div>
     <div class="panel" style="margin-top:20px">
@@ -704,9 +714,14 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.addEventListener('click',e=>{ if(e.target!==mb && !md.contains(e.target)) md.classList.remove('open'); });
 })();
 document.querySelectorAll('#modesel button').forEach(b=>b.onclick=()=>{LBMODE=b.dataset.m;render(DATA);});
-document.querySelectorAll('#chartSel button').forEach(b=>b.onclick=()=>{
+document.querySelectorAll('#chartView button').forEach(b=>b.onclick=()=>{
+  CHARTVIEW=b.dataset.v;
+  document.querySelectorAll('#chartView button').forEach(x=>x.classList.toggle('on',x===b));
+  renderChart(DATA);
+});
+document.querySelectorAll('#chartMetric button').forEach(b=>b.onclick=()=>{
   CHARTMETRIC=b.dataset.c;
-  document.querySelectorAll('#chartSel button').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('#chartMetric button').forEach(x=>x.classList.toggle('on',x===b));
   renderChart(DATA);
 });
 
@@ -738,6 +753,7 @@ function renderScoringRules(d){
     +'<table style="width:100%;font-size:12.5px;border-collapse:collapse">'
     +order.filter(k=>SV[k]).map(k=>row(LBL[k]||k,SV[k])).join('')
     +'</table></div></div>'
+    +'<div style="background:#0a1f15;border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-top:10px;font-size:12px"><b style="color:var(--gold)">Worked example.</b> Win a group game 2–0 → <b>+'+(2*(SC.per_goal||1))+'</b> goals, <b>+'+SC.win+'</b> win, <b>+'+SC.clean_sheet+'</b> clean sheet = <b>'+(2*(SC.per_goal||1)+SC.win+SC.clean_sheet)+' pts</b>'+(SB.QUARTER_FINALS?'. The same win in the quarter-final also adds the <b>+'+SB.QUARTER_FINALS+'</b> QF bonus':'')+'. Going all the way and lifting the trophy adds the <b>+'+(SB.WINNER||0)+'</b> champion bonus on top.</div>'
     +'<div style="color:var(--muted);font-size:11.5px;margin-top:10px">Bonuses count your <b>furthest</b> round only — they don\'t stack per round, and winning the tournament is worth by far the most. A knockout tie won on <b>penalties counts as a win</b> (the loser takes the loss). The <b>3rd-place play-off</b> earns points but no extra survival — both teams are already out at the semi. <b>Survival</b> takes your furthest stage\'s value and also ranks on teams still alive. <b>Both</b> = Points + Survival added together.</div>'
     +'</div>';
 }
@@ -883,7 +899,7 @@ function renderOdds(d){
 }
 
 // ---- points / position line chart over time ----
-let CHARTMETRIC='pts';
+let CHARTMETRIC='pts', CHARTVIEW='val';
 const PCOL=['#ffc83d','#3dd9c9','#5b8def','#ff7ac8','#7ee787','#ff9f5b','#b58cff','#ff5a5a','#5ad1ff','#ffd86b'];
 // replay finished fixtures in date order -> per-player points/survival after each match (mirrors the server scoring)
 function buildHistory(d){
@@ -921,12 +937,12 @@ function renderChart(d){
   const hist=buildHistory(d).filter(h=>h&&h.p);
   if(hist.length<2){ el.innerHTML='<div class="empty">Fills in as matches are played — one point per match. Come back once the tournament is under way.</div>'; return; }
   const names=Object.keys(hist[hist.length-1].p);
-  const n=hist.length, pos=(CHARTMETRIC==='pos');
+  const n=hist.length, pos=(CHARTVIEW==='pos');
   const key = CHARTMETRIC==='both'?'hyb':(CHARTMETRIC==='surv'?'srv':'pts');
   const series={}; names.forEach(nm=>series[nm]=[]);
   hist.forEach(h=>{
     if(pos){
-      const ranked=names.slice().sort((a,b)=>((h.p[b]||{}).hyb||0)-((h.p[a]||{}).hyb||0));
+      const ranked=names.slice().sort((a,b)=>((h.p[b]||{})[key]||0)-((h.p[a]||{})[key]||0));
       ranked.forEach((nm,idx)=>series[nm].push(idx+1));
     } else {
       names.forEach(nm=>series[nm].push((h.p[nm]||{})[key]||0));
@@ -1102,8 +1118,6 @@ async function refreshStatus(){
   const ps=document.getElementById('setPushState'); if(ps) ps.textContent=STATUS.push_enabled?'on ✅':'off (pywebpush not installed)';
   const dw=document.getElementById('setDiscord'); if(dw && STATUS.discord) dw.placeholder='webhook saved ✅ (paste to replace, or clear to remove)';
   if(STATUS.has_invite){ const iv=document.getElementById('setInvite'); if(iv) iv.placeholder='invite saved ✅ (paste to replace)'; }
-  const db=document.getElementById('discordBtn');
-  if(db){ if(STATUS.invite){ db.href=STATUS.invite; db.style.display=''; } else { db.style.display='none'; } }
   const su=document.getElementById('setSite'); if(su && STATUS.site_url) su.value=STATUS.site_url;
   const dg=document.getElementById('setDigest'); if(dg) dg.checked=!!STATUS.digest_enabled;
   const dh=document.getElementById('setDigestHour'); if(dh) dh.value=(STATUS.digest_hour!=null?STATUS.digest_hour:9);
@@ -1237,6 +1251,32 @@ async function discordAction(url, sending, ok){
 document.getElementById('setDemoDiscord').onclick=()=>discordAction('/api/discord_demo','Posting demo…','Demo posted — check Discord (takes a few seconds).');
 document.getElementById('setSummaryDiscord').onclick=()=>discordAction('/api/discord_summary','Posting summary…','Summary posted to Discord.');
 function closeAlerts(){ document.getElementById('alertsModal').style.display='none'; }
+function renderDiscord(){
+  const b=document.getElementById('discordBody'); if(!b) return;
+  let h='';
+  if(STATUS.invite){
+    h+='<p style="margin:0 0 12px;font-size:13px;color:var(--ink);opacity:.85">Join the group server to get every kickoff, goal, knockout and lead change in the channel — plus the round-by-round draw and the daily summary.</p>';
+    h+='<a class="mini cta" href="'+esc(STATUS.invite)+'" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;padding:10px 16px;font-size:14px">💬 Join the group chat</a>';
+  } else {
+    h+='<p style="margin:0 0 12px;font-size:13px;color:var(--muted)">No Discord invite link has been added yet'+(STATUS.discord?' — alerts are posting to a channel, but there\'s no public join link.':'.')+'</p>';
+  }
+  h+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">';
+  h+='<div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:8px"><b style="color:var(--ink)">What posts here:</b> kickoffs, goals, knockouts, lead changes &amp; rivalries, the draw (round-by-round + final squads), the end-of-tournament wrap-up, and an optional daily summary.</div>';
+  h+='<button class="mini" id="discordSetupBtn">⚙ Discord setup — webhook, invite &amp; bot</button>';
+  h+='</div>';
+  b.innerHTML=h;
+  const sb=document.getElementById('discordSetupBtn');
+  if(sb) sb.onclick=()=>{ closeDiscord(); openSettingsAt('discordSetup'); };
+}
+function closeDiscord(){ document.getElementById('discordModal').style.display='none'; }
+function openSettingsAt(id){
+  const p=document.getElementById('setPanel');
+  if(p && p.style.display==='none') document.getElementById('setBtn').click();   // opens + runs the admin-key gate
+  const el=document.getElementById(id); if(el) setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'start'}),60);
+}
+document.getElementById('discordClose').onclick=closeDiscord;
+document.getElementById('discordModal').onclick=e=>{ if(e.target.id==='discordModal') closeDiscord(); };
+document.getElementById('discordBtn').onclick=()=>{ document.getElementById('discordModal').style.display='block'; renderDiscord(); };
 document.getElementById('alertsClose').onclick=closeAlerts;
 document.getElementById('alertsModal').onclick=e=>{ if(e.target.id==='alertsModal') closeAlerts(); };
 function notifyMe(){ return localStorage.getItem('wc26_me')||''; }
