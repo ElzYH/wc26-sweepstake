@@ -50,7 +50,8 @@
   .pname{font-family:'Anton';font-size:22px;letter-spacing:.01em}
   .palive{color:var(--muted);font-size:12px;letter-spacing:.06em}
   .pscore{font-family:'Anton';font-size:30px;color:var(--gold)}
-  .livedelta{font-family:'Sora',sans-serif;font-size:11px;font-weight:700;color:#062;background:#7ee787;border-radius:999px;padding:2px 7px;margin-left:8px;vertical-align:middle;animation:pulse 1.6s infinite}
+  .livedelta{font-family:'Sora',sans-serif;font-size:11px;font-weight:700;color:#0a2e16;background:#7ee787;border-radius:6px;padding:1px 7px;margin-left:8px;vertical-align:middle}
+  .wlive{margin-top:4px;font-family:'Sora',sans-serif;font-size:12px;font-weight:700;color:#7ee787;letter-spacing:.02em}
   .pscore span{font-family:'Sora';font-size:12px;color:var(--muted);letter-spacing:.1em}
 
   /* player cards */
@@ -319,7 +320,7 @@
       <div id="discordSetup" style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
         <p style="margin:0 0 8px"><b>💬 Discord & alerts.</b> Two ways to get notified — players switch them on via <b>🔔 Get alerts</b> (top bar).</p>
         <p style="margin:0 0 8px;color:var(--muted);font-size:12.5px">• <b>Phone &amp; desktop push</b> — arrives even when the app is closed. On iPhone each person taps Share → <b>Add to Home Screen</b> first. Needs <code>pip install pywebpush</code> on the server, then restart. Status: <b id="setPushState">—</b></p>
-        <p style="margin:0 0 8px;color:var(--muted);font-size:12.5px">• <b>Discord (group)</b> — paste a channel webhook and every kickoff / goal / knockout / lead change posts there. Most reliable on phones.</p>
+        <p style="margin:0 0 8px;color:var(--muted);font-size:12.5px">• <b>Discord (group)</b> — paste a channel webhook and every kickoff / goal / half-time / full-time (incl. extra time &amp; penalties) / knockout / lead change posts there. Most reliable on phones.</p>
         <input id="setDiscord" type="text" placeholder="https://discord.com/api/webhooks/…">
         <div class="row2" style="margin-top:6px"><button id="setSaveDiscord">Save webhook</button><button id="setTestDiscord" class="mini">Send Discord test</button></div>
         <div class="row2" style="margin-top:6px"><button id="setDemoDiscord" class="mini">Demo a game in Discord</button><button id="setSummaryDiscord" class="mini">Post summary to Discord</button></div>
@@ -372,7 +373,7 @@
         <div style="font-family:'Anton';font-size:22px;color:var(--gold);text-transform:uppercase">🔔 Get alerts</div>
         <button class="mini" id="alertsClose">✕ Close</button>
       </div>
-      <p style="color:var(--ink);opacity:.85;font-size:13px;margin:0 0 14px">Pings your phone when your team kicks off (and who they're up against), when your team scores or goes out, and when the lead changes.</p>
+      <p style="color:var(--ink);opacity:.85;font-size:13px;margin:0 0 14px">Pings your phone when your team kicks off (and who they're up against), scores, reaches half-time and full-time (including extra time and penalties), or goes out — and when the lead changes.</p>
       <div id="alertsBody"></div>
     </div>
   </div>
@@ -461,13 +462,14 @@ const SAMPLE = {"updated_at":"pre-tournament","competition":"WC","default_mode":
 let MODE="hybrid";
 const FLAGS={"France": "🇫🇷", "Spain": "🇪🇸", "Argentina": "🇦🇷", "Brazil": "🇧🇷", "Portugal": "🇵🇹", "Germany": "🇩🇪", "Netherlands": "🇳🇱", "Morocco": "🇲🇦", "Belgium": "🇧🇪", "Croatia": "🇭🇷", "Colombia": "🇨🇴", "USA": "🇺🇸", "Senegal": "🇸🇳", "Mexico": "🇲🇽", "Uruguay": "🇺🇾", "Japan": "🇯🇵", "Switzerland": "🇨🇭", "Turkey": "🇹🇷", "Ecuador": "🇪🇨", "Iran": "🇮🇷", "Norway": "🇳🇴", "Austria": "🇦🇹", "Korea Republic": "🇰🇷", "Australia": "🇦🇺", "Egypt": "🇪🇬", "Algeria": "🇩🇿", "Canada": "🇨🇦", "Ivory Coast": "🇨🇮", "Sweden": "🇸🇪", "Panama": "🇵🇦", "Paraguay": "🇵🇾", "Czech Republic": "🇨🇿", "Tunisia": "🇹🇳", "DR Congo": "🇨🇩", "Uzbekistan": "🇺🇿", "Qatar": "🇶🇦", "Iraq": "🇮🇶", "South Africa": "🇿🇦", "Saudi Arabia": "🇸🇦", "Bosnia & Herzegovina": "🇧🇦", "Jordan": "🇯🇴", "Cape Verde": "🇨🇻", "Ghana": "🇬🇭", "Curacao": "🇨🇼", "Haiti": "🇭🇹", "New Zealand": "🇳🇿", "Bosnia-Herzegovina": "🇧🇦", "Bosnia and Herzegovina": "🇧🇦", "Cote d'Ivoire": "🇨🇮", "Côte d'Ivoire": "🇨🇮", "South Korea": "🇰🇷", "United States": "🇺🇸", "Czechia": "🇨🇿", "Curaçao": "🇨🇼", "Cape Verde Islands": "🇨🇻", "Türkiye": "🇹🇷", "Turkiye": "🇹🇷", "Congo DR": "🇨🇩", "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "Scotland": "🏴󠁧󠁢󠁳󠁣󠁴󠁿"};
 function flag(n){const f=FLAGS[n];return f?f+" ":"";}
+function isDone(s){return s==='FINISHED'||s==='AWARDED';}   // a forfeit (AWARDED) is a played, decided result
 function esc(s){return String(s==null?'':s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));}
 function ownerOf(d,team){ for(const p of (d.players||[])){ for(const t of (p.teams||[])){ if(t.name===team) return p.name; } } return '—'; }
 function summaryLines(d){
   const st=d.stats||{}, mp=st.matches_played||0;
   if(!mp) return ["Tournament hasn't kicked off yet — this fills in once games start (11 June)."];
   const mode=(STATUS.scoring_mode||'hybrid'); const m=['points','survival','hybrid'].includes(mode)?mode:'hybrid';
-  const label=m==='survival'?'survival':'pts';
+  const label=m==='survival'?'survival':(m==='hybrid'?'total':'pts');
   const board=(d.leaderboards||{})[m]||[]; const medals=['🥇','🥈','🥉']; const out=[];
   board.slice(0,3).forEach((p,i)=>out.push(medals[i]+' '+p.name+' — '+(p.score??0)+' '+label));
   if(st.teams_remaining!=null) out.push('🛡️ Teams still in: '+st.teams_remaining);
@@ -507,7 +509,7 @@ function renderLive(d){
   const live=fx.filter(m=>['IN_PLAY','PAUSED','LIVE','SUSPENDED'].includes(m.status));
   const soon=fx.filter(m=>['TIMED','SCHEDULED'].includes(m.status)).sort((a,b)=>new Date(a.utcDate)-new Date(b.utcDate)).slice(0,5);
   const isToday=s=>{const x=new Date(s),n=new Date();return x.getFullYear()===n.getFullYear()&&x.getMonth()===n.getMonth()&&x.getDate()===n.getDate();};
-  const earlier=fx.filter(m=>m.status==='FINISHED'&&isToday(m.utcDate)).sort((a,b)=>new Date(b.utcDate)-new Date(a.utcDate));
+  const earlier=fx.filter(m=>isDone(m.status)&&isToday(m.utcDate)).sort((a,b)=>new Date(b.utcDate)-new Date(a.utcDate));
   let h='';
   if(live.length){
     h+='<div class="lcgrid">'+live.map(m=>{
@@ -652,12 +654,12 @@ function renderBracket(d){
 function liveOrCurrentRound(ko,present){
   const live=ko.find(m=>m.status==='IN_PLAY'||m.status==='PAUSED');
   if(live) return live.stage;
-  const open=present.find(s=>ko.some(m=>m.stage===s && m.status!=='FINISHED'));
+  const open=present.find(s=>ko.some(m=>m.stage===s && !isDone(m.status)));
   return open || present[present.length-1];
 }
 function bracketCard(m){
   const isLive=m.status==='IN_PLAY'||m.status==='PAUSED';
-  const done=m.status==='FINISHED', hw=m.winner==='HOME', aw=m.winner==='AWAY';
+  const done=isDone(m.status), hw=m.winner==='HOME', aw=m.winner==='AWAY';
   const show=done||isLive;
   const sc=home=>show?((home?m.homeScore:m.awayScore)??0):'';
   const foot=isLive?'<div class="blive"><span class="pd"></span>LIVE</div>':(done?'':`<div class="btime">${fmtTime(m.utcDate)}</div>`);
@@ -687,13 +689,13 @@ function winProb(h,a,hs,as_,inplay){
   return {h:ph,d:pd,a:pa};
 }
 function wpBar3(m,live){
-  if(m.status==='FINISHED'||!m.home||!m.away||(COMP[m.home]==null&&COMP[m.away]==null))return '';
+  if(isDone(m.status)||!m.home||!m.away||(COMP[m.home]==null&&COMP[m.away]==null))return '';
   const p=winProb(m.home,m.away,m.homeScore,m.awayScore,live), R=x=>Math.round(x*100);
   return `<div class="wp" title="${live?'live ':''}win chance — ${m.home} ${R(p.h)}% · draw ${R(p.d)}% · ${m.away} ${R(p.a)}%"><i style="width:${p.h*100}%;background:var(--t2)"></i><i style="width:${p.d*100}%;background:#3a4a40"></i><i style="width:${p.a*100}%;background:var(--gold)"></i></div><div class="wppct"><span>${R(p.h)}%</span><span style="text-align:center">draw ${R(p.d)}%</span><span style="text-align:right">${R(p.a)}%</span></div>`;
 }
 function matchRow(m){
   const live=m.status==='IN_PLAY'||m.status==='PAUSED';
-  const done=m.status==='FINISHED';
+  const done=isDone(m.status);
   const score=(done||live)?`${m.homeScore??0}–${m.awayScore??0}`:'v';
   const koNote = done && (m.aet||m.shootout)
     ? `<div class="konote">${m.aet?'a.e.t.':''}${m.shootout?(m.aet?' · ':'')+'pens '+(m.penHome??0)+'–'+(m.penAway??0):''}</div>`
@@ -737,11 +739,12 @@ document.querySelectorAll('#chartMetric button').forEach(b=>b.onclick=()=>{
 
 function leaderCells(lb,done){
   const sm=STATUS.scoring_mode||'hybrid';
-  const cell=(label,mode,unit)=>{const w=(lb[mode]||[])[0];
-    return `<div class="wcard"><div class="l">${label} ${done?'WINNER 🏆':'LEADER'}</div><div class="nm">${w?w.name:'—'}</div><div class="sc">${w?w.score+' '+unit:''}</div></div>`;};
-  if(sm==='points') return [cell('POINTS','points','pts')];
-  if(sm==='survival') return [cell('SURVIVAL','survival','in')];
-  return [cell('POINTS','points','pts'),cell('BOTH','hybrid','total'),cell('SURVIVAL','survival','in')];
+  const cell=(label,mode,unit,showlive)=>{const w=(lb[mode]||[])[0];
+    const lv=(showlive && !done && w && w.live>0)?`<div class="wlive">▲ +${w.live} live</div>`:'';
+    return `<div class="wcard"><div class="l">${label} ${done?'WINNER 🏆':'LEADER'}</div><div class="nm">${w?w.name:'—'}</div><div class="sc">${w?w.score+' '+unit:''}</div>${lv}</div>`;};
+  if(sm==='points') return [cell('POINTS','points','pts',true)];
+  if(sm==='survival') return [cell('SURVIVAL','survival','in',false)];
+  return [cell('POINTS','points','pts',true),cell('BOTH','hybrid','total',true),cell('SURVIVAL','survival','in',false)];
 }
 function renderScoringRules(d){
   const el=document.getElementById('scoringRules'); if(!el) return;
@@ -764,7 +767,7 @@ function renderScoringRules(d){
     +order.filter(k=>SV[k]).map(k=>row(LBL[k]||k,SV[k])).join('')
     +'</table></div></div>'
     +'<div style="background:#0a1f15;border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-top:10px;font-size:12px"><b style="color:var(--gold)">Worked example.</b> Win a group game 2–0 → <b>+'+(2*(SC.per_goal||1))+'</b> goals, <b>+'+SC.win+'</b> win, <b>+'+SC.clean_sheet+'</b> clean sheet = <b>'+(2*(SC.per_goal||1)+SC.win+SC.clean_sheet)+' pts</b>'+(SB.QUARTER_FINALS?'. The same win in the quarter-final also adds the <b>+'+SB.QUARTER_FINALS+'</b> QF bonus':'')+'. Going all the way and lifting the trophy adds the <b>+'+(SB.WINNER||0)+'</b> champion bonus on top.</div>'
-    +'<div style="color:var(--muted);font-size:11.5px;margin-top:10px">Bonuses count your <b>furthest</b> round only — they don\'t stack per round, and winning the tournament is worth by far the most. A knockout tie won on <b>penalties counts as a win</b> (the loser takes the loss). The <b>3rd-place play-off</b> earns points but no extra survival — both teams are already out at the semi. <b>Survival</b> takes your furthest stage\'s value and also ranks on teams still alive. <b>Both</b> = Points + Survival added together.</div>'
+    +'<div style="color:var(--muted);font-size:11.5px;margin-top:10px">Bonuses count your <b>furthest</b> round only — they don\'t stack per round, and winning the tournament is worth by far the most. A knockout tie won on <b>penalties counts as a win</b> (the loser takes the loss). The <b>3rd-place play-off</b> earns points but no extra survival — both teams are already out at the semi. <b>Survival</b> takes your furthest stage\'s value and also ranks on teams still alive. <b>Both</b> = Points + Survival added together. A green <b>+N live</b> next to a score is the points your teams are earning from games <b>in play right now</b> — it&#39;s provisional and settles the moment the game ends (a disallowed goal takes it back off).</div>'
     +'</div>';
 }
 function renderWinners(d){  const lb=d.leaderboards||{}, done=(d.stats&&d.stats.teams_remaining<=1&&d.stats.matches_played>0);
@@ -814,20 +817,23 @@ function renderOverview(d){
     html+='<div class="empty">No games in play right now — live scores appear here the moment a match kicks off.</div>';
   }
   html+='</div>';
-  // MATCHDAY — today's slate, or the next day that has games (works pre-tournament + live)
+  // MATCHDAY — today's slate, or the next day that still has games to play (works pre-tournament + live)
   {
     const todayStr=new Date().toISOString().slice(0,10);
     const dt=m=>(m.utcDate||'').slice(0,10);
+    const liveOf=m=>['IN_PLAY','PAUSED','LIVE','SUSPENDED'].includes(m.status);
+    const scored=m=>m.homeScore!=null&&m.awayScore!=null;
+    const doneOf=m=>['FINISHED','AWARDED'].includes(m.status)||(scored(m)&&!liveOf(m));   // AWARDED = walkover; a scored game is played
     let day = fx.some(m=>dt(m)===todayStr) ? todayStr
-            : (fx.filter(m=>m.status!=='FINISHED'&&dt(m)).map(dt).sort()[0]||'');
+            : (fx.filter(m=>!doneOf(m)&&dt(m)).map(dt).sort()[0]||'');
     const games = day ? fx.filter(m=>dt(m)===day).sort((a,b)=>(a.utcDate||'').localeCompare(b.utcDate||'')) : [];
     if(games.length){
       const dlabel = day===todayStr ? 'Today' : new Date(day+'T12:00:00Z').toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'short'});
       html+='<div class="ovsec"><div class="ovh">📅 '+dlabel+'’s games</div><div class="mdgrid">'+games.map(m=>{
         const t=(m.utcDate||'').slice(11,16);
-        const liveN=['IN_PLAY','PAUSED','LIVE','SUSPENDED'].includes(m.status);
-        const fin=m.status==='FINISHED';
-        const sc=(m.homeScore!=null&&m.awayScore!=null)?(m.homeScore+'–'+m.awayScore):'v';
+        const liveN=liveOf(m);
+        const fin=doneOf(m);
+        const sc=scored(m)?(m.homeScore+'–'+m.awayScore):'v';
         const tag=liveN?('<span class="livedot"></span>LIVE'+(m.minute?" "+m.minute+"'":'')):(fin?'FT':(t?t+' UTC':'TBC'));
         const where=m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):('Group '+(m.group||'?'));
         return `<div class="mdcard${liveN?' mdlive':''}${fin?' mdfin':''}"><div class="mdmeta">${where} · ${tag}</div>
@@ -939,7 +945,7 @@ function buildHistory(d){
   const owner={}; (d.players||[]).forEach(p=>(p.teams||[]).forEach(t=>owner[t.name]=p.name));
   const players=(d.players||[]).map(p=>p.name);
   if(!players.length) return [];
-  const fin=(d.fixtures||[]).filter(m=>m.status==='FINISHED'&&m.homeScore!=null&&m.awayScore!=null)
+  const fin=(d.fixtures||[]).filter(m=>isDone(m.status)&&m.homeScore!=null&&m.awayScore!=null)
     .slice().sort((a,b)=>String(a.utcDate||'').localeCompare(String(b.utcDate||'')));
   const base={}, reached={}, hist=[];
   fin.forEach((m,i)=>{
@@ -1286,13 +1292,13 @@ function renderDiscord(){
   const b=document.getElementById('discordBody'); if(!b) return;
   let h='';
   if(STATUS.invite){
-    h+='<p style="margin:0 0 12px;font-size:13px;color:var(--ink);opacity:.85">Join the group server to get every kickoff, goal, knockout and lead change in the channel — plus the round-by-round draw and the daily summary.</p>';
+    h+='<p style="margin:0 0 12px;font-size:13px;color:var(--ink);opacity:.85">Join the group server to get every kickoff, goal, half-time, full-time, knockout and lead change in the channel — plus the round-by-round draw and the daily summary. Type <code>/notifyme &lt;your name&gt;</code> in the server and the bot will <b>@you</b> on your own teams&#39; events.</p>';
     h+='<a class="mini cta" href="'+esc(STATUS.invite)+'" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;padding:10px 16px;font-size:14px">💬 Join the group chat</a>';
   } else {
     h+='<p style="margin:0 0 12px;font-size:13px;color:var(--muted)">No Discord invite link has been added yet'+(STATUS.discord?' — alerts are posting to a channel, but there\'s no public join link.':'.')+'</p>';
   }
   h+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">';
-  h+='<div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:8px"><b style="color:var(--ink)">What posts here:</b> kickoffs, goals, knockouts, lead changes &amp; rivalries, the draw (round-by-round + final squads), the end-of-tournament wrap-up, and an optional daily summary.</div>';
+  h+='<div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:8px"><b style="color:var(--ink)">What posts here:</b> kickoffs, goals, half-time, full-time (with extra time &amp; penalties), knockouts, lead changes &amp; rivalries, the draw (round-by-round + final squads), the end-of-tournament wrap-up, and an optional daily summary. With <code>/notifyme</code> you also get personally @-pinged on your teams&#39; events.</div>';
   h+='<button class="mini" id="discordSetupBtn">⚙ Discord setup — webhook, invite &amp; bot</button>';
   h+='</div>';
   b.innerHTML=h;
@@ -1462,7 +1468,7 @@ function ping(title,body){
 }
 function pingT(t,title,body){ if(prefOn(t)) ping(title,body); }
 function finalResultName(d){
-  const f=(d.fixtures||[]).find(m=>m.stage==='FINAL'&&m.status==='FINISHED'); if(!f) return null;
+  const f=(d.fixtures||[]).find(m=>m.stage==='FINAL'&&isDone(m.status)); if(!f) return null;
   if(f.homeScore!=null&&f.awayScore!=null&&f.homeScore!==f.awayScore) return f.homeScore>f.awayScore?f.home:f.away;
   if(f.winner==='HOME_TEAM') return f.home; if(f.winner==='AWAY_TEAM') return f.away; return null;
 }

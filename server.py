@@ -686,7 +686,7 @@ def build_summary():
     today = time.strftime("%a %d %b", time.gmtime())
     mode = (load_config().get("scoring_mode") or "hybrid")
     mode = mode if mode in ("points", "survival", "hybrid") else "hybrid"
-    label = {"points": "pts", "survival": "teams in", "hybrid": "pts"}[mode]
+    label = {"points": "pts", "survival": "teams in", "hybrid": "total"}[mode]
     lines = ["📊 **WC26 Sweepstake** — %s" % today]
     board = (d.get("leaderboards") or {}).get(mode) or []
     medals = ["🥇", "🥈", "🥉"]
