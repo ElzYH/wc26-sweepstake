@@ -7,9 +7,9 @@ cd "$(dirname "$0")"
 FAIL=0
 say(){ printf '\n=== %s ===\n' "$1"; }
 
-say "Python syntax (ast.parse)"
+say "Python syntax (compile)"
 for f in *.py; do
-  if python3 -c "import ast,sys; ast.parse(open('$f').read())" 2>/tmp/pyerr; then
+  if python3 -c "import sys; compile(open('$f').read(), '$f', 'exec')" 2>/tmp/pyerr; then
     echo "  ok   $f"
   else
     echo "  FAIL $f"; cat /tmp/pyerr; FAIL=1
@@ -53,7 +53,8 @@ need = ["_atomic_write_json", "save_config", "load_config", "compute_assignment"
 missing = [f for f in need if f not in fns]
 # every POST route should be reachable from do_POST source (guards against a str_replace eating a route)
 routes = ['"/api/setup"', '"/api/save_draw"', '"/api/start_draw"', '"/api/settings"',
-          '"/api/redraw"', '"/api/access_log"', '"/api/discord_summary"', '"/api/push_subscribe"']
+          '"/api/redraw"', '"/api/access_log"', '"/api/discord_summary"', '"/api/push_subscribe"',
+          '"/api/export.csv"']
 route_missing = [r for r in routes if r not in src]
 if missing or route_missing:
     print("  FAIL  missing functions: %s | missing routes: %s" % (missing, route_missing)); sys.exit(1)

@@ -334,7 +334,7 @@ def discord_send(text):
 
 # ---------------- Web Push (Path A) — needs pywebpush; guarded so missing lib is harmless ----------------
 PUSH_FILE = "push_subs.json"          # {player: [{"sub": <subscription>, "prefs": {etype: bool}}, ...]}
-EVENT_TYPES = ("goal", "kickoff", "flow", "knockout", "leader", "winner")
+EVENT_TYPES = ("goal", "kickoff", "flow", "knockout", "leader", "winner", "rivalry")
 
 
 def ensure_vapid():
@@ -537,6 +537,13 @@ def notify_changes(old):
                       "📈 New leader: **%s** now tops the table." % nl)
     except Exception:
         pass
+    # head-to-head overtakes (positions below 1st), in the active scoring mode
+    try:
+        for x, y, pos in rivalry_alerts(old, new, _active_mode()):
+            alert_player(x, "rivalry", "Moved up 📊", "You overtook %s for %s." % (y, _ord(pos)),
+                         "📊 **%s** overtakes **%s** for %s." % (x, y, _ord(pos)))
+    except Exception:
+        pass
     # per-match transitions: kickoff, half-time, second half, goals
     try:
         of, nf = _fixture_status(old), _fixture_status(new)
@@ -595,6 +602,9 @@ def notify_changes(old):
             alert_all("winner", "🏆 Champions: %s" % team,
                       "%s won the World Cup%s" % (team, tail),
                       "🏆 **%s** (%s) are World Cup champions%s" % (team, own(owner), tail))
+            wrap = build_wrapup()
+            if wrap:
+                discord_send("\n".join(wrap))      # full recap to the channel, once
     except Exception:
         pass
 
@@ -635,6 +645,113 @@ def build_summary():
     cd = d.get("champion_decided") or {}
     if cd.get("team"):
         lines.append("🏆 Champions: %s (%s)" % (cd["team"], cd.get("owner") or _owner_of(d, cd["team"])))
+    return lines
+
+
+def _hhmm(utc):
+    try:
+        return time.strftime("%H:%M", time.strptime((utc or "")[:16], "%Y-%m-%dT%H:%M"))
+    except Exception:
+        return ""
+
+
+def _ord(n):
+    return "%d%s" % (n, "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th"))
+
+
+def _day_by_player(d):
+    """{player: ["Team vs Opp (HH:MM)", ...]} for each player's teams playing today (UTC), not yet finished."""
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    by = {}
+    for m in (d.get("fixtures") or []):
+        if (m.get("utcDate") or "")[:10] != today or m.get("status") == "FINISHED":
+            continue
+        t = _hhmm(m.get("utcDate"))
+        for own_k, team_k, opp_k in (("homeOwner", "home", "away"), ("awayOwner", "away", "home")):
+            ow = m.get(own_k)
+            if ow and ow not in ("—", "-"):
+                by.setdefault(ow, []).append("%s vs %s%s" % (m.get(team_k), m.get(opp_k), (" (%s)" % t if t else "")))
+    return by
+
+
+def build_day_lines(d):
+    """A 'your teams today' section appended to the daily Discord digest."""
+    by = _day_by_player(d)
+    if not by:
+        return []
+    lines = ["", "📅 **Today's games**"]
+    for pl in sorted(by):
+        lines.append("• %s: %s" % (pl, ", ".join(by[pl])))
+    return lines
+
+
+def push_day_fixtures(d):
+    """Personal morning push to each subscribed player whose teams play today."""
+    for pl, games in _day_by_player(d).items():
+        push_player(pl, "flow", "Your games today ⚽", " · ".join(games[:6]))
+
+
+def rivalry_alerts(old, new, mode):
+    """A player overtaking another in the active leaderboard (positions 2+; the leader change covers the top)."""
+    ob = [p.get("name") for p in (old.get("leaderboards") or {}).get(mode) or []]
+    nb = [p.get("name") for p in (new.get("leaderboards") or {}).get(mode) or []]
+    if len(nb) < 2:
+        return []
+    orank = {n: i for i, n in enumerate(ob)}
+    out = []
+    for i in range(1, len(nb) - 1):                    # skip i==0: 1st place is the leader-change alert
+        x, y = nb[i], nb[i + 1]                         # x is directly above y now
+        if x in orank and y in orank and orank[x] > orank[y]:
+            out.append((x, y, i + 1))                   # x overtook y, claiming (i+1)th
+    return out[:3]
+
+
+def _third_place(d):
+    for m in (d.get("fixtures") or []):
+        if m.get("stage") == "THIRD_PLACE" and m.get("status") in ("FINISHED", "AWARDED"):
+            hs, as_ = m.get("homeScore"), m.get("awayScore")
+            if hs is not None and as_ is not None and hs != as_:
+                return m["home"] if hs > as_ else m["away"]
+            w = m.get("winner")
+            if w in ("HOME", "HOME_TEAM"):
+                return m.get("home")
+            if w in ("AWAY", "AWAY_TEAM"):
+                return m.get("away")
+    return None
+
+
+def build_wrapup():
+    """End-of-tournament recap — champion, podium, final table, golden-boot team. Posted once the final is done."""
+    d = _load_tracker()
+    if not d:
+        return []
+    cd = d.get("champion_decided") or {}
+    if not cd.get("team"):
+        return []
+    stats = d.get("stats") or {}
+    mode = _active_mode()
+    lines = ["🏁 **WC26 — that's a wrap!**",
+             "🏆 Champions: **%s** (%s)" % (cd["team"], cd.get("owner") or _owner_of(d, cd["team"]))]
+    if cd.get("runnerUp"):
+        lines.append("🥈 Runners-up: %s (%s)" % (cd["runnerUp"], _owner_of(d, cd["runnerUp"])))
+    third = _third_place(d)
+    if third:
+        lines.append("🥉 Third place: %s (%s)" % (third, _owner_of(d, third)))
+    board = (d.get("leaderboards") or {}).get(mode) or []
+    if board:
+        lbl = {"points": "Points", "survival": "Survival", "hybrid": "Both"}.get(mode, "Both")
+        lines.append("")
+        lines.append("**Final table — %s**" % lbl)
+        medals = ["🥇", "🥈", "🥉"]
+        for i, p in enumerate(board[:3]):
+            lines.append("%s %s — %s" % (medals[i], p.get("name", "?"), p.get("score", 0)))
+        if len(board) > 3:
+            lines.append("…and %d more" % (len(board) - 3))
+    if stats.get("top_team"):
+        lines.append("⚽ Golden-boot team: %s (%s) — %s goals"
+                     % (stats["top_team"], _owner_of(d, stats["top_team"]), stats.get("top_team_goals", 0)))
+    lines.append("📅 %s games · %s goals (%s/game)"
+                 % (stats.get("matches_played", 0), stats.get("goals", 0), stats.get("goals_per_match", 0)))
     return lines
 
 
@@ -841,9 +958,11 @@ def update_now(cfg):
 
 
 def maybe_send_daily_digest(cfg):
-    """Post the summary to Discord once per day at/after the configured UTC hour.
-    Idempotent: a persisted last_digest_date means a restart can't double-post."""
-    if not (cfg.get("digest_enabled") and cfg.get("discord_webhook") and draw_locked()):
+    """Post the summary (+ today's games) to Discord and push each player their fixtures, once per day
+    at/after the configured UTC hour. Idempotent: a persisted last_digest_date stops a restart double-posting."""
+    if not (cfg.get("digest_enabled") and draw_locked()):
+        return
+    if not (cfg.get("discord_webhook") or push_enabled()):
         return
     today = time.strftime("%Y-%m-%d", time.gmtime())
     if cfg.get("last_digest_date") == today:
@@ -854,10 +973,14 @@ def maybe_send_daily_digest(cfg):
         hour = 9
     if time.gmtime().tm_hour < max(0, min(23, hour)):
         return
+    d = _load_tracker()
     lines = build_summary()
     if not lines:
         return
-    discord_send("\n".join(lines))
+    if cfg.get("discord_webhook"):
+        discord_send("\n".join(lines + build_day_lines(d)))
+    if push_enabled() and d:
+        push_day_fixtures(d)                       # each player gets their own fixtures-today push
     cfg["last_digest_date"] = today
     save_config(cfg)
     log("daily digest sent for", today)
@@ -1013,11 +1136,13 @@ def run_auto_draw(gen, players, mode, t1_cap, leftover, order_gap=1.0, pick_gap=
 
 
 class Handler(BaseHTTPRequestHandler):
-    def _send(self, code, body, ctype="application/json"):
+    def _send(self, code, body, ctype="application/json", extra_headers=None):
         body = body.encode() if isinstance(body, str) else body
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
+        for k, v in (extra_headers or {}).items():
+            self.send_header(k, v)
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "SAMEORIGIN")
         self.send_header("Referrer-Policy", "no-referrer")
@@ -1075,6 +1200,24 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/draw_result": return self._file("draw_result.json")
         if path == "/api/summary":
             return self._send(200, json.dumps({"ok": True, "lines": build_summary()}))
+        if path == "/api/export.csv":
+            d = _load_tracker() or {}
+            import io
+            import csv
+            buf = io.StringIO()
+            w = csv.writer(buf)
+            w.writerow(["Player", "Points", "Survival", "Both", "Teams alive", "Total teams"])
+            for p in (d.get("players") or []):
+                w.writerow([p.get("name"), p.get("points", 0), p.get("survival", 0), p.get("hybrid", 0),
+                            p.get("alive_teams", 0), p.get("total_teams", 0)])
+            w.writerow([])
+            w.writerow(["Player", "Team", "Group", "Status", "Points", "Survival", "Goals for", "Goals against"])
+            for p in (d.get("players") or []):
+                for t in (p.get("teams") or []):
+                    w.writerow([p.get("name"), t.get("name"), t.get("group"), t.get("status"),
+                                t.get("points", 0), t.get("survival", 0), t.get("gf", 0), t.get("ga", 0)])
+            return self._send(200, buf.getvalue(), "text/csv",
+                              extra_headers={"Content-Disposition": "attachment; filename=wc26-sweepstake.csv"})
         if path == "/api/telegram_links":          # OPEN read: players self-subscribe, no admin key
             cfg = load_config()
             players = [(p if isinstance(p, str) else p.get("name", "")) for p in cfg.get("players", [])]

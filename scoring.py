@@ -17,11 +17,14 @@ from datetime import datetime, timezone
 SCORING = {
     "per_goal": 1, "win": 3, "draw": 1, "clean_sheet": 1,
     "stage_bonus": {"LAST_32": 4, "LAST_16": 6, "QUARTER_FINALS": 9,
-                    "SEMI_FINALS": 12, "FINAL": 16, "WINNER": 20},
+                    "SEMI_FINALS": 12, "THIRD_PLACE": 14, "FINAL": 16, "WINNER": 20},
 }
 SURVIVAL_VALUE = {"LAST_32": 18, "LAST_16": 26, "QUARTER_FINALS": 34,
-                  "SEMI_FINALS": 44, "FINAL": 56, "WINNER": 70}
+                  "SEMI_FINALS": 44, "THIRD_PLACE": 50, "FINAL": 56, "WINNER": 70}
 KO_ORDER = ["LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "FINAL"]
+# The 3rd-place play-off isn't on the path to the final — both teams already lost their semi.
+# It only awards a bonus to its WINNER (bronze); it must not affect bracket advancement/elimination.
+BRACKET_KO = ("LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "FINAL")
 # A match counts as decided when FINISHED or AWARDED (a walkover/forfeit — the API gives it a winner + score).
 FINAL_STATUSES = ("FINISHED", "AWARDED")
 
@@ -105,7 +108,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
     reached = defaultdict(set); lost_ko_at = {}
 
     for m in matches:                                  # which KO stages a team appears in
-        if m["stage"] != "GROUP_STAGE":
+        if m["stage"] in BRACKET_KO:
             for s in ("home", "away"):
                 if m[s] in teams:
                     reached[m[s]].add(m["stage"])
@@ -128,7 +131,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
             else:
                 record[team][2] += 1
 
-    for m in [x for x in finished if x["stage"] != "GROUP_STAGE"]:   # KO resolution (pens-aware)
+    for m in [x for x in finished if x["stage"] in BRACKET_KO]:   # KO resolution (pens-aware)
         side = _winner_side(m)
         if side == "HOME":
             loser, champ = m["away"], m["home"]
@@ -140,6 +143,13 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
             lost_ko_at[loser] = m["stage"]
         if m["stage"] == "FINAL" and champ in teams:
             reached[champ].add("WINNER")
+
+    for m in finished:                                 # 3rd-place play-off: only the WINNER earns the bronze bonus
+        if m["stage"] == "THIRD_PLACE":
+            side = _winner_side(m)
+            w = m["home"] if side == "HOME" else (m["away"] if side == "AWAY" else None)
+            if w in teams:
+                reached[w].add("THIRD_PLACE")
 
     for team, stages in reached.items():       # furthest stage reached only (not stacked per round)
         pts[team] += max((SCORING["stage_bonus"].get(st, 0) for st in stages), default=0)

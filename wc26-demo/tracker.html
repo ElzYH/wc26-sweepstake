@@ -33,8 +33,7 @@
   .dot-live{display:inline-block;width:8px;height:8px;border-radius:50%;background:#39d98a;margin-right:6px;
     animation:pulse 1.6s infinite}
   @keyframes pulse{50%{opacity:.3}}
-  .tabs{display:flex;gap:8px;margin:22px 0 18px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-  .tabs::-webkit-scrollbar{display:none}
+  .tabs{display:flex;gap:8px;margin:22px 0 18px;flex-wrap:wrap}
   .tab{flex:0 0 auto;white-space:nowrap;font-family:'Sora';font-weight:700;font-size:14px;padding:9px 18px;border-radius:999px;cursor:pointer;
     background:#10301f;border:1px solid var(--line);color:var(--ink)}
   .tab.on{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205;border-color:var(--gold)}
@@ -230,6 +229,10 @@
     .statcard{padding:10px 11px}
     .statcard .v{font-size:19px}
     .winrow{gap:7px}
+    .h2hgrid{grid-template-columns:1fr}
+    .h2hmetric{grid-template-columns:1fr 78px 1fr;gap:6px;padding:7px 8px}
+    .h2hmetric .mv{font-size:16px}
+    .lcgrid,.livegrid,.bracket,.grid,.pcards{grid-template-columns:1fr}
     .wcard{padding:12px 5px;text-align:center}
     .wcard .nm{font-size:16px;margin-top:7px}
     .wcard .l{font-size:9px;line-height:1.2}
@@ -277,7 +280,8 @@
     <p><b>Fixtures:</b> the bar under each match is the win chance — home / draw / away — from team strength, shifting toward the leader once a game is in-play.</p>
     <p><b>Odds &amp; stats:</b> the win bars are your live chance of owning the champion (from bookmaker prices, updating as teams go out). The simulator there estimates your odds of winning on Points, Survival or Both.</p>
     <p><b>📋 Summary:</b> the quick digest at the top of Overview — leaders, teams left, top team and goals. The same digest can be posted to Discord from Settings.</p>
-    <p><b>🔔 Get alerts:</b> tap it in the ⋯ menu, pick your name, and turn on alerts for your teams — goals, kick-offs, half-time, knockouts and lead changes. Tick exactly which of those you want. On iPhone you must first add the site to your Home Screen (Share → Add to Home Screen) and open it from that icon; on a laptop just allow notifications. You can also join the group Discord, where the same alerts post for everyone.</p>
+    <p><b>⬇ Export:</b> <a href="/api/export.csv" style="color:var(--gold)">download the standings as a CSV</a> — open it in Excel/Sheets or print it for the group.</p>
+    <p><b>🔔 Get alerts:</b> tap it in the ⋯ menu, pick your name, and turn on alerts for your teams — goals, kick-offs, half-time, knockouts, lead changes and rivalries (when you overtake another player). Tick exactly which of those you want. If the daily summary is on, you'll also get your fixtures for the day each morning. On iPhone you must first add the site to your Home Screen (Share → Add to Home Screen) and open it from that icon; on a laptop just allow notifications. You can also join the group Discord, where the same alerts post for everyone.</p>
     <p><b>Discord bot:</b> in the group server, type <code>/</code> to pull live data — <code>/leaderboard</code>, <code>/summary</code>, <code>/odds</code>, <code>/fixtures</code>, <code>/myteams</code>, <code>/help</code>. It's read-only; nobody can change the draw from Discord.</p>
     <p><b>The draw — Fair vs Weighted:</b> Fair spreads the strongest teams evenly so everyone gets a balanced mix (within each strength band it's still random, so it's fair but not predictable). Weighted is luck-of-the-draw — a bigger team gives better odds but you might land several strong or several weak ones. On the Reveal page, <b>Run draw on the server</b> does the draw on the server and keeps going even if you close the tab — everyone can watch it live.</p>
   </div>
@@ -1273,7 +1277,7 @@ function renderAlerts(){
     if(localStorage.getItem('wc26_push_on')==='1') await pushUpdatePrefs();
   });
 }
-const EVENT_LABELS=[['goal','Goals ⚽'],['kickoff','Kick-offs 🔵'],['flow','Half-time & 2nd half ⏱️'],['knockout','Knockouts ❌'],['leader','Lead changes 📈'],['winner','Champion 🏆']];
+const EVENT_LABELS=[['goal','Goals ⚽'],['kickoff','Kick-offs 🔵'],['flow','Half-time & 2nd half ⏱️'],['knockout','Knockouts ❌'],['leader','Lead changes 📈'],['rivalry','Rivalries 📊'],['winner','Champion 🏆']];
 function getPrefs(){ try{ return JSON.parse(localStorage.getItem('wc26_prefs')||'{}'); }catch(e){ return {}; } }
 function setPrefs(p){ localStorage.setItem('wc26_prefs', JSON.stringify(p)); }
 function prefOn(t){ return getPrefs()[t]!==false; }   // default on
@@ -1410,7 +1414,7 @@ document.getElementById('setImportFile').onchange=async(ev)=>{
 };
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(function(){}); }
 load();
-setInterval(load,60000);                       // auto-refresh every 60s
+setInterval(load,2500);                       // auto-refresh every 60s
 document.getElementById('auto').innerHTML='<span class="dot-live"></span>auto-refresh on';
 
 window.addEventListener('pageshow',function(e){ if(e.persisted) location.reload(); });

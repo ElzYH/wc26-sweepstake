@@ -199,6 +199,61 @@ elif "120" not in _champ_msgs[0]:
 else:
     print("[champion-alert] champion notification fires with finishing score OK")
 
+# head-to-head rivalry: overtaking another player (position 2+) fires an alert naming both + the new place
+_sent.clear()
+_lo = {"hybrid": [{"name": "A", "score": 50, "alive_teams": 3, "total_teams": 9},
+                  {"name": "B", "score": 40, "alive_teams": 3, "total_teams": 9},
+                  {"name": "C", "score": 30, "alive_teams": 3, "total_teams": 9}], "points": [], "survival": []}
+_ln = {"hybrid": [{"name": "A", "score": 50, "alive_teams": 3, "total_teams": 9},
+                  {"name": "C", "score": 45, "alive_teams": 3, "total_teams": 9},
+                  {"name": "B", "score": 42, "alive_teams": 3, "total_teams": 9}], "points": [], "survival": []}
+_oldr = {"stats": {"matches_played": 10}, "fixtures": [], "leaderboards": _lo, "players": []}
+_newr = {"stats": {"matches_played": 10}, "fixtures": [], "leaderboards": _ln, "players": []}
+json.dump(_newr, open(os.path.join(D, "tracker_data.json"), "w"))
+server.notify_changes(_oldr)
+_riv = [s for s in _sent if "overtakes" in s]
+if not _riv:
+    fails.append(("rivalry", "no overtake alert fired"))
+elif not ("C" in _riv[0] and "B" in _riv[0] and "2nd" in _riv[0]):
+    fails.append(("rivalry", "overtake alert wrong: %r" % _riv[0]))
+else:
+    print("[rivalry] overtake alert fires (C overtakes B for 2nd) OK")
+
+# 'your day' digest: today's fixtures grouped per player
+_today = time.strftime("%Y-%m-%dT15:00:00Z", time.gmtime())
+_dayd = {"fixtures": [{"utcDate": _today, "status": "TIMED", "stage": "GROUP_STAGE",
+                       "home": "Brazil", "away": "Spain", "homeOwner": "Erol", "awayOwner": "James"},
+                      {"utcDate": "2026-01-01T15:00:00Z", "status": "TIMED", "stage": "GROUP_STAGE",
+                       "home": "Japan", "away": "Ghana", "homeOwner": "Erol", "awayOwner": "James"}]}
+_by = server._day_by_player(_dayd)
+_lines = server.build_day_lines(_dayd)
+if not (_by.get("Erol") == ["Brazil vs Spain (15:00)"] and _by.get("James") == ["Spain vs Brazil (15:00)"]):
+    fails.append(("day-digest", "today grouping wrong: %r" % _by))
+elif not any("Today's games" in l for l in _lines):
+    fails.append(("day-digest", "no today section: %r" % _lines))
+else:
+    print("[day-digest] today's games grouped per player (excludes other days) OK")
+
+# end-of-tournament wrap-up: champion + podium + final table once the final is done
+_wd = {"stats": {"matches_played": 104, "goals": 250, "goals_per_match": 2.4, "top_team": "Brazil",
+                 "top_team_goals": 16, "teams_remaining": 1},
+       "leaderboards": {"hybrid": [{"name": "Erol", "score": 120, "alive_teams": 0, "total_teams": 9},
+                                   {"name": "James", "score": 110, "alive_teams": 0, "total_teams": 9},
+                                   {"name": "Louis", "score": 90, "alive_teams": 0, "total_teams": 9}],
+                        "points": [], "survival": []},
+       "champion_decided": {"team": "Brazil", "owner": "Erol", "runnerUp": "Spain"},
+       "fixtures": [{"stage": "THIRD_PLACE", "status": "FINISHED", "home": "France", "away": "Germany",
+                     "homeScore": 2, "awayScore": 1, "winner": "HOME"}],
+       "players": [{"name": "Erol", "teams": [{"name": "Brazil"}]}]}
+json.dump(_wd, open(os.path.join(D, "tracker_data.json"), "w"))
+_wt = "\n".join(server.build_wrapup())
+_need = ["Brazil", "Spain", "France", "Final table", "Golden-boot"]
+_miss = [w for w in _need if w not in _wt]
+if _miss:
+    fails.append(("wrapup", "missing from recap: %s" % _miss))
+else:
+    print("[wrapup] recap has champion + runner-up + 3rd + final table + golden boot OK")
+
 shutil.rmtree(D, ignore_errors=True)
 if fails:
     print("\nFAILED:", fails)

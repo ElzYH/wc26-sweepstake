@@ -148,6 +148,19 @@ def run():
         check("shootout winner is champion", (d.get("champion_decided") or {}).get("team") == "Brazil",
               d.get("champion_decided"))
 
+        # 11) THIRD-PLACE PLAY-OFF: only the winner gets the bronze bonus; both stay 'out at the semi'
+        tp = [M(20, "Brazil", "Japan", "FINISHED", stage="SEMI_FINALS", hs=1, as_=0, winner="HOME"),
+              M(21, "Spain", "Ghana", "FINISHED", stage="SEMI_FINALS", hs=1, as_=0, winner="HOME"),
+              M(22, "Japan", "Ghana", "FINISHED", stage="THIRD_PLACE", hs=2, as_=1, winner="HOME")]
+        d = run_compute(tp, tmp)
+        jp = next(t for p in d["players"] for t in p["teams"] if t["name"] == "Japan")
+        gh = next(t for p in d["players"] for t in p["teams"] if t["name"] == "Ghana")
+        check("3rd-place winner earns the bronze survival value (50 > semi 44)", jp["survival"] == 50, jp["survival"])
+        check("4th place stays at the semi value (44)", gh["survival"] == 44, gh["survival"])
+        check("both semi losers stay 'out' (the play-off doesn't revive anyone)",
+              team_status(d, "Japan") == "out" and team_status(d, "Ghana") == "out",
+              (team_status(d, "Japan"), team_status(d, "Ghana")))
+
         # 10) normalizer turns a raw AWARDED API match into a scored result end-to-end
         api = [{"id": 1, "stage": "GROUP_STAGE", "group": "GROUP_A", "utcDate": "2026-06-11T18:00:00Z",
                 "status": "AWARDED", "homeTeam": {"name": "Brazil"}, "awayTeam": {"name": "Japan"},

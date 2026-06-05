@@ -143,6 +143,10 @@ def run():
         st, body = req("GET", "/manifest.webmanifest")
         check("manifest served (200)", st == 200 and "{" in body, str(st))
 
+        # CSV export: public, downloadable, has the standings header
+        st, body = req("GET", "/api/export.csv")
+        check("CSV export 200 + has header row", st == 200 and "Player,Points,Survival" in body, body[:80])
+
         # access log: admin-only, returns a summary, leaks no secrets; records real page views
         st, _ = req("POST", "/api/access_log", {"admin_key": "nope"})
         check("access_log needs admin key (403)", st == 403, str(st))
