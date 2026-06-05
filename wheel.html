@@ -150,7 +150,7 @@ async function init(){
   let st={}, offline=false;
   try{
     const [tj,s]=await Promise.all([fetch('teams.json').then(r=>r.json()),fetch('/api/status').then(r=>r.json())]);
-    teams=tj.teams.map(t=>({name:t.name,tier:t.tier,group:t.group,composite:t.composite}));
+    teams=tj.teams.map(t=>({name:t.name,tier:t.tier,group:t.group,composite:t.composite,implied_prob:t.implied_prob}));
     st=s; players=(s.players&&s.players.length)?s.players:SAMPLE.players;
     leftover=s.leftover||'pool'; mode=s.draw_mode||'weighted'; maxPer=s.max_per_player||null;
   }catch(e){ offline=true; teams=SAMPLE.teams;players=SAMPLE.players;leftover='pool';mode='weighted';maxPer=null; }
@@ -208,19 +208,32 @@ function remainingTeams(){ return wheelOrder.filter(t=>!drawn.has(t.name)); }
 function teamSlices(list){ const wt=t=>(mode==='weighted'?WEIGHT[t.tier]:1); const tot=list.reduce((s,t)=>s+wt(t),0)||1; let a=-90; const m=new Map();
   for(const t of list){ const span=wt(t)/tot*360; m.set(t.name,{a0:a,span,center:a+span/2}); a+=span; } return m; }
 
-/* fair = balanced snake over the strongest inPlay teams, shuffled within each tier band */
+/* fair = guaranteed favourite in round 1, then a loose draw (better teams just more likely); re-drawn until nobody is below a fair floor */
 function computeFair(){
-  const n=order.length, J=0.5;        // first band (top n teams) is strictly fair so everyone gets an elite team; jitter ramps in for weaker teams so later bands aren't predictable
+  const n=order.length, J=0.5;
   const ranked=teams.slice().sort((a,b)=>b.composite-a.composite);
-  const Nr=Math.max(1,ranked.length-1);
-  const pool=ranked.map((t,i)=>({t,k:t.composite*(1+(Math.random()*2-1)*(i<n?0:J*((i-n)/Math.max(1,Nr-n))))})).sort((a,b)=>b.k-a.k).slice(0,inPlay).map(x=>x.t);
-  fairAssign={}; order.forEach(p=>fairAssign[p]=[]);
-  for(let pot=0;pot<perPlayer;pot++){
-    const slice=pool.slice(pot*n,pot*n+n);
-    for(let i=slice.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[slice[i],slice[j]]=[slice[j],slice[i]];}  // every team in the band equally likely for any player
-    const seq= pot%2? order.slice().reverse() : order;
-    seq.forEach((p,i)=> fairAssign[p].push(slice[i]));
+  let ti=teams.reduce((s,t)=>s+(t.implied_prob||0),0);
+  const share={};
+  if(ti>0){ teams.forEach(t=>share[t.name]=100*(t.implied_prob||0)/ti); }
+  else { const tc=teams.reduce((s,t)=>s+(t.composite||0),0)||1; teams.forEach(t=>share[t.name]=100*(t.composite||0)/tc); }
+  const floorTarget=0.75*(100/n);   // 75% of an equal champion-odds share -> 15% on 5 players
+  const shuffle=arr=>{for(let i=arr.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;};
+  function oneDraw(){
+    const top=shuffle(ranked.slice(0,n));                                  // favourites: strict first band, one each
+    const rest=ranked.slice(n).map(t=>({t,k:t.composite*(1+(Math.random()*2-1)*J)})).sort((a,b)=>b.k-a.k).map(x=>x.t);
+    const bands=[top]; for(let i=0;i<perPlayer-1;i++) bands.push(rest.slice(i*n,i*n+n));
+    const a={}; order.forEach(p=>a[p]=[]);
+    bands.forEach((band,bi)=>{ const b=shuffle(band.slice()); const seq= bi%2? order.slice().reverse() : order; seq.forEach((p,i)=>a[p].push(b[i])); });
+    return a;
   }
+  let best=null, bestFloor=-1;
+  for(let attempt=0;attempt<400;attempt++){
+    const a=oneDraw();
+    let fl=Infinity; order.forEach(p=>{const s=a[p].reduce((x,t)=>x+(share[t.name]||0),0); if(s<fl)fl=s;});
+    if(fl>bestFloor){ best=a; bestFloor=fl; }
+    if(fl>=floorTarget) break;
+  }
+  fairAssign=best;
 }
 function pickWeighted(arr){ const tot=arr.reduce((s,t)=>s+WEIGHT[t.tier],0); let r=Math.random()*tot;
   for(const t of arr){ r-=WEIGHT[t.tier]; if(r<=0)return t; } return arr[arr.length-1]; }

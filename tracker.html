@@ -558,7 +558,7 @@ function render(d){
     ? 'Level on teams still in? The higher total survival value ranks first.'
     : 'Level on '+unit.toLowerCase()+'? Most teams still in breaks the tie.';
   document.getElementById('lbBody').innerHTML=board.map((p,i)=>{
-    const tied=(i>0&&board[i-1].score===p.score)||(i<board.length-1&&board[i+1].score===p.score);
+    const tied=lbm!=='survival' && ((i>0&&board[i-1].score===p.score)||(i<board.length-1&&board[i+1].score===p.score));
     return `
     <div class="row ${i===0&&p.score>0?'lead':''}">
       <div class="rank">${i+1}</div>

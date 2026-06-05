@@ -132,23 +132,46 @@ elif not server.load_config().get("last_digest_date"):
 else:
     print("[digest] posts once per day, idempotent OK")
 
-# fair draw: the first band is always the true top-n (everyone gets an elite team), squads complete + unique
+# fair draw: round-1 favourite guaranteed (band 1 = true top-n), squads complete + unique, and the
+# champion-odds floor holds (no player below 75% of an equal share -> 15% on 5 players)
 _top = set(t["name"] for t in sorted(TEAMS.values(), key=lambda t: -t["composite"])[:len(PLAYERS)])
 _per = len(TEAMS) // len(PLAYERS)
-_fair = "ok"
-for _ in range(150):
+_ti = sum(t.get("implied_prob", 0) for t in TEAMS.values()) or 1.0
+_share = {t["name"]: 100.0 * t.get("implied_prob", 0) / _ti for t in TEAMS.values()}
+_floor_target = 0.75 * (100.0 / len(PLAYERS))
+_fair = "ok"; _worst = 100.0
+for _ in range(200):
     _a, _ = server.compute_assignment("fair", PLAYERS)
     _all = [t["name"] for p in PLAYERS for t in _a[p]]
     if set(_a[p][0]["name"] for p in PLAYERS) != _top:
-        _fair = "first band not the strict top-%d" % len(PLAYERS); break
+        _fair = "round-1 favourite not guaranteed (band 1 != top-%d)" % len(PLAYERS); break
     if len(_all) != len(set(_all)):
         _fair = "duplicate team in draw"; break
     if any(len(_a[p]) != _per for p in PLAYERS):
         _fair = "uneven squad sizes"; break
+    _mn = min(sum(_share.get(t["name"], 0) for t in _a[p]) for p in PLAYERS)
+    _worst = min(_worst, _mn)
+    if _mn < _floor_target - 0.01:
+        _fair = "floor breached: %.1f%% < %.1f%%" % (_mn, _floor_target); break
 if _fair != "ok":
     fails.append(("fair-draw", _fair))
 else:
-    print("[fair-draw] first band always the top %d, squads unique + even OK" % len(PLAYERS))
+    print("[fair-draw] band 1 = favourites, unique+even, floor held (worst %.1f%% >= %.1f%%) OK" % (_worst, _floor_target))
+
+# summary: medal lines must surface the real leaderboard score (regression: was reading wrong key -> always 0)
+json.dump({"stats": {"matches_played": 104, "goals": 303, "goals_per_match": 2.91, "teams_remaining": 1},
+           "leaderboards": {"hybrid": [{"name": "Zed", "score": 42, "alive_teams": 1, "total_teams": 9}]},
+           "champion_decided": {"team": "Argentina", "owner": "Zed"}, "teams": []},
+          open(os.path.join(D, "tracker_data.json"), "w"))
+_sm = server.build_summary()
+_line = next((l for l in _sm if l.startswith("🥇")), "")
+_champ = next((l for l in _sm if l.startswith("🏆")), "")
+if "42" not in _line or "Zed" not in _line:
+    fails.append(("summary", "top score 42 not surfaced in medal line %r" % _line))
+elif "Argentina" not in _champ:
+    fails.append(("summary", "champion not surfaced: %r" % _champ))
+else:
+    print("[summary] leaderboard score (key='score') + champion line surface OK")
 
 shutil.rmtree(D, ignore_errors=True)
 if fails:

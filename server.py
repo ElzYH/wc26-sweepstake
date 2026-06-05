@@ -575,12 +575,12 @@ def build_summary():
     today = time.strftime("%a %d %b", time.gmtime())
     mode = (load_config().get("scoring_mode") or "hybrid")
     mode = mode if mode in ("points", "survival", "hybrid") else "hybrid"
-    label = {"points": "pts", "survival": "survival", "hybrid": "pts"}[mode]
+    label = {"points": "pts", "survival": "teams in", "hybrid": "pts"}[mode]
     lines = ["📊 **WC26 Sweepstake** — %s" % today]
     board = (d.get("leaderboards") or {}).get(mode) or []
     medals = ["🥇", "🥈", "🥉"]
     for i, p in enumerate(board[:3]):
-        lines.append("%s %s — %s %s" % (medals[i], p.get("name", "?"), p.get(mode, 0), label))
+        lines.append("%s %s — %s %s" % (medals[i], p.get("name", "?"), p.get("score", 0), label))
     if stats.get("teams_remaining") is not None:
         lines.append("🛡️ Teams still in: %s" % stats["teams_remaining"])
     if stats.get("top_team"):
@@ -588,10 +588,9 @@ def build_summary():
     if stats.get("top_scorer_player"):
         lines.append("⚽ Most goals: %s (%s)" % (stats["top_scorer_player"], stats.get("top_scorer_player_goals", 0)))
     lines.append("📅 Played: %s · ⚽ %s goals (%s/game)" % (mp, stats.get("goals", 0), stats.get("goals_per_match", 0)))
-    if (stats.get("teams_remaining") or 0) <= 1:
-        champ = next((t for t in (d.get("teams") or []) if t.get("status") == "alive"), None)
-        if champ:
-            lines.append("🏆 Champions: %s (%s)" % (champ.get("name"), _owner_of(d, champ.get("name"))))
+    cd = d.get("champion_decided") or {}
+    if cd.get("team"):
+        lines.append("🏆 Champions: %s (%s)" % (cd["team"], cd.get("owner") or _owner_of(d, cd["team"])))
     return lines
 
 
@@ -849,23 +848,42 @@ def compute_assignment(mode, players, t1_cap=None, leftover="pool", seed=None):
     in_play_n = per_player * n
     rng = random.Random(seed)
     if mode == "fair":
-        J = 0.5                                             # MAX jitter, applied to the weakest teams; the best teams barely move
+        # First band (top n) is guaranteed strict — everyone gets a favourite. After that the draw is loose
+        # (better teams just more likely, like the original). We then reject any draw that leaves a player
+        # below a fair floor of champion odds and re-draw, so nobody ends up with a hopeless squad.
+        J = 0.5
         ranked = sorted(teams, key=lambda t: -t.get("composite", 0))
-        Nr = max(1, len(ranked) - 1)
-        keyed = []
-        for i, t in enumerate(ranked):
-            scale = 0.0 if i < n else J * ((i - n) / max(1, Nr - n))   # first band (top n) strictly fair; jitter ramps in after
-            keyed.append((t.get("composite", 0) * (1 + (rng.random() * 2 - 1) * scale), t))
-        keyed.sort(key=lambda x: -x[0])
-        pool = [t for _, t in keyed][:in_play_n]
-        assign = {p: [] for p in players}
-        for pot in range(per_player):
-            band = pool[pot * n:pot * n + n][:]
-            rng.shuffle(band)                               # every team in the band equally likely
-            seq = players if pot % 2 == 0 else players[::-1]
-            for i, p in enumerate(seq):
-                assign[p].append(_team_brief(band[i]))
-        return assign, []
+        _ti = sum(t.get("implied_prob", 0) for t in teams)
+        if _ti > 0:
+            share = {t["name"]: 100.0 * t.get("implied_prob", 0) / _ti for t in teams}   # pre-tournament champion odds %
+        else:
+            _tc = sum(t.get("composite", 0) for t in teams) or 1.0
+            share = {t["name"]: 100.0 * t.get("composite", 0) / _tc for t in teams}
+        floor_target = 0.75 * (100.0 / n)                   # 75% of an equal share -> 15% on 5 players
+
+        def _one_draw():
+            top = ranked[:n][:]                             # the favourites: strict first band, one guaranteed per player
+            rng.shuffle(top)
+            rest = sorted(ranked[n:], key=lambda t: -(t.get("composite", 0) * (1 + (rng.random() * 2 - 1) * J)))
+            bands = [top] + [rest[i * n:(i + 1) * n] for i in range(per_player - 1)]
+            a = {p: [] for p in players}
+            for b_idx, band in enumerate(bands):
+                band = band[:]
+                rng.shuffle(band)
+                seq = players if b_idx % 2 == 0 else players[::-1]
+                for i, p in enumerate(seq):
+                    a[p].append(_team_brief(band[i]))
+            return a
+
+        best, best_floor = None, -1.0
+        for _ in range(400):
+            a = _one_draw()
+            fl = min(sum(share.get(t["name"], 0) for t in a[p]) for p in players)
+            if fl > best_floor:
+                best, best_floor = a, fl
+            if fl >= floor_target:
+                break
+        return best, []
     d = draw_mod.Draw(mode=("weighted" if str(mode).startswith("weighted") else "snake"),
                       leftover_policy=leftover, t1_cap=t1_cap, seed=seed)
     d.add_players(players)
