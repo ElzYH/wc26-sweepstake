@@ -140,7 +140,7 @@ Same panel → **Generate passcodes** → one code per player appears, e.g.
 
 ## 3) Players — how to bet (share this with the group)
 
-You bet the **points you've already earned** from finished games. Win at the odds shown and they're added to your total; lose and the stake's gone. No real money — it's all sweepstake points.
+**Everyone starts with 5 free betting points**, so you can bet from the very first game — before your teams have earned anything. Those 5 are bet-only: **only winnings ever reach the leaderboard**, and losing them costs you nothing. After that you bet the **points you've already earned** from finished games. Win at the odds shown and the winnings are added to your total; lose and the stake's gone. No real money — it's all sweepstake points.
 
 ### On the website (simplest)
 1. Go to the tracker → **Bets** tab.
@@ -158,8 +158,9 @@ You link your Discord account once, then you never type your code in chat:
    - *Or* self-link: on the website Bets tab, type your passcode, tap **Connect Discord**, it shows a one-time code, then run `/linkdiscord code:THATCODE` in a DM to the bot.
 
 **Once linked, the betting commands:**
-- `/games` — upcoming games + odds
+- `/games` — upcoming games + odds (and a 🎁 note when a free bet is on offer)
 - `/bet team:<name> pick:<home/draw/away> stake:<n>` — preview; add `confirm:true` to place
+- `/claim team:<name>` — claim today's **free 5-point bet** when one's on offer (add `confirm:true` to place; win = all profit, a loss costs nothing)
 - `/mybets` — your open + settled bets
 - `/points` — how many points you have to bet + your current max bet
 - `/allbets` — everyone's open bets
@@ -168,8 +169,11 @@ You link your Discord account once, then you never type your code in chat:
 - `/unlink` — disconnect this Discord (if you linked the wrong player)
 
 ### The rules (so nobody's surprised)
+- **5 free starting points:** everyone begins with 5 betting points so you can bet from the first game. Bet-only — **only winnings reach the leaderboard**, losing them costs nothing.
+- **100-point staking budget per round:** each round you can stake up to 100 points total. Lose and it drops (bet 20, lose → 80 left); win and it tops back up, **never above 100**. Spend it all → locked out of betting until the next round. The budget **resets at the group-stage midpoint** and again at **the start of each knockout round**.
+- **Free bets (🎁):** drop the day before the first game and on a few match-days. A free 5-point bet — **win and the winnings are yours; lose and it costs nothing**. One per person per drop. Claim on the Bets tab or with `/claim` in Discord.
 - Bet **before kick-off** only; odds **lock** when you place; **no cash-out**.
-- **Max stake rises each round:** Group 30 → R32 35 → R16 40 → QF 45 → SF 50 → **Final 65**.
+- **Max stake per single game rises each round:** Group 30 → R32 35 → R16 40 → QF 45 → SF 50 → **Final 65** (the round dates show on the Bets tab). This is on top of the 100-point budget — both limits apply.
 - **Open-stake limit:** the total you have on open bets at once can't beat the current max — it frees up as bets settle.
 - Up to **8** open bets. **No cap on winnings by default** — the organiser can optionally set a max return per bet.
 - **Accumulator:** up to **3 legs by default** (the organiser can change this); all must win, and **if one leg loses the whole acca pays nothing**; a postponed leg drops out and it pays on the rest.

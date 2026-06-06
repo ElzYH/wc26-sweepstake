@@ -547,6 +547,38 @@ def _current_round_max_stake():
     return max(caps) if caps else wager_mod.MAX_STAKE
 
 
+# Round order + friendly labels for the betting explainer. WC2026 schedule for reference (UTC, subject to FIFA):
+#   Group stage 11–27 Jun · Round of 32 28 Jun–3 Jul · Round of 16 4–7 Jul · Quarter-finals 9–11 Jul
+#   Semi-finals 14–15 Jul · Third place 18 Jul · Final 19 Jul. The per-game cap rises each round (30→35→40→45→50→65),
+#   and the 100-pt staking budget resets at the group midpoint and again at the start of each of these rounds.
+_STAGE_LABELS = [("GROUP_STAGE", "Group stage"), ("LAST_32", "Round of 32"), ("LAST_16", "Round of 16"),
+                 ("QUARTER_FINALS", "Quarter-finals"), ("SEMI_FINALS", "Semi-finals"),
+                 ("THIRD_PLACE", "Third place"), ("FINAL", "Final")]
+
+
+def _stage_schedule():
+    """For the betting explainer: each round's per-game max stake and when that round starts (from the loaded fixtures)."""
+    if wager_mod is None:
+        return []
+    try:
+        ms = json.load(open("results.json")).get("matches", [])
+    except Exception:
+        ms = []
+    earliest = {}
+    for m in ms:
+        st = m.get("stage") or "GROUP_STAGE"
+        t = wager_mod._utc_ts(m.get("utcDate") or "")
+        if t is None:
+            continue
+        earliest[st] = min(earliest.get(st, t), t)
+    out = []
+    for st, label in _STAGE_LABELS:
+        d = earliest.get(st)
+        out.append({"stage": st, "label": label, "cap": wager_mod.stage_max_stake(st),
+                    "from": (time.strftime("%d %b", time.gmtime(d)).lstrip("0") if d else None)})
+    return out
+
+
 def _discord_err(e):
     """Turn a urllib error from a Discord call into a human message (esp. 429 rate limits)."""
     try:
@@ -622,8 +654,12 @@ def _announce_bet(player, w):
             player, w["stake"], len(w["legs"]), picks, w["return"])
     else:
         pick = w["home"] if w["selection"] == "HOME" else (w["away"] if w["selection"] == "AWAY" else "a draw")
-        line = "🎲 %s staked %g on %s (%s v %s) at %s — returns %g if it wins." % (
-            player, w["stake"], pick, w["home"], w["away"], w["frac"], w["return"])
+        if w.get("free"):
+            line = "🎁 %s claimed a free bet on %s (%s v %s) at %s — returns %g if it wins (a loss costs nothing)." % (
+                player, pick, w["home"], w["away"], w["frac"], w["return"])
+        else:
+            line = "🎲 %s staked %g on %s (%s v %s) at %s — returns %g if it wins." % (
+                player, w["stake"], pick, w["home"], w["away"], w["frac"], w["return"])
     try:
         discord_send(line)
     except Exception as e:
@@ -1244,7 +1280,7 @@ def discord_command(name, opts, uid=None):
             out.append("%s%s — %s @ %s · %g → %g" % ("🔴 " if isl else "", w["player"], pick, w["frac"],
                                                        w["stake"], w["return"]))
         return "\n".join(out)
-    if name in ("games", "bet", "mybets"):
+    if name in ("games", "bet", "mybets", "claim"):
         cfg = load_config()
         if not cfg.get("wagering_enabled") or wager_mod is None:
             return "Betting isn't switched on for this sweepstake."
@@ -1256,6 +1292,8 @@ def discord_command(name, opts, uid=None):
             if not fx:
                 return "No upcoming games to bet on right now — check back before kick-off."
             rows = ["**Upcoming games & odds**", "_Bet with_ `/bet team:<name> stake:<n>` _(your team to win), or add_ `pick:draw`_._"]
+            if _open_free_drop():
+                rows.append("🎁 _A **free 5-point bet** is on offer right now — claim it with_ `/claim team:<name>` _(win and it's all profit; a loss costs nothing)._")
             for m in fx[:12]:
                 ko = m.get("stage") and m["stage"] != "GROUP_STAGE"
                 o = m["odds"]
@@ -1282,6 +1320,71 @@ def discord_command(name, opts, uid=None):
                 rows.append("%s %s v %s — %s @ %s · %s"
                             % (tag.get(w["status"], ""), w["home"], w["away"], pick, w["frac"], out))
             return "\n".join(rows)
+        # ---- /claim (today's free bet) ----
+        if name == "claim":
+            if wager_mod.betting_locked(d):
+                return "Betting is closed — the tournament is over."
+            links = load_config().get("wager_links"); links = links if isinstance(links, dict) else {}
+            if links.get(str(uid)) != player:
+                return ("🔒 Link your Discord for betting first: open the tracker → **💷 Bets**, enter your passcode, "
+                        "tap **Connect Discord**, then `/linkdiscord code:<the code>`. Then `/claim` works here.")
+            drop = _open_free_drop()
+            if not drop:
+                return "No free bet on offer right now — they drop the day before the first game and on a few match-days. I'll post here the moment one's live."
+            cfgc = load_config()
+            claims = cfgc.get("free_bet_claims") if isinstance(cfgc.get("free_bet_claims"), dict) else {}
+            taken = claims.get(drop["id"]) if isinstance(claims.get(drop["id"]), dict) else {}
+            if player in taken:
+                return "You've already used today's free bet 🎁 — the next one drops another day."
+            team = str(opts.get("team", "")).strip()
+            pick = str(opts.get("pick", "")).strip().lower() or "win"
+            confirm = bool(opts.get("confirm"))
+            if pick in ("w", "winner"):
+                pick = "win"
+            if pick not in ("win", "draw"):
+                return "Pick **win** (your team to win) or **draw**."
+            tl = team.lower()
+            m = next((x for x in fx if tl in (x["home"].lower(), x["away"].lower())), None) \
+                or next((x for x in fx if tl and (tl in x["home"].lower() or tl in x["away"].lower())), None)
+            if not m:
+                return "No upcoming game found for **%s**. Use `/games` to see what's on, then `/claim team:<name>`." % (team or "?")
+            team_is_home = tl in m["home"].lower()
+            selection = "DRAW" if pick == "draw" else ("HOME" if team_is_home else "AWAY")
+            if selection == "DRAW" and m.get("stage") and m["stage"] != "GROUP_STAGE":
+                return "Knockout games can't end in a draw — back **%s** or **%s** to win." % (m["home"], m["away"])
+            o = m["odds"][selection]
+            ret = wager_mod.potential_return(wager_mod.FREE_BET_STAKE, o["num"], o["den"])
+            who = ("a draw" if selection == "DRAW" else "%s to win" % (m["home"] if selection == "HOME" else m["away"]))
+            if not confirm:
+                return ("🎁 **Free bet preview** — %s v %s\n"
+                        "Backing **%s** at **%s** with your FREE **%g** points.\n"
+                        "Returns **%g** if it wins — that's **all profit**, and a loss costs you nothing.\n"
+                        "Run `/claim team:%s%s confirm: True` to place it. One free bet per drop."
+                        % (m["home"], m["away"], who, o["frac"], wager_mod.FREE_BET_STAKE, ret,
+                           team, (" pick:draw" if selection == "DRAW" else "")))
+            try:
+                results = json.load(open("results.json"))
+                teams = {t["name"]: t for t in json.load(open("teams.json"))["teams"]}
+            except Exception:
+                return "Couldn't load the data to place that bet."
+            raw = next((x for x in results.get("matches", []) if wager_mod.match_id(x) == m["matchId"]), None)
+            if raw is None or raw.get("home") not in teams or raw.get("away") not in teams:
+                return "You can only bet once both teams are confirmed."
+            ch = (teams.get(m["home"], {}) or {}).get("composite", 0)
+            ca = (teams.get(m["away"], {}) or {}).get("composite", 0)
+            with _lock:                                  # claim recorded atomically with the wager so nobody double-claims
+                wl = load_wagers()
+                ok, res = wager_mod.place_free(wl, player, raw, selection, ch, ca)
+                if ok:
+                    save_wagers(wl)
+                    taken[player] = res["id"]; claims[drop["id"]] = taken
+                    cfgc["free_bet_claims"] = claims; save_config(cfgc)
+            if ok:
+                update_now(load_config())
+                _announce_bet(player, res)
+                return ("✅ **Free bet placed!** %g on **%s** @ %s — returns **%g** if it wins, and a loss costs you nothing. Good luck! 🎁"
+                        % (res["stake"], who, res["frac"], res["return"]))
+            return "❌ %s" % res
         # ---- /bet ----
         if wager_mod.betting_locked(d):
             return "Betting is closed — the tournament is over."
@@ -1378,6 +1481,7 @@ def discord_command(name, opts, uid=None):
                 "/games - upcoming games + betting odds\n"
                 "/linkdiscord <code> - link your account to bet (code from the tracker's Bets tab)\n"
                 "/bet team:<name> stake:<n> - back your team to win (add pick:draw for a draw; shows payout, points & stake left; add confirm to place). Bets are final\n"
+                "/claim team:<name> - claim today's FREE 5-point bet when one's on offer (win = all profit, a loss costs nothing; add confirm to place)\n"
                 "/mybets - your open and settled bets\n"
                 "/allbets - everyone's open bets right now\n"
                 "/points - how many points you have to bet (and your max bet)\n"
@@ -1549,6 +1653,12 @@ def register_discord_commands():
              {"name": "pick", "description": "Back them to win, or back the draw (default: win)", "type": 3, "required": False,
               "choices": [{"name": "win", "value": "win"}, {"name": "draw", "value": "draw"}]},
              {"name": "confirm", "description": "Set true to actually place the bet", "type": 5, "required": False}]},
+        {"name": "claim", "description": "Claim today's FREE 5-point bet (when one's on offer) — pick a team", "type": 1,
+         "options": [
+             {"name": "team", "description": "The team to put your free bet on", "type": 3, "required": True},
+             {"name": "pick", "description": "Back them to win, or back the draw (default: win)", "type": 3, "required": False,
+              "choices": [{"name": "win", "value": "win"}, {"name": "draw", "value": "draw"}]},
+             {"name": "confirm", "description": "Set true to actually place the free bet", "type": 5, "required": False}]},
         {"name": "mybets", "description": "Your open and settled bets", "type": 1},
         {"name": "linkdiscord", "description": "Link this Discord to your player for betting (code from the website)", "type": 1,
          "options": [{"name": "code", "description": "The code shown on the tracker's Bets tab", "type": 3, "required": True}]},
@@ -1696,8 +1806,9 @@ def _maybe_announce_free_drop(cfg):
     drop = _open_free_drop()
     if not drop or cfg.get("free_bet_announced") == drop["id"]:
         return
-    discord_send("🎁 **Free bet!** Everyone gets a free %d-point bet today — claim it on the tracker's 💷 Bets tab. "
-                 "Win and the points are yours; lose and it costs you nothing. One per person, today only." % wager_mod.FREE_BET_STAKE)
+    discord_send("🎁 **Free bet!** Everyone gets a free %d-point bet today — claim it with `/claim team:<name>` here, "
+                 "or on the tracker's 💷 Bets tab. Win and the points are yours; lose and it costs you nothing. One per person, today only."
+                 % wager_mod.FREE_BET_STAKE)
     cfg["free_bet_announced"] = drop["id"]
     save_config(cfg)
 
@@ -1966,6 +2077,7 @@ class Handler(BaseHTTPRequestHandler):
                               if dr else {"open": False})(_open_free_drop())
                              if (cfg.get("wagering_enabled") and wager_mod is not None) else {"open": False}),
                 "group_mid": (_group_mid_ts() if wager_mod is not None else None),
+                "stage_caps": (_stage_schedule() if wager_mod is not None else None),
                 "wager_caps": (_apply_wager_caps(cfg) or {"min_stake": wager_mod.MIN_STAKE, "max_stake": _current_round_max_stake(),
                                 "base_max_stake": wager_mod.MAX_STAKE, "max_return": wager_mod.MAX_RETURN,
                                 "max_pending": wager_mod.MAX_PENDING, "max_acca_legs": wager_mod.MAX_ACCA_LEGS}
@@ -2012,7 +2124,7 @@ class Handler(BaseHTTPRequestHandler):
                 log("discord command error:", e)
                 content = "Something went wrong building that."
             resp = {"content": (content or "—")[:1900]}
-            if data.get("name") in ("bet", "mybets", "linkdiscord", "mypin", "unlink", "points"):    # private: passcodes, codes, personal bets/points
+            if data.get("name") in ("bet", "claim", "mybets", "linkdiscord", "mypin", "unlink", "points"):    # private: passcodes, codes, personal bets/points
                 resp["flags"] = 64
             return self._send(200, json.dumps({"type": 4, "data": resp}))
         return self._send(200, json.dumps({"type": 4, "data": {"content": "Unsupported interaction."}}))

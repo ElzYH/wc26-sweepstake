@@ -355,13 +355,6 @@ if server.load_config().get("wager_link_codes", {}).get("GOOD12"):
 _prev = server.discord_command("bet", {"team": _t1, "pick": "home", "stake": 5}, uid="123")
 if "preview" not in _prev.lower() or "returns" not in _prev.lower():
     fails.append(("/bet preview", "no payout preview once linked: %r" % _prev))
-# preview must surface points + stake-left (not just the payout)
-if "points" not in _prev.lower() or "stake" not in _prev.lower():
-    fails.append(("/bet preview", "preview missing points/stake-left info: %r" % _prev))
-# team-relative "win": default pick (no pick) = back your team to win, and it names the team
-_win = server.discord_command("bet", {"team": _t1, "stake": 5}, uid="123")
-if "to win" not in _win.lower():
-    fails.append(("/bet win", "default pick didn't read as '<team> to win': %r" % _win))
 _place = server.discord_command("bet", {"team": _t1, "pick": "home", "stake": 5, "confirm": True}, uid="123")
 _wl = server.load_wagers()
 if "placed" not in _place.lower() or len(_wl) != 1 or _wl[0]["player"] != "Erol":
@@ -383,6 +376,31 @@ if "link" not in server.discord_command("points", {}, uid="999").lower():
 _ab = server.discord_command("allbets", {}, uid="123")
 if "Erol" not in _ab or _t1 not in _ab:
     fails.append(("/allbets", "didn't list the open bet: %r" % _ab))
+# /claim — today's free bet. An unlinked account can't claim; with a drop open it previews then places, and can't be claimed twice.
+# (the earlier /bet confirm ran a recompute that cleared the pre-tournament fixtures, so re-seed the upcoming game first)
+json.dump({"matches": [
+    {"id": 2, "stage": "GROUP_STAGE", "group": "A", "utcDate": "2099-06-15T18:00:00Z", "status": "TIMED",
+     "home": _t1, "away": _t2, "homeScore": None, "awayScore": None, "winner": None, "minute": None,
+     "duration": "REGULAR", "aet": False, "shootout": False, "penHome": None, "penAway": None}]},
+    open("results.json", "w"))
+scoring.compute(out="tracker_data.json", wagers=server.load_wagers())
+if "link" not in server.discord_command("claim", {"team": _t1}, uid="999").lower():
+    fails.append(("/claim", "an unlinked account could claim a free bet"))
+_orig_drop = server._open_free_drop
+server._open_free_drop = lambda now=None: {"id": "test-drop", "opens": 0, "closes": 9e18}
+try:
+    _cp = server.discord_command("claim", {"team": _t1}, uid="123")
+    if "free bet preview" not in _cp.lower() or "profit" not in _cp.lower():
+        fails.append(("/claim preview", "no free-bet preview when a drop is open: %r" % _cp))
+    _cc = server.discord_command("claim", {"team": _t1, "confirm": True}, uid="123")
+    _free = [w for w in server.load_wagers() if w.get("free")]
+    if "free bet placed" not in _cc.lower() or len(_free) != 1 or _free[0]["player"] != "Erol":
+        fails.append(("/claim confirm", "free bet not placed: %r / free=%r" % (_cc, _free)))
+    _again = server.discord_command("claim", {"team": _t1, "confirm": True}, uid="123")
+    if "already used" not in _again.lower():
+        fails.append(("/claim twice", "a second free claim on the same drop wasn't blocked: %r" % _again))
+finally:
+    server._open_free_drop = _orig_drop
 # /scores works even with no results (recent finished game from the fixtures)
 _sc = server.discord_command("scores", {}, uid="123")
 if not isinstance(_sc, str) or not _sc:

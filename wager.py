@@ -32,6 +32,9 @@ OVERROUND = 1.08          # ~8% bookmaker margin
 MAX_PROB = 0.95           # favourites can be priced shorter (down to ~1/20) so the margin holds on them too
 
 # Max stake rises as the tournament gets deeper: +5 per knockout round, and an extra +15 for the final.
+# WC2026 round dates (UTC, for reference — actual dates come from the live fixture feed):
+#   Group stage 11–27 Jun · Round of 32 28 Jun–3 Jul · Round of 16 4–7 Jul · Quarter-finals 9–11 Jul ·
+#   Semi-finals 14–15 Jul · Third place 18 Jul · Final 19 Jul. The 100-pt budget also resets at each of these.
 STAGE_MAX_STAKE = {
     "GROUP_STAGE":     30,
     "LAST_32":         35,
