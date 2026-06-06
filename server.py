@@ -477,6 +477,30 @@ def _current_round_max_stake():
     return max(caps) if caps else wager_mod.MAX_STAKE
 
 
+def _discord_err(e):
+    """Turn a urllib error from a Discord call into a human message (esp. 429 rate limits)."""
+    try:
+        import urllib.error
+        if isinstance(e, urllib.error.HTTPError):
+            if e.code == 429:
+                ra = e.headers.get("Retry-After") if e.headers else None
+                try:
+                    body = json.loads(e.read().decode() or "{}")
+                    ra = ra or body.get("retry_after")
+                except Exception:
+                    body = {}
+                secs = int(float(ra)) + 1 if ra else 30
+                return "Discord is rate-limiting us (429). Wait about %d second%s and try again — don't tap it repeatedly." % (secs, "" if secs == 1 else "s")
+            if e.code == 401:
+                return "Discord rejected the bot token (401) — re-check the bot token in Settings."
+            if e.code == 403:
+                return "Discord blocked the message (403) — the bot may not share a server with you, or your DMs are closed. Open the tracker and use the passcode there instead."
+            return "Discord returned HTTP %s." % e.code
+    except Exception:
+        pass
+    return str(e)
+
+
 def _bot_dm(user_id, text):
     """Send a private DM from the bot to one Discord user (used to hand out bet passcodes)."""
     tok = (load_config().get("discord_bot_token") or "").strip()
@@ -496,7 +520,7 @@ def _bot_dm(user_id, text):
         return True, None
     except Exception as e:
         log("bot dm failed:", e)
-        return False, str(e)
+        return False, _discord_err(e)
 
 
 def _announce_bet(player, w):
@@ -1455,7 +1479,7 @@ def register_discord_commands():
         urllib.request.urlopen(req, timeout=12)
         return True, None
     except Exception as e:
-        return False, str(e)
+        return False, _discord_err(e)
 
 
 def update_now(cfg):
@@ -2280,7 +2304,7 @@ class Handler(BaseHTTPRequestHandler):
                     urllib.request.urlopen(req, timeout=8)
                     results["discord_channel"] = "sent ✓ (check your Discord channel)"
                 except Exception as e:
-                    results["discord_channel"] = "failed: %s" % e
+                    results["discord_channel"] = "failed: %s" % _discord_err(e)
             log("test notification:", results)
             return self._send(200, json.dumps({"ok": True, "results": results}))
         if path == "/api/wager_link_code":          # OPEN (passcode-gated): mint a one-time code to link Discord
