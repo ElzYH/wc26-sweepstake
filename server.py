@@ -732,8 +732,10 @@ def _pin_ok(player, pin):
 
 
 def _session_secret():
-    """Key used to sign browser session tokens. Tied to the admin key, so rotating it logs everyone out."""
-    return (load_config().get("admin_key") or "wc26-no-key").encode()
+    """Key used to sign browser session tokens. Tied to the admin key + a rotatable salt,
+    so the organiser can log everyone out by bumping the salt (via /api/logout_all)."""
+    c = load_config()
+    return (str(c.get("admin_key") or "wc26-no-key") + str(c.get("session_salt") or "")).encode()
 
 
 def _make_session(discord_id, days=30):
@@ -2614,6 +2616,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, json.dumps({"ok": True, "player": player}))
         if path == "/api/logout":                  # clear this browser's Discord session
             return self._send(200, json.dumps({"ok": True}), extra_headers={"Set-Cookie": "wc26_sess=; Path=/; Max-Age=0"})
+        if path == "/api/logout_all":               # admin: invalidate EVERYONE's Discord login at once (rotates the session salt)
+            if not key_ok(body):
+                return self._send(403, json.dumps({"ok": False, "need_key": True, "error": "Admin key required."}))
+            cfg = load_config(); cfg["session_salt"] = secrets.token_hex(8); save_config(cfg)
+            log("admin logged everyone out (session salt rotated)")
+            return self._send(200, json.dumps({"ok": True, "logged_out_all": True}))
         if path == "/api/wager_self_unlink":       # OPEN to the player (passcode-gated): disconnect MY Discord
             player = str(body.get("player", "")).strip()
             if not self._authed_as(player, body):

@@ -868,8 +868,9 @@ let KOROUND=null, KO_USER_SET=false;
 
 let DATA=SAMPLE;
 async function load(){
-  try{ const lp=new URLSearchParams(location.search).get('login');
-       if(lp){ if(lp==='failed') BETMSG='Discord login didn\'t complete — try again, or use a passcode.';
+  let loginParam=null;
+  try{ loginParam=new URLSearchParams(location.search).get('login');
+       if(loginParam){ if(loginParam==='failed') BETMSG='Discord login didn\'t complete — try again, or use a passcode.';
                history.replaceState(null,'',location.pathname); } }catch(e){}
   let ok=false;
   try{ const r=await fetch('tracker_data.json?'+Date.now());
@@ -881,7 +882,8 @@ async function load(){
            secs.forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';}); return; }
   gate.style.display='none'; tabs.style.display='';
   secs.forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='';});
-  render(DATA); refreshStatus();
+  render(DATA); await refreshStatus();        // wait for who-am-I before landing, so the right name shows (no flash)
+  if(loginParam && STATUS.wagering_enabled) activateTab('bets');   // after a Discord login, drop you straight on the Bets tab
 }
 
 let H2H_A=null, H2H_B=null;
@@ -1102,12 +1104,14 @@ function fmtUpdated(s){if(!s||s==='pre-tournament')return 'pre-tournament (sampl
 function fmtTime(s){const d=new Date(s);return isNaN(d)?'TBC':d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
 function dayKey(s){const d=new Date(s);return isNaN(d)?'TBC':d.toLocaleDateString([],{weekday:'short',day:'numeric',month:'short'});}
 
-document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+function activateTab(s){
+  const t=document.querySelector('.tab[data-s="'+s+'"]'); if(!t) return;
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
   document.querySelectorAll('section').forEach(x=>x.classList.remove('on'));
-  t.classList.add('on');document.getElementById(t.dataset.s).classList.add('on');
-  if(t.dataset.s==='bets' && STATUS.wagering_enabled && !document.getElementById('betWho')) renderBets();
-});
+  t.classList.add('on'); document.getElementById(s).classList.add('on');
+  if(s==='bets' && STATUS.wagering_enabled && !document.getElementById('betWho')) renderBets();
+}
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>activateTab(t.dataset.s));
 (function(){ const mb=document.getElementById('menuBtn'), md=document.getElementById('menuDrop');
   mb.onclick=e=>{ e.stopPropagation(); md.classList.toggle('open'); };
   md.addEventListener('click',()=>md.classList.remove('open'));
