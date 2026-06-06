@@ -11,6 +11,7 @@ and a background thread refreshes results every few minutes.
 The API token is stored in config.json (gitignored) — keep your box private.
 """
 import json
+import re
 import os
 import random
 import secrets
@@ -1788,6 +1789,7 @@ class Handler(BaseHTTPRequestHandler):
                 "wagering_enabled": bool(cfg.get("wagering_enabled")) and wager_mod is not None,
                 "wager_locked": bool(cfg.get("wager_locked")),
                 "wager_pins_set": bool(_wager_pins()),
+                "wager_pins_for": sorted(_wager_pins().keys()),
                 "wager_caps": (_apply_wager_caps(cfg) or {"min_stake": wager_mod.MIN_STAKE, "max_stake": _current_round_max_stake(),
                                 "base_max_stake": wager_mod.MAX_STAKE, "max_return": wager_mod.MAX_RETURN,
                                 "max_pending": wager_mod.MAX_PENDING, "max_acca_legs": wager_mod.MAX_ACCA_LEGS}
@@ -2131,7 +2133,18 @@ class Handler(BaseHTTPRequestHandler):
             players = [(p if isinstance(p, str) else p.get("name", "")) for p in cfg.get("players", [])]
             pins = cfg.get("wager_pins") if isinstance(cfg.get("wager_pins"), dict) else {}
             reset_one = str(body.get("reset_player", "")).strip()
-            if reset_one:                          # forgot/leaked: reset JUST this player's passcode, leave everyone else alone
+            clear_one = str(body.get("clear_player", "")).strip()
+            if clear_one:                          # wrong person claimed this name: wipe its passcode + Discord link so the RIGHT player can re-claim
+                if clear_one not in players:
+                    return self._send(404, json.dumps({"ok": False, "error": "Unknown player."}))
+                pins.pop(clear_one, None)
+                lk = cfg.get("wager_links") if isinstance(cfg.get("wager_links"), dict) else {}
+                removed = [u for u, pl in list(lk.items()) if pl == clear_one]
+                for u in removed:
+                    lk.pop(u, None)
+                cfg["wager_links"] = lk
+                log("wager account cleared for", clear_one, "(unlinked %d Discord account[s])" % len(removed))
+            elif reset_one:                        # forgot/leaked: reset JUST this player's passcode, leave everyone else alone
                 if reset_one not in players:
                     return self._send(404, json.dumps({"ok": False, "error": "Unknown player."}))
                 if not pins:
@@ -2152,7 +2165,30 @@ class Handler(BaseHTTPRequestHandler):
             linked = {}                                # player -> True if some Discord account is linked
             for u, pl in links.items():
                 linked[pl] = True
-            return self._send(200, json.dumps({"ok": True, "pins": pins, "linked": linked, "reset": reset_one or None}))
+            return self._send(200, json.dumps({"ok": True, "pins": pins, "linked": linked, "reset": reset_one or None, "cleared": clear_one or None}))
+        if path == "/api/wager_set_pin":           # OPEN: a player sets/changes THEIR OWN passcode (no organiser needed)
+            cfg = load_config()
+            if not cfg.get("wagering_enabled") or wager_mod is None:
+                return self._send(400, json.dumps({"ok": False, "error": "Betting isn't switched on."}))
+            if cfg.get("wager_locked"):
+                return self._send(403, json.dumps({"ok": False, "error": "Betting is locked to the organiser."}))
+            players = [(p if isinstance(p, str) else p.get("name", "")) for p in cfg.get("players", [])]
+            player = str(body.get("player", "")).strip()
+            new_pin = str(body.get("pin", "")).strip().upper()
+            if player not in players:
+                return self._send(400, json.dumps({"ok": False, "error": "Pick a valid player."}))
+            if not re.fullmatch(r"[A-Z0-9]{4,10}", new_pin):
+                return self._send(400, json.dumps({"ok": False, "error": "Passcode must be 4–10 letters or numbers (no spaces)."}))
+            pins = cfg.get("wager_pins") if isinstance(cfg.get("wager_pins"), dict) else {}
+            if pins.get(player):                   # already claimed -> must prove ownership to change it
+                if not _pin_ok(player, body.get("current_pin")):
+                    return self._send(403, json.dumps({"ok": False, "claimed": True,
+                        "error": "%s already has a passcode. Enter the current one to change it — or DM /resetpin on Discord, or ask the organiser to reset it." % player}))
+            pins[player] = new_pin
+            cfg["wager_pins"] = pins
+            save_config(cfg)
+            log("player self-set bet passcode for", player)
+            return self._send(200, json.dumps({"ok": True, "set": True}))
         if path == "/api/wager_self_unlink":       # OPEN to the player (passcode-gated): disconnect MY Discord
             player = str(body.get("player", "")).strip()
             if not _pin_ok(player, body.get("pin")):

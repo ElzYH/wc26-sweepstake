@@ -153,7 +153,35 @@ def run():
                   and all(newpins.get(n) == pins.get(n) for n in _names[1:]), body[:160])
             st, _ = req("POST", "/api/wager_pins", {"admin_key": KEY, "reset_player": "NotARealPlayer"})
             check("reset of unknown player -> 404", st == 404, str(st))
+            # admin Clear: wipes a player's code so the right person can re-claim (un-claim)
+            st, body = req("POST", "/api/wager_pins", {"admin_key": KEY, "clear_player": _who})
+            check("admin clear removes that player's code", st == 200 and _who not in json.loads(body).get("pins", {}), body[:140])
+            st, _ = req("POST", "/api/wager_pins", {"clear_player": _who})
+            check("clear needs admin key (403)", st == 403, str(st))
             pins = newpins
+        # self-service: a player sets their OWN passcode (first-come), then needs the current one to change it
+        req("POST", "/api/settings", {"admin_key": KEY, "wagering_enabled": True})
+        st, _ = req("POST", "/api/wager_pins", {"admin_key": KEY, "regenerate": True})   # clear to a known state, then test set
+        # pick a player with a known fresh code, then OVERWRITE requires the current code
+        _np = list(json.loads(req("POST", "/api/wager_pins", {"admin_key": KEY})[1]).get("pins", {}).keys())
+        if _np:
+            who = _np[0]
+            st, body = req("POST", "/api/wager_set_pin", {"player": who, "pin": "MINE12", "current_pin": "definitely-wrong"})
+            check("self-set on a claimed name without current code -> 403", st == 403, str(st))
+            st, body = req("POST", "/api/wager_set_pin", {"player": who, "pin": "ab"})
+            check("self-set rejects a too-short passcode (400)", st == 400, str(st))
+            st, body = req("POST", "/api/wager_set_pin", {"player": "GhostPlayer", "pin": "OKPIN1"})
+            check("self-set rejects an unknown player (400)", st == 400, str(st))
+            _cur = json.loads(req("POST", "/api/wager_pins", {"admin_key": KEY})[1]).get("pins", {}).get(who)
+            st, body = req("POST", "/api/wager_set_pin", {"player": who, "pin": "NEWONE9", "current_pin": _cur})
+            check("self-set changes own code with the correct current one (200)",
+                  st == 200 and json.loads(body).get("ok") is True, body[:120])
+            _now = json.loads(req("POST", "/api/wager_pins", {"admin_key": KEY})[1]).get("pins", {}).get(who)
+            check("self-set actually replaced the code (old gone, new in place)",
+                  _now == "NEWONE9" and _now != _cur, "now=%s old=%s" % (_now, _cur))
+            # a wrong current code is refused even when the player already has one
+            st, _ = req("POST", "/api/wager_set_pin", {"player": who, "pin": "ANOTHER1", "current_pin": "NOPE99"})
+            check("self-set with wrong current code -> 403", st == 403, str(st))
         st, body = req("GET", "/api/status")
         check("status exposes wagering flags, never the pins",
               "wager_pins_set" in json.loads(body) and not any(p in body for p in pins.values()), body[:160])
