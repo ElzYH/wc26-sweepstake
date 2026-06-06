@@ -499,7 +499,7 @@ function flag(n){const f=FLAGS[n];return f?f+" ":"";}
 //  so there's no separate 🎲 pill on the leaderboard.)
 
 function isDone(s){return s==='FINISHED'||s==='AWARDED';}   // a forfeit (AWARDED) is a played, decided result
-let BETPLAYER=null, BETPICK=null, BETMSG='', ACCAMODE=false, ACCA=[];
+let BETPLAYER=null, BETPICK=null, BETMSG='', ACCAMODE=false, ACCA=[], FREEMODE=false;
 function betPin(p){ try{ return localStorage.getItem('wc26_betpin_'+p)||''; }catch(e){ return ''; } }
 function setBetPin(p,v){ try{ if(v) localStorage.setItem('wc26_betpin_'+p,v); else localStorage.removeItem('wc26_betpin_'+p); }catch(e){} }
 function renderBets(){
@@ -543,7 +543,15 @@ function renderBets(){
   }
   if(held>=caps.max_stake-1e-9){ h+='<div style="margin:0 0 12px;padding:9px 12px;border-radius:8px;background:#2a2210;border:1px solid #ffc83d;color:#ffd97a;font-size:13px">⚠ You\'re maxed out — '+held+' points riding on open bets (limit '+caps.max_stake+'). Wait for one to settle before betting again.</div>'; }
   if(BETMSG) h+='<div style="margin:0 0 10px;padding:8px 12px;border-radius:8px;background:'+(BETMSG[0]==='✓'?'#10240f':'#2a1414')+';color:'+(BETMSG[0]==='✓'?'#7ee787':'#ff9a9a')+';font-size:13px">'+esc(BETMSG)+'</div>';
-  h+='<div style="display:flex;gap:6px;margin:0 0 10px"><button class="mini'+(!ACCAMODE?' cta':'')+'" id="modeSingle">Single bet</button><button class="mini'+(ACCAMODE?' cta':'')+'" id="modeAcca">🎰 Accumulator (up to '+maxLegs+')</button></div>';
+  // 🎁 Free bet drop — available on certain days, one per person, stake is free (only winnings count)
+  const fbet=STATUS.free_bet||{}; const fbMine=(fbet.claimed||[]).indexOf(BETPLAYER)>=0;
+  if(fbet.open && !fbMine){
+    h+='<div style="margin:0 0 12px;padding:11px 14px;border:1px solid var(--gold);border-radius:10px;background:#1b1606;font-size:13px;color:var(--ink)">🎁 <b>You\'ve got a FREE '+(fbet.stake||5)+'-point bet!</b> The stake is on the house — if it <b>wins</b>, the winnings go to your points; if it loses, it costs you nothing. One per person, available today only. Tap <b>🎁 Use free bet</b>, then tap a team\'s odds.</div>';
+  } else if(fbet.open && fbMine){
+    h+='<div style="margin:0 0 12px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;color:var(--muted)">🎁 You\'ve used your free bet for this drop. The next one drops on another day — watch the summary.</div>';
+  }
+  h+='<div style="display:flex;gap:6px;margin:0 0 10px;flex-wrap:wrap"><button class="mini'+(!ACCAMODE&&!FREEMODE?' cta':'')+'" id="modeSingle">Single bet</button><button class="mini'+(ACCAMODE?' cta':'')+'" id="modeAcca">🎰 Accumulator (up to '+maxLegs+')</button>'+((fbet.open&&!fbMine)?('<button class="mini'+(FREEMODE?' cta':'')+'" id="modeFree" style="border-color:var(--gold)">🎁 Use free bet</button>'):'')+'</div>';
+  if(FREEMODE) h+='<div style="color:var(--gold);font-size:12.5px;margin:0 0 10px">🎁 <b>Free-bet mode:</b> tap a team\'s odds below to place your free '+(fbet.stake||5)+'-point bet on it. You\'ll be asked to confirm — it can\'t be undone.</div>';
   if(ACCAMODE) h+='<div style="color:var(--muted);font-size:12.5px;margin:0 0 10px">Pick up to '+maxLegs+' upcoming games — the odds multiply and <b>all</b> must win (one loss = the whole acca pays nothing). Tap an odds button to add a leg.'+(retCap?(' Max return on any bet is <b>'+retCap+'</b> points.'):'')+' '+(maxLegs!==3?'(The organiser set the leg limit to '+maxLegs+'.)':'')+'</div>';
   if(!fx.length) h+='<div class="empty">No upcoming games to bet on right now — check back before kick-off.</div>';
   else h+='<div class="mdgrid">'+fx.map(m=>{
@@ -609,6 +617,12 @@ function renderBets(){
     }catch(e){ box.textContent='Could not reach the server.'; }
   };
   el.querySelectorAll('.betodd').forEach(b=>b.onclick=()=>{
+    if(FREEMODE){
+      const mid=b.dataset.mid, sel=b.dataset.sel, frac=b.dataset.frac;
+      const m=fx.find(x=>x.matchId===mid); const who=sel==='HOME'?(m&&m.home):(sel==='AWAY'?(m&&m.away):'the draw');
+      if(!confirm('Use your FREE '+((STATUS.free_bet||{}).stake||5)+'-point bet on '+who+' at '+frac+'?\n\nIf it wins, the winnings are added to your points. If it loses, it costs you nothing. This can\u2019t be undone.')) return;
+      placeFreeBet(mid,sel); return;
+    }
     if(ACCAMODE){
       const mid=b.dataset.mid, sel=b.dataset.sel, frac=b.dataset.frac;
       const ix=ACCA.findIndex(l=>l.matchId===mid);
@@ -617,8 +631,9 @@ function renderBets(){
       BETMSG=''; renderBets();
     } else { BETPICK={matchId:b.dataset.mid,sel:b.dataset.sel,frac:b.dataset.frac}; BETMSG=''; renderBets(); }
   });
-  const msng=document.getElementById('modeSingle'); if(msng) msng.onclick=()=>{ ACCAMODE=false; BETMSG=''; renderBets(); };
-  const macc=document.getElementById('modeAcca'); if(macc) macc.onclick=()=>{ ACCAMODE=true; BETPICK=null; BETMSG=''; renderBets(); };
+  const msng=document.getElementById('modeSingle'); if(msng) msng.onclick=()=>{ ACCAMODE=false; FREEMODE=false; BETMSG=''; renderBets(); };
+  const macc=document.getElementById('modeAcca'); if(macc) macc.onclick=()=>{ ACCAMODE=true; FREEMODE=false; BETPICK=null; BETMSG=''; renderBets(); };
+  const mfree=document.getElementById('modeFree'); if(mfree) mfree.onclick=()=>{ FREEMODE=true; ACCAMODE=false; BETPICK=null; BETMSG=''; renderBets(); };
   el.querySelectorAll('.accarm').forEach(b=>b.onclick=()=>{ ACCA.splice(+b.dataset.i,1); renderBets(); });
   const ap=document.getElementById('accaPlace'); if(ap) ap.onclick=placeAcca;
   // live validation for the ACCA stake: warn on 0 / negative / over-max, disable Place
@@ -709,6 +724,21 @@ async function loadAllBets(){
     open.sort((a,b)=>(b.placed_at||0)-(a.placed_at||0));
     box.innerHTML=open.map(w=>betCardHTML(w,{showPlayer:true,live:live})).join('');
   }catch(e){ box.innerHTML='<div class="empty">Could not load bets.</div>'; }
+}
+async function placeFreeBet(mid,sel){
+  let pin='';
+  if(STATUS.wager_pins_set){
+    const pi=document.getElementById('betPinInput'); pin=((pi&&pi.value)||'').trim().toUpperCase();
+    if(!pin){ BETMSG='Enter your bet passcode first, then tap your free-bet pick.'; renderBets(); return; }
+  }
+  BETMSG='Placing your free bet…'; renderBets();
+  try{
+    const j=await fetch('/api/place_free_bet',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({player:BETPLAYER,matchId:mid,selection:sel,pin:pin})}).then(r=>r.json());
+    if(j.ok){ setBetPin(BETPLAYER,pin); FREEMODE=false; BETMSG='🎁 Free bet placed @ '+j.wager.frac+' — wins '+(Math.round((j.wager.return-j.wager.stake)*10)/10)+' points if it lands (nothing lost if it doesn\u2019t).'; await refreshStatus(); await load(); renderBets(); }
+    else if(j.bad_pin){ setBetPin(BETPLAYER,''); BETMSG='Wrong passcode for '+BETPLAYER+'. Check with the organiser.'; renderBets(); }
+    else { BETMSG=j.error||'Could not place the free bet.'; renderBets(); }
+  }catch(e){ BETMSG='Could not reach the server.'; renderBets(); }
 }
 async function placeBet(){
   if(!BETPICK) return;
@@ -1244,6 +1274,8 @@ function renderBettingStats(d){
   const card=(label,o,fmt,colour)=> '<div class="statcard"><div class="l">'+label+'</div><div class="v" style="color:'+(colour||'var(--ink)')+'">'+(o?esc(o.player):'—')+'</div><div class="l">'+(o?fmt(o):'—')+'</div></div>';
   let h='<h4 style="font-family:\'Anton\';font-weight:400;color:var(--gold);text-transform:uppercase;font-size:15px;margin:22px 0 8px">💷 Betting</h4>';
   h+=bestBetsHTML(d);
+  const punter=S.slice().sort((a,b)=>b.net-a.net).find(x=>x.bets>0 && x.net>0);   // most net betting profit
+  if(punter) h+='<div style="margin:6px 0 10px;padding:10px 12px;border:1px solid var(--gold);border-radius:10px;background:#1b1606;font-size:13.5px;color:var(--ink)">🏆 <b>Punter of the Tournament:</b> '+esc(punter.player)+' — <b style="color:var(--gold)">+'+punter.net+'</b> net from betting.</div>';
   h+='<div class="statgrid">'
     + card('MOST POINTS WAGERED', L.most_wagered, o=>o.staked+' staked over '+o.bets+' bet'+(o.bets===1?'':'s'))
     + card('BIGGEST WINNER', L.most_won, o=>'+'+o.won+' points won','var(--gold)')

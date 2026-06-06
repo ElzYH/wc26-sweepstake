@@ -23,6 +23,7 @@ MAX_STAKE = 30           # base single-bet cap (group stage); rises each knockou
 MAX_RETURN = None         # most a single bet can return; None = no limit (admin can set a number)
 MAX_PENDING = 8           # most simultaneous open bets per player
 MAX_ACCA_LEGS = 3         # default legs in one accumulator; admin can raise
+FREE_BET_STAKE = 5        # a claimed free bet stakes this many points; the stake is NEVER credited — only winnings (profit) count
 STAGE_BUDGET = 100        # staking allowance per "epoch": group 1st half, group 2nd half, then each KO round.
                           # Resets automatically because budget_remaining only sums bets within the same epoch.
 OVERROUND = 1.08          # ~8% bookmaker margin
@@ -140,6 +141,10 @@ def player_deltas(wagers):
     for w in wagers or []:
         d = out.setdefault(w["player"], {"settled_net": 0.0, "pending_stake": 0.0, "pending_count": 0})
         st = w.get("status")
+        if w.get("free"):                                # a free bet: only a WIN matters, and only its profit counts.
+            if st == "won":                              # the 5-point stake was never the player's, so credit return - stake (profit).
+                d["settled_net"] += (w.get("return", 0) - w["stake"])
+            continue                                     # pending/lost/void free bets hold nothing and cost nothing
         if st == "pending":
             d["pending_stake"] += w["stake"]
             d["pending_count"] += 1
@@ -176,8 +181,8 @@ def budget_remaining(wagers, player, epoch, budget=STAGE_BUDGET):
     spent = 0.0
     back = 0.0
     for w in wagers or []:
-        if w.get("player") != player or w.get("epoch") != epoch:
-            continue
+        if w.get("player") != player or w.get("epoch") != epoch or w.get("free"):
+            continue                                    # free bets sit outside the staking budget entirely
         st = w.get("status")
         if st in ("pending", "won", "lost"):       # void = refunded, ignore
             spent += w.get("stake", 0) or 0
@@ -251,6 +256,35 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
     w = {"id": uuid.uuid4().hex[:12], "player": player, "matchId": match_id(match),
          "home": match.get("home"), "away": match.get("away"), "stage": match.get("stage"),
          "utcDate": match.get("utcDate"), "selection": selection, "stake": stake, "epoch": epoch,
+         "num": odds["num"], "den": odds["den"], "frac": odds["frac"], "return": ret,
+         "status": "pending", "placed_at": int(now if now is not None else time.time())}
+    wagers.append(w)
+    return True, w
+
+
+def place_free(wagers, player, match, selection, comp_home, comp_away, now=None):
+    """Place a CLAIMED free bet: a fixed FREE_BET_STAKE wager that costs the player nothing.
+    It ignores the staking budget, the available-points check and the open-stake cap (it's free),
+    but still respects the no-draw-on-knockouts rule and the pre-kickoff lock. On a win only the
+    PROFIT is credited (the stake was never the player's); a loss costs nothing. Returns (ok, wager_or_error)."""
+    if not player or player in ("—", "-"):
+        return False, "Pick which player is betting first."
+    if selection not in SELECTIONS:
+        return False, "Pick home, draw or away."
+    if match is None:
+        return False, "That game could not be found."
+    if selection == "DRAW" and _norm_stage(match.get("stage")) != "GROUP_STAGE":
+        return False, "No draw bets on knockout games — pick the side to go through."
+    if not can_bet_on(match, now):
+        return False, "Betting on that game is closed — it has kicked off or finished."
+    odds = match_odds(comp_home, comp_away).get(selection)
+    ret = potential_return(FREE_BET_STAKE, odds["num"], odds["den"])
+    if MAX_RETURN is not None and ret > MAX_RETURN + 1e-9:
+        ret = float(MAX_RETURN)
+    w = {"id": uuid.uuid4().hex[:12], "player": player, "matchId": match_id(match),
+         "home": match.get("home"), "away": match.get("away"), "stage": match.get("stage"),
+         "utcDate": match.get("utcDate"), "selection": selection, "stake": FREE_BET_STAKE,
+         "epoch": epoch_of(match), "free": True,
          "num": odds["num"], "den": odds["den"], "frac": odds["frac"], "return": ret,
          "status": "pending", "placed_at": int(now if now is not None else time.time())}
     wagers.append(w)

@@ -443,6 +443,54 @@ def _gen_pin(n=5):
     return "".join(secrets.choice(_PIN_ALPHABET) for _ in range(n))
 
 
+def _free_bet_drops():
+    """Days a free bet is on offer: the day before the first game, plus a few deterministic 'random' game-days.
+    Returns a sorted list of {id, opens, closes} UTC-epoch windows. Stable across restarts (seeded once)."""
+    if wager_mod is None:
+        return []
+    try:
+        ms = json.load(open("results.json")).get("matches", [])
+    except Exception:
+        return []
+    day_ts = {}                                          # first kickoff epoch per UTC date
+    for m in ms:
+        t = wager_mod._utc_ts(m.get("utcDate") or "")
+        if t is None:
+            continue
+        d = time.strftime("%Y-%m-%d", time.gmtime(t))
+        day_ts[d] = min(day_ts.get(d, t), t)
+    if not day_ts:
+        return []
+    days = sorted(day_ts)
+    DAY = 86400
+    drops = []
+    first = day_ts[days[0]]
+    drops.append({"id": "pre", "opens": first - DAY, "closes": first})   # the day before matchday 1, until kickoff
+    cfg = load_config()
+    seed = cfg.get("free_bet_seed")
+    if not isinstance(seed, int):
+        seed = secrets.randbelow(10**9)
+        cfg["free_bet_seed"] = seed
+        save_config(cfg)
+    pool = days[1:] if len(days) > 1 else days           # don't double up the first day
+    rnd = random.Random(seed)
+    pick = sorted(rnd.sample(pool, min(3, len(pool)))) if pool else []
+    for d in pick:
+        midnight = wager_mod._utc_ts(d + "T00:00:00Z")   # 00:00 UTC of that match-day
+        if midnight is not None:
+            drops.append({"id": d, "opens": midnight, "closes": day_ts[d]})   # open until that day's first kickoff
+    return sorted(drops, key=lambda x: x["opens"])
+
+
+def _open_free_drop(now=None):
+    """The free-bet drop currently open (you can still claim it), or None."""
+    now = now if now is not None else time.time()
+    for d in _free_bet_drops():
+        if d["opens"] <= now < d["closes"]:
+            return d
+    return None
+
+
 def _group_mid_ts():
     """Calendar midpoint (UTC epoch) of the group-stage games, so the staking budget resets halfway
     through the group stage. Games before it are epoch GROUP_1, on/after it GROUP_2. None if unknown."""
@@ -1628,7 +1676,24 @@ def poller():
             maybe_send_daily_digest(load_config())
         except Exception as e:
             print("[digest] error:", e)
+        try:
+            _maybe_announce_free_drop(load_config())
+        except Exception as e:
+            print("[freebet] error:", e)
         time.sleep(max(60, mins * 60))
+
+
+def _maybe_announce_free_drop(cfg):
+    """Post once to Discord when a free-bet drop opens (idempotent via a stored marker)."""
+    if not (cfg.get("wagering_enabled") and cfg.get("discord_webhook")) or wager_mod is None:
+        return
+    drop = _open_free_drop()
+    if not drop or cfg.get("free_bet_announced") == drop["id"]:
+        return
+    discord_send("🎁 **Free bet!** Everyone gets a free %d-point bet today — claim it on the tracker's 💷 Bets tab. "
+                 "Win and the points are yours; lose and it costs you nothing. One per person, today only." % wager_mod.FREE_BET_STAKE)
+    cfg["free_bet_announced"] = drop["id"]
+    save_config(cfg)
 
 
 def _team_brief(t):
@@ -1890,6 +1955,10 @@ class Handler(BaseHTTPRequestHandler):
                 "wager_pins_set": bool(_wager_pins()),
                 "wager_pins_for": sorted(_wager_pins().keys()),
                 "wager_budget": (wager_mod.STAGE_BUDGET if wager_mod is not None else None),
+                "free_bet": ((lambda dr: {"open": True, "id": dr["id"], "closes": dr["closes"], "stake": wager_mod.FREE_BET_STAKE,
+                                          "claimed": sorted((cfg.get("free_bet_claims", {}).get(dr["id"]) or {}).keys())}
+                              if dr else {"open": False})(_open_free_drop())
+                             if (cfg.get("wagering_enabled") and wager_mod is not None) else {"open": False}),
                 "group_mid": (_group_mid_ts() if wager_mod is not None else None),
                 "wager_caps": (_apply_wager_caps(cfg) or {"min_stake": wager_mod.MIN_STAKE, "max_stake": _current_round_max_stake(),
                                 "base_max_stake": wager_mod.MAX_STAKE, "max_return": wager_mod.MAX_RETURN,
@@ -2438,6 +2507,60 @@ class Handler(BaseHTTPRequestHandler):
                 log("wager placed:", player, selection, "on", match_id)
                 _announce_bet(player, res)
                 return self._send(200, json.dumps({"ok": True, "wager": res}))
+            return self._send(400, json.dumps({"ok": False, "error": res}))
+        if path == "/api/place_free_bet":          # OPEN (passcode-gated): claim + place the current free bet (5 pts, free)
+            cfg = load_config()
+            if not cfg.get("wagering_enabled") or wager_mod is None:
+                return self._send(400, json.dumps({"ok": False, "error": "Betting isn't switched on."}))
+            drop = _open_free_drop()
+            if not drop:
+                return self._send(400, json.dumps({"ok": False, "error": "No free bet is available right now — they drop the day before the first match and on some match-days."}))
+            _apply_wager_caps(cfg)
+            players = [(p if isinstance(p, str) else p.get("name", "")) for p in cfg.get("players", [])]
+            player = str(body.get("player", "")).strip()
+            selection = str(body.get("selection", "")).strip().upper()
+            mid_q = str(body.get("matchId", "")).strip()
+            if player not in players:
+                return self._send(400, json.dumps({"ok": False, "error": "Pick a valid player."}))
+            if cfg.get("wager_locked") and not key_ok(body):
+                return self._send(403, json.dumps({"ok": False, "need_key": True, "error": "Betting is locked to the organiser."}))
+            if not cfg.get("wager_locked"):
+                if not _wager_pins():
+                    return self._send(400, json.dumps({"ok": False, "error": "Betting passcodes aren't set up yet — ask the organiser."}))
+                if not _pin_ok(player, body.get("pin")):
+                    return self._send(403, json.dumps({"ok": False, "bad_pin": True, "error": "Wrong bet passcode for %s." % player}))
+            claims = cfg.get("free_bet_claims") if isinstance(cfg.get("free_bet_claims"), dict) else {}
+            taken = claims.get(drop["id"]) if isinstance(claims.get(drop["id"]), dict) else {}
+            if player in taken:
+                return self._send(400, json.dumps({"ok": False, "error": "You've already used this free bet — the next one drops another day."}))
+            try:
+                results = json.load(open("results.json"))
+            except Exception:
+                return self._send(400, json.dumps({"ok": False, "error": "No data yet."}))
+            match = next((m for m in results.get("matches", []) if wager_mod.match_id(m) == mid_q), None)
+            if not match:
+                return self._send(400, json.dumps({"ok": False, "error": "That game could not be found."}))
+            teams = {}
+            try:
+                teams = {t["name"]: t for t in json.load(open("teams.json"))["teams"]}
+            except Exception:
+                pass
+            if match.get("home") not in teams or match.get("away") not in teams:
+                return self._send(400, json.dumps({"ok": False, "error": "You can only bet once both teams are confirmed."}))
+            ch = (teams.get(match.get("home"), {}) or {}).get("composite", 0)
+            ca = (teams.get(match.get("away"), {}) or {}).get("composite", 0)
+            with _lock:                                  # claim is recorded atomically with the wager so nobody double-claims
+                wlist = load_wagers()
+                ok, res = wager_mod.place_free(wlist, player, match, selection, ch, ca)
+                if ok:
+                    save_wagers(wlist)
+                    taken[player] = res["id"]; claims[drop["id"]] = taken
+                    cfg["free_bet_claims"] = claims; save_config(cfg)
+            if ok:
+                update_now(load_config())
+                log("free bet placed:", player, selection, "on", mid_q)
+                _announce_bet(player, res)
+                return self._send(200, json.dumps({"ok": True, "wager": res, "free": True}))
             return self._send(400, json.dumps({"ok": False, "error": res}))
         if path == "/api/place_acca":              # OPEN: an accumulator (one stake, combined odds)
             cfg = load_config()

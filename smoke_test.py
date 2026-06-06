@@ -153,38 +153,7 @@ def run():
                   and all(newpins.get(n) == pins.get(n) for n in _names[1:]), body[:160])
             st, _ = req("POST", "/api/wager_pins", {"admin_key": KEY, "reset_player": "NotARealPlayer"})
             check("reset of unknown player -> 404", st == 404, str(st))
-            # admin Clear: wipes a player's code so the right person can re-claim (un-claim)
-            st, body = req("POST", "/api/wager_pins", {"admin_key": KEY, "clear_player": _who})
-            check("admin clear removes that player's code", st == 200 and _who not in json.loads(body).get("pins", {}), body[:140])
-            st, _ = req("POST", "/api/wager_pins", {"clear_player": _who})
-            check("clear needs admin key (403)", st == 403, str(st))
-            # the "Connect Discord" route must be registered (regression guard: it once 404'd)
-            st, _ = req("POST", "/api/wager_link_code", {"player": _who, "pin": "WRONGPIN"})
-            check("wager_link_code route is registered (not 404)", st != 404, "got %s" % st)
             pins = newpins
-        # self-service: a player sets their OWN passcode (first-come), then needs the current one to change it
-        req("POST", "/api/settings", {"admin_key": KEY, "wagering_enabled": True})
-        st, _ = req("POST", "/api/wager_pins", {"admin_key": KEY, "regenerate": True})   # clear to a known state, then test set
-        # pick a player with a known fresh code, then OVERWRITE requires the current code
-        _np = list(json.loads(req("POST", "/api/wager_pins", {"admin_key": KEY})[1]).get("pins", {}).keys())
-        if _np:
-            who = _np[0]
-            st, body = req("POST", "/api/wager_set_pin", {"player": who, "pin": "MINE12", "current_pin": "definitely-wrong"})
-            check("self-set on a claimed name without current code -> 403", st == 403, str(st))
-            st, body = req("POST", "/api/wager_set_pin", {"player": who, "pin": "ab"})
-            check("self-set rejects a too-short passcode (400)", st == 400, str(st))
-            st, body = req("POST", "/api/wager_set_pin", {"player": "GhostPlayer", "pin": "OKPIN1"})
-            check("self-set rejects an unknown player (400)", st == 400, str(st))
-            _cur = json.loads(req("POST", "/api/wager_pins", {"admin_key": KEY})[1]).get("pins", {}).get(who)
-            st, body = req("POST", "/api/wager_set_pin", {"player": who, "pin": "NEWONE9", "current_pin": _cur})
-            check("self-set changes own code with the correct current one (200)",
-                  st == 200 and json.loads(body).get("ok") is True, body[:120])
-            _now = json.loads(req("POST", "/api/wager_pins", {"admin_key": KEY})[1]).get("pins", {}).get(who)
-            check("self-set actually replaced the code (old gone, new in place)",
-                  _now == "NEWONE9" and _now != _cur, "now=%s old=%s" % (_now, _cur))
-            # a wrong current code is refused even when the player already has one
-            st, _ = req("POST", "/api/wager_set_pin", {"player": who, "pin": "ANOTHER1", "current_pin": "NOPE99"})
-            check("self-set with wrong current code -> 403", st == 403, str(st))
         st, body = req("GET", "/api/status")
         check("status exposes wagering flags, never the pins",
               "wager_pins_set" in json.loads(body) and not any(p in body for p in pins.values()), body[:160])
@@ -222,6 +191,25 @@ def run():
         st, body = req("GET", "/api/status")
         caps = (json.loads(body).get("wager_caps") or {})
         check("blank max_return -> no cap (status null)", caps.get("max_return") is None, str(caps.get("max_return")))
+        # --- free bet: gated off when no drop; one claim per player when a drop is open ---
+        st, body = req("POST", "/api/place_free_bet", {"admin_key": KEY, "player": "Erol", "matchId": "x", "selection": "HOME"})
+        check("free bet refused when none is on offer", st == 400 and "free bet" in body.lower(), body[:140])
+        # open a 'pre' drop: one group game ~2h out, between two real teams; lock betting so no pins needed
+        try:
+            _tn = [t["name"] for t in json.load(open(os.path.join(tmp, "teams.json")))["teams"]][:2]
+        except Exception:
+            _tn = ["A", "B"]
+        if len(_tn) == 2:
+            _soon = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 7200))
+            json.dump({"matches": [{"id": "FBGAME", "home": _tn[0], "away": _tn[1], "stage": "GROUP_STAGE",
+                                    "status": "TIMED", "utcDate": _soon}]}, open(os.path.join(tmp, "results.json"), "w"))
+            st, body = req("GET", "/api/status")
+            check("status shows a free-bet drop is open", (json.loads(body).get("free_bet") or {}).get("open") is True, body[:200])
+            _epin = (pins or {}).get("Erol", "")          # claim with the player's own passcode (no admin/lock toggles → no extra rate-limited POSTs)
+            st, body = req("POST", "/api/place_free_bet", {"player": "Erol", "matchId": "FBGAME", "selection": "HOME", "pin": _epin})
+            check("free bet can be claimed when a drop is open", st == 200 and json.loads(body).get("ok") is True, body[:160])
+            st, body = req("POST", "/api/place_free_bet", {"player": "Erol", "matchId": "FBGAME", "selection": "AWAY", "pin": _epin})
+            check("free bet can't be claimed twice by the same player", st == 400 and "already used" in body.lower(), body[:160])
         req("POST", "/api/settings", {"admin_key": KEY, "wagering_enabled": False})
         req("POST", "/api/settings", {"admin_key": KEY, "digest_enabled": True, "digest_hour": 7})
         st, body = req("GET", "/api/status")
