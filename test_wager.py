@@ -43,7 +43,7 @@ def run():
     ok, res = wager.place(w, "Erol", fx(), "HOME", 5, settled_points=20, comp_home=80, comp_away=40)
     ck("valid bet accepted", ok and res["status"] == "pending", res)
     ck("bet locks odds + return", "num" in res and res["return"] == wager.potential_return(5, res["num"], res["den"]), res)
-    ck("available drops by the stake", wager.available_points("Erol", 20, w) == 15.0, wager.available_points("Erol", 20, w))
+    ck("available = earned + free bonus - held stake", wager.available_points("Erol", 20, w) == 20.0, wager.available_points("Erol", 20, w))
 
     # --- can't stake more than you have (settled points only) ---
     ok, res = wager.place(w, "Erol", fx(mid="m2"), "HOME", 25, settled_points=20, comp_home=80, comp_away=40)
@@ -51,7 +51,7 @@ def run():
     ck("nothing was appended on failure", len(w) == 1, len(w))
 
     # --- floor at zero: never negative available ---
-    ck("available floored at 0", wager.available_points("Nobody", 0, w) == 0.0, wager.available_points("Nobody", 0, w))
+    ck("with 0 earned you still have the free bonus to stake", wager.available_points("Nobody", 0, w) == float(wager.STARTING_BONUS), wager.available_points("Nobody", 0, w))
 
     # --- stake bounds + caps ---
     ok, res = wager.place([], "Erol", fx(), "HOME", 0.5, settled_points=999, comp_home=80, comp_away=40)
@@ -189,8 +189,8 @@ def run():
     neg = []
     for i in range(6):
         ok, _ = wager.place(neg, "Erol", fx(mid="n%d" % i), "HOME", 5, settled_points=10, comp_home=80, comp_away=40)
-    # only the first two (10 points / 5 each) should be accepted; the rest exceed available
-    ck("can't stake beyond settled points (no overdraw)", len([w for w in neg if w["status"] == "pending"]) == 2,
+    # only the first three (10 earned + 5 free bonus = 15, at 5 each) should be accepted; the rest exceed available
+    ck("can't stake beyond earned + bonus (no overdraw)", len([w for w in neg if w["status"] == "pending"]) == 3,
        len(neg))
     for w in neg:                                   # lose them all
         wager.settle([w], fx(mid=w["matchId"], status="FINISHED", winner="AWAY", hs=0, as_=1))
@@ -355,6 +355,45 @@ def run():
     wager.place(liveb, "Erol", fx(mid="e1", utc=g1), "HOME", 20, 500, 80, 40, group_mid_ts=mid)
     ck("placement tags the epoch + spends from it", liveb[0]["epoch"] == "GROUP_1"
        and wager.budget_remaining(liveb, "Erol", "GROUP_1") == B - 20, liveb[0].get("epoch"))
+
+    # --- free bets: free stake never costs the player; only a WIN's profit is credited ---
+    fb = []
+    fok, fw = wager.place_free(fb, "Erol", fx(mid="fb1"), "HOME", 80, 40)
+    ck("place_free makes a free 5-point bet", fok and fw.get("free") and fw["stake"] == wager.FREE_BET_STAKE, fw)
+    ck("free pending holds no points (available unchanged)", wager.available_points("Erol", 100, fb) == wager.available_points("Erol", 100, []),
+       wager.available_points("Erol", 100, fb))
+    ck("free pending uses no staking budget", wager.budget_remaining(fb, "Erol", "GROUP_1") == B,
+       wager.budget_remaining(fb, "Erol", "GROUP_1"))
+    # settle that free bet as a WIN -> only profit (return-5) is credited
+    wager.settle(fb, fx(mid="fb1", status="FINISHED", winner="HOME", hs=1, as_=0))
+    won_profit = round(fb[0]["return"] - wager.FREE_BET_STAKE, 1)
+    ck("free WIN credits profit only (not the 5 stake)",
+       round(wager.player_deltas(fb)["Erol"]["settled_net"], 1) == won_profit, (fb[0], won_profit))
+    # a LOST free bet costs nothing
+    fb2 = []
+    wager.place_free(fb2, "Erol", fx(mid="fb2"), "HOME", 80, 40)
+    wager.settle(fb2, fx(mid="fb2", status="FINISHED", winner="AWAY", hs=0, as_=2))
+    ck("free LOSS costs the player nothing", wager.player_deltas(fb2).get("Erol", {}).get("settled_net", 0.0) == 0.0,
+       wager.player_deltas(fb2))
+    ck("free bet never counts toward the budget after losing",
+       wager.budget_remaining(fb2, "Erol", "GROUP_1") == B, wager.budget_remaining(fb2, "Erol", "GROUP_1"))
+    ck("free draw rejected on a knockout", not wager.place_free([], "Erol", fx(mid="fk", stage="LAST_16"), "DRAW", 70, 60)[0])
+    ck("free bet rejected once the game is closed",
+       not wager.place_free([], "Erol", fx(mid="fc", status="FINISHED", utc=PAST), "HOME", 80, 40)[0])
+
+    # --- 5-point starting bonus: lets you bet from 0 earned; only winnings hit the leaderboard ---
+    ck("everyone can stake the free bonus at 0 earned", wager.available_points("Erol", 0, []) == wager.STARTING_BONUS,
+       wager.available_points("Erol", 0, []))
+    lost5 = [{"player": "Erol", "epoch": "GROUP_1", "stake": 5, "status": "lost", "return": 0}]
+    ck("losing the bonus costs 0 available", wager.available_points("Erol", 0, lost5) == 0, wager.available_points("Erol", 0, lost5))
+    ck("losing the bonus does NOT dent the leaderboard", wager.leaderboard_net("Erol", lost5) == 0.0, wager.leaderboard_net("Erol", lost5))
+    ck("losing the bonus leaves earned points intact", wager.applied_points(40, "Erol", lost5) == 40, wager.applied_points(40, "Erol", lost5))
+    lost8 = [{"player": "Erol", "epoch": "GROUP_1", "stake": 8, "status": "lost", "return": 0}]
+    ck("losses beyond the 5 bonus do hit the leaderboard (8 lost -> -3)", wager.leaderboard_net("Erol", lost8) == -3.0, wager.leaderboard_net("Erol", lost8))
+    won = [{"player": "Erol", "epoch": "GROUP_1", "stake": 5, "status": "won", "return": 12}]
+    ck("a win adds profit to the leaderboard (12-5=7)", wager.leaderboard_net("Erol", won) == 7.0, wager.leaderboard_net("Erol", won))
+    ck("the bonus is on top of earned points for staking", wager.available_points("Erol", 40, []) == 40 + wager.STARTING_BONUS,
+       wager.available_points("Erol", 40, []))
 
     if FAILS:
         print("\nFAILED (%d): %s" % (len(FAILS), ", ".join(FAILS)))

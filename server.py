@@ -530,14 +530,20 @@ def _apply_wager_caps(cfg=None):
 
 
 def _current_round_max_stake():
-    """Highest single-bet cap among games you can currently bet on (i.e. the cap for the current round)."""
+    """Highest single-bet cap among games you can ACTUALLY bet on now (both teams known + not kicked off).
+    Knockout fixtures have TBD teams until those rounds, so during the group stage this stays 30, not 65."""
     if wager_mod is None:
         return 30
     try:
         results = json.load(open("results.json"))
     except Exception:
         return wager_mod.MAX_STAKE
-    caps = [wager_mod.stage_max_stake(m.get("stage")) for m in results.get("matches", []) if wager_mod.can_bet_on(m)]
+    try:
+        known = {t["name"] for t in json.load(open("teams.json"))["teams"]}
+    except Exception:
+        known = None
+    caps = [wager_mod.stage_max_stake(m.get("stage")) for m in results.get("matches", [])
+            if wager_mod.can_bet_on(m) and (known is None or (m.get("home") in known and m.get("away") in known))]
     return max(caps) if caps else wager_mod.MAX_STAKE
 
 

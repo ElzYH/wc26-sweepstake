@@ -24,6 +24,8 @@ MAX_RETURN = None         # most a single bet can return; None = no limit (admin
 MAX_PENDING = 8           # most simultaneous open bets per player
 MAX_ACCA_LEGS = 3         # default legs in one accumulator; admin can raise
 FREE_BET_STAKE = 5        # a claimed free bet stakes this many points; the stake is NEVER credited — only winnings (profit) count
+STARTING_BONUS = 5        # everyone starts with this many free betting points so they can bet before earning any.
+                          # It's bet-only: it never sits on the leaderboard, and it cushions the first 5 of net losses.
 STAGE_BUDGET = 100        # staking allowance per "epoch": group 1st half, group 2nd half, then each KO round.
                           # Resets automatically because budget_remaining only sums bets within the same epoch.
 OVERROUND = 1.08          # ~8% bookmaker margin
@@ -192,15 +194,24 @@ def budget_remaining(wagers, player, epoch, budget=STAGE_BUDGET):
 
 
 def available_points(player, settled_points, wagers):
-    """Points a player can still stake: settled points + settled wager profit/loss - points already on open bets, floored at 0."""
+    """Points a player can still stake: their earned points + the free STARTING_BONUS + settled bet profit/loss
+    - points already on open bets, floored at 0. The bonus lets everyone bet from kick-off, before any points are earned."""
     d = player_deltas(wagers).get(player, {})
-    return max(0.0, round(settled_points + d.get("settled_net", 0.0) - d.get("pending_stake", 0.0), 1))
+    return max(0.0, round(settled_points + STARTING_BONUS + d.get("settled_net", 0.0) - d.get("pending_stake", 0.0), 1))
+
+
+def leaderboard_net(player, wagers, bonus=STARTING_BONUS):
+    """The bet profit/loss that should hit a player's LEADERBOARD total. The free STARTING_BONUS (and any free-bet
+    winnings already in settled_net) means the first `bonus` points of net losses are absorbed and never cost the
+    player real points — only genuine winnings, and losses beyond the free bonus, move the leaderboard."""
+    net = player_deltas(wagers).get(player, {}).get("settled_net", 0.0)
+    return round(net + min(float(bonus), max(0.0, -net)), 1)
 
 
 def applied_points(base_points, player, wagers):
-    """A player's displayed points once wagers are applied: base + settled profit/loss - open stakes, floored at 0."""
+    """A player's displayed points once wagers are applied: base + leaderboard net (bonus-cushioned) - open stakes, floored at 0."""
     d = player_deltas(wagers).get(player, {})
-    return max(0.0, round(base_points + d.get("settled_net", 0.0) - d.get("pending_stake", 0.0), 1))
+    return max(0.0, round(base_points + leaderboard_net(player, wagers) - d.get("pending_stake", 0.0), 1))
 
 
 def place(wagers, player, match, selection, stake, settled_points, comp_home, comp_away, now=None, group_mid_ts=None):
