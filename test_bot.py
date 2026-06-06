@@ -355,6 +355,13 @@ if server.load_config().get("wager_link_codes", {}).get("GOOD12"):
 _prev = server.discord_command("bet", {"team": _t1, "pick": "home", "stake": 5}, uid="123")
 if "preview" not in _prev.lower() or "returns" not in _prev.lower():
     fails.append(("/bet preview", "no payout preview once linked: %r" % _prev))
+# preview must surface points + stake-left (not just the payout)
+if "points" not in _prev.lower() or "stake" not in _prev.lower():
+    fails.append(("/bet preview", "preview missing points/stake-left info: %r" % _prev))
+# team-relative "win": default pick (no pick) = back your team to win, and it names the team
+_win = server.discord_command("bet", {"team": _t1, "stake": 5}, uid="123")
+if "to win" not in _win.lower():
+    fails.append(("/bet win", "default pick didn't read as '<team> to win': %r" % _win))
 _place = server.discord_command("bet", {"team": _t1, "pick": "home", "stake": 5, "confirm": True}, uid="123")
 _wl = server.load_wagers()
 if "placed" not in _place.lower() or len(_wl) != 1 or _wl[0]["player"] != "Erol":

@@ -1142,7 +1142,7 @@ def discord_command(name, opts, uid=None):
                 return "Betting is closed — the tournament is over."
             if not fx:
                 return "No upcoming games to bet on right now — check back before kick-off."
-            rows = ["**Upcoming games & odds**", "_Bet with_ `/bet team:<name> pick:<home/draw/away> stake:<n>`"]
+            rows = ["**Upcoming games & odds**", "_Bet with_ `/bet team:<name> stake:<n>` _(your team to win), or add_ `pick:draw`_._"]
             for m in fx[:12]:
                 ko = m.get("stage") and m["stage"] != "GROUP_STAGE"
                 o = m["odds"]
@@ -1180,34 +1180,59 @@ def discord_command(name, opts, uid=None):
                     "Open the tracker → **💷 Bets**, enter your passcode, tap **Connect Discord**, then run "
                     "`/linkdiscord code:<the code it shows>` (DM me to keep it private). Then `/bet` works with no passcode.")
         team = str(opts.get("team", "")).strip()
-        pick = str(opts.get("pick", "")).strip().upper()
+        pick = str(opts.get("pick", "")).strip().lower() or "win"
         confirm = bool(opts.get("confirm"))
         try:
             stake = float(opts.get("stake"))
         except (TypeError, ValueError):
             return "Stake must be a number of points."
-        if pick not in ("HOME", "DRAW", "AWAY"):
-            return "Pick must be **home**, **draw** or **away**."
+        if pick in ("w", "winner"):
+            pick = "win"
+        if pick not in ("win", "draw", "home", "away"):     # natural picks are win / draw (relative to YOUR team)
+            return "Pick **win** (your team to win) or **draw**."
         tl = team.lower()
         m = next((x for x in fx if tl in (x["home"].lower(), x["away"].lower())), None) \
             or next((x for x in fx if tl and (tl in x["home"].lower() or tl in x["away"].lower())), None)
         if not m:
             return "No upcoming game found for **%s**. Use `/games` to see what's on." % (team or "?")
-        if pick == "DRAW" and m.get("stage") and m["stage"] != "GROUP_STAGE":
-            return "Knockout games can't be a draw — pick **home** or **away** (the side to go through)."
-        o = m["odds"][pick]
+        team_is_home = tl in m["home"].lower()
+        if pick == "draw":
+            selection = "DRAW"
+        elif pick == "home":
+            selection = "HOME"
+        elif pick == "away":
+            selection = "AWAY"
+        else:                                               # "win" -> back the chosen team's side
+            selection = "HOME" if team_is_home else "AWAY"
+        if selection == "DRAW" and m.get("stage") and m["stage"] != "GROUP_STAGE":
+            return "Knockout games can't end in a draw — back **%s** or **%s** to win (whoever goes through counts)." % (m["home"], m["away"])
+        o = m["odds"][selection]
         ret = wager_mod.potential_return(stake, o["num"], o["den"])
-        who = m["home"] if pick == "HOME" else (m["away"] if pick == "AWAY" else "a draw")
-        if not confirm:
-            return ("🎲 **Bet preview**\nBacking **%s** in %s v %s at **%s**.\n"
-                    "Stake **%g** → returns **%g** if it wins (profit **%g**).\n"
-                    "_Bets are final once placed — odds are locked in at the moment you confirm._\n"
-                    "Run the same command again with **confirm: True** to place it."
-                    % (who, m["home"], m["away"], o["frac"], stake, ret, round(ret - stake, 1)))
+        who = ("a draw" if selection == "DRAW" else "%s to win" % (m["home"] if selection == "HOME" else m["away"]))
+        # points + stake-left info for the preview
         prow = next((p for p in (d.get("players") or []) if p.get("name") == player), {})
         settled = prow.get("points_settled")
         if settled is None:
             settled = round((prow.get("points", 0) or 0) - (prow.get("live", 0) or 0), 1)
+        wl_now = load_wagers()
+        avail = wager_mod.available_points(player, settled, wl_now)
+        round_max = _current_round_max_stake()
+        held = wager_mod.player_deltas(wl_now).get(player, {}).get("pending_stake", 0.0)
+        can_stake = max(0.0, round(min(avail, round_max - held), 1))
+        if not confirm:
+            warn = ""
+            if stake > avail:
+                warn = "\n⚠ That's more than your **%g** available points." % avail
+            elif stake > can_stake:
+                warn = "\n⚠ Most you can stake right now is **%g** (round cap %g, %g already riding on open bets)." % (can_stake, round_max, held)
+            return ("🎲 **Bet preview** — %s v %s\n"
+                    "Backing **%s** at **%s**.\n"
+                    "Stake **%g** → returns **%g** if it wins (profit **%g**).\n"
+                    "💰 You have **%g** points · max stake this round **%g** · you can still stake **%g**.%s\n"
+                    "_Bets are final once placed — odds lock in when you confirm._\n"
+                    "Run the same command again with **confirm: True** to place it."
+                    % (m["home"], m["away"], who, o["frac"], stake, ret, round(ret - stake, 1),
+                       avail, round_max, can_stake, warn))
         try:
             results = json.load(open("results.json"))
             teams = {t["name"]: t for t in json.load(open("teams.json"))["teams"]}
@@ -1218,14 +1243,18 @@ def discord_command(name, opts, uid=None):
         ca = (teams.get(m["away"], {}) or {}).get("composite", 0)
         with _lock:
             wl = load_wagers()
-            ok, res = wager_mod.place(wl, player, raw, pick, stake, settled, ch, ca)
+            ok, res = wager_mod.place(wl, player, raw, selection, stake, settled, ch, ca)
             if ok:
                 save_wagers(wl)
         if ok:
             update_now(load_config())
             _announce_bet(player, res)
-            return ("✅ **Bet placed!** %g on **%s** @ %s — returns **%g** if it wins. "
-                    "Good luck. _(Bets are final.)_" % (res["stake"], who, res["frac"], res["return"]))
+            _wl2 = load_wagers()
+            _left = max(0.0, round(min(wager_mod.available_points(player, settled, _wl2),
+                                       round_max - wager_mod.player_deltas(_wl2).get(player, {}).get("pending_stake", 0.0)), 1))
+            return ("✅ **Bet placed!** %g on **%s** @ %s — returns **%g** if it wins.\n"
+                    "💰 You can still stake **%g** this round. Good luck. _(Bets are final.)_"
+                    % (res["stake"], who, res["frac"], res["return"], _left))
         return "❌ %s" % res
     if name == "help":
         return ("**WC26 bot commands**\n"
@@ -1235,7 +1264,7 @@ def discord_command(name, opts, uid=None):
                 "/odds - who's most likely to win\n"
                 "/games - upcoming games + betting odds\n"
                 "/linkdiscord <code> - link your account to bet (code from the tracker's Bets tab)\n"
-                "/bet <team> <pick> <stake> - bet your points (shows payout; add confirm to place). Bets are final\n"
+                "/bet team:<name> stake:<n> - back your team to win (add pick:draw for a draw; shows payout, points & stake left; add confirm to place). Bets are final\n"
                 "/mybets - your open and settled bets\n"
                 "/allbets - everyone's open bets right now\n"
                 "/points - how many points you have to bet (and your max bet)\n"
@@ -1402,10 +1431,9 @@ def register_discord_commands():
         {"name": "games", "description": "Upcoming games and their betting odds", "type": 1},
         {"name": "bet", "description": "Bet your points on a game (shows the payout; add confirm to place)", "type": 1,
          "options": [
-             {"name": "team", "description": "A team in the game you want to bet on", "type": 3, "required": True},
-             {"name": "pick", "description": "Who you're backing", "type": 3, "required": True,
-              "choices": [{"name": "home", "value": "home"}, {"name": "draw", "value": "draw"},
-                          {"name": "away", "value": "away"}]},
+             {"name": "team", "description": "The team you want to back (or that's in the game)", "type": 3, "required": True},
+             {"name": "pick", "description": "Back them to win, or back the draw (default: win)", "type": 3, "required": False,
+              "choices": [{"name": "win", "value": "win"}, {"name": "draw", "value": "draw"}]},
              {"name": "stake", "description": "Points to stake", "type": 10, "required": True},
              {"name": "confirm", "description": "Set true to actually place the bet", "type": 5, "required": False}]},
         {"name": "mybets", "description": "Your open and settled bets", "type": 1},
