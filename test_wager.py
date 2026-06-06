@@ -419,12 +419,14 @@ def run():
     ck("losing 8 with start+10 free -> leaderboard unaffected", wager.leaderboard_net("Erol", fp2) == 0.0, wager.leaderboard_net("Erol", fp2))
 
     # --- form-adjusted odds (bounded, deterministic, see==get) ---
-    FM = [{"home": "A", "away": "B", "homeScore": 4, "awayScore": 0, "winner": "HOME"},
-          {"home": "C", "away": "B", "homeScore": 3, "awayScore": 0, "winner": "HOME"}]
+    FM = [{"home": "A", "away": "B", "homeScore": 4, "awayScore": 0, "winner": "HOME", "status": "FINISHED"},
+          {"home": "C", "away": "B", "homeScore": 3, "awayScore": 0, "winner": "HOME", "status": "FINISHED"}]
     ck("no games played -> no form change (1.0)", wager.team_form("Z", FM) == 1.0, wager.team_form("Z", FM))
     ck("a winner is stronger (>1) but bounded to +12%", 1.0 < wager.team_form("A", FM) <= 1.12 + 1e-9, wager.team_form("A", FM))
     ck("a loser is weaker (<1) but bounded to -12%", 0.88 - 1e-9 <= wager.team_form("B", FM) < 1.0, wager.team_form("B", FM))
     ck("form is deterministic (same data, same number)", wager.team_form("B", FM) == wager.team_form("B", FM), True)
+    _live = [{"home": "A", "away": "W", "homeScore": 0, "awayScore": 3, "winner": "AWAY", "status": "IN_PLAY"}]
+    ck("a LIVE match does not move form (only finished games count)", wager.team_form("A", _live) == 1.0, wager.team_form("A", _live))
     _seen = wager.match_odds(wager.live_strength(80, "A", FM), wager.live_strength(55, "B", FM))
     _got = wager.match_odds(wager.live_strength(80, "A", FM), wager.live_strength(55, "B", FM))
     ck("see == get: display and placement price identically", _seen == _got, True)

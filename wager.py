@@ -108,6 +108,8 @@ def team_form(team, matches):
     Pure function of results -> deterministic (same data, same number), so the board never wobbles."""
     played, score = 0, 0.0
     for m in matches or []:
+        if m.get("status") not in ("FINISHED", "AWARDED"):
+            continue                                # only settled results count — a live half-time score must not move odds
         if team not in (m.get("home"), m.get("away")):
             continue
         hs, as_ = m.get("homeScore"), m.get("awayScore")
