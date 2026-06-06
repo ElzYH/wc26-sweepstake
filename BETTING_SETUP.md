@@ -123,28 +123,57 @@ In the same **Betting** panel:
 
 Tap **Save bet limits**. Changes apply immediately. (Stakes also auto-cap per round: 30 in the group stage, rising to 65 in the final — that's fixed.)
 
-### Step 6 — Generate passcodes
-Same panel → **Generate passcodes** → one code per player appears, e.g.
+### Step 6 — Passcodes (now self-serve — you can skip this)
+Players set up their **own** bet passcodes on the website, so you don't have to generate or hand out anything. Once you've switched betting on (Step 4), each player just:
+- opens the **Bets** tab, picks their name, and — first time — **chooses their own passcode** and taps **Create my passcode**. That claims their name; nobody can bet their points without it.
+
+You only need the admin **Generate passcodes** panel if you'd rather issue codes yourself (e.g. to hand them out). It still works exactly as before:
 ```
 🔗 Erol   DMT9T   [DM via bot] [Unlink]
    James  X69D7   [DM via bot]
 ```
-🔗 = that player's Discord is linked for betting. **Regenerate** invalidates old codes (use if one leaks).
+🔗 = that player's Discord is linked for betting. **Regenerate** invalidates old codes. A player who forgets a self-chosen passcode can tap **Change** (needs the old one) or, if their Discord is linked, DM the bot `/resetpin`; otherwise you can reset it for them from this panel.
 
-### Step 7 — Get each player their code, privately
+### Step 7 — (Only if you issued codes) get each player their code, privately
 - **DM via bot** (best) — if the player has already run `/notifyme` in Discord, this DMs them their code privately **and** links their Discord so they can bet with no passcode in chat.
 - Or message them the code yourself.
 - **Never post a passcode in a public channel.** The system never requires that.
+
+### Step 8 (optional but recommended) — "Log in with Discord" on the website
+This is the strongest "is it really you" check: a player taps **Log in with Discord** on the Bets tab, approves once, and bets with **no passcode** — their real Discord account is the proof. It's **off until you add the credentials below**, and the passcode system keeps working either way, so this can't break anything that's already live.
+
+1. Go to the **Discord Developer Portal** → your application (you can reuse the same app as the bot) → **OAuth2**.
+2. Copy the **Client ID** and **Client Secret**.
+3. Under **Redirects**, add the callback URL for *each* site you run, exactly:
+   - `https://bbmsweepstake.co.uk/api/discord_oauth_callback`
+   - …and the same for any other subdomain you use (e.g. the family site). Discord allows several.
+4. On the box, add three keys to each site's `config.json` (it's git-ignored, so this stays private):
+```bash
+cd /opt/wc26/sites/mandem
+sudo python3 - <<'PY'
+import json; f="config.json"; c=json.load(open(f))
+c["discord_oauth_client_id"]="YOUR_CLIENT_ID"
+c["discord_oauth_client_secret"]="YOUR_CLIENT_SECRET"
+c["site_url"]="https://bbmsweepstake.co.uk"   # must match the redirect host above
+json.dump(c, open(f,"w"), indent=2); print("saved")
+PY
+sudo systemctl restart wc26@mandem
+```
+5. Reload the tracker — the **Log in with Discord** button now appears on the Bets tab. First login asks the player which name they are (first come, first served); after that it's automatic.
+
+**Note:** the redirect host in `site_url` and in the Discord portal must match the host players actually visit, and it must be **https** (Caddy already gives you that). If login bounces back with "didn't complete", that mismatch is the usual cause.
 
 ---
 
 ## 3) Players — how to bet (share this with the group)
 
-**Everyone starts with 5 free betting points**, so you can bet from the very first game — before your teams have earned anything. Those 5 are bet-only: **only winnings ever reach the leaderboard**, and losing them costs you nothing. After that you bet the **points you've already earned** from finished games. Win at the odds shown and the winnings are added to your total; lose and the stake's gone. No real money — it's all sweepstake points.
+You bet the **points you've already earned** from finished games. Win at the odds shown and they're added to your total; lose and the stake's gone. No real money — it's all sweepstake points.
 
 ### On the website (simplest)
 1. Go to the tracker → **Bets** tab.
-2. Pick **your name**, type the **passcode** the organiser gave you (it's saved in your browser, so just once).
+2. Pick **your name**. Two ways to prove it's you:
+   - **Log in with Discord** (if the organiser enabled it) — tap the button, approve once, and you bet with **no passcode**. Strongest option, and the site knows it's really you.
+   - **Or a passcode** — first time, choose your own (4+ characters) and tap **Create my passcode** (no organiser needed). On a new device later, type the same passcode and tap **Save**; a wrong one is never stored. It's saved in your browser, so you only enter it once.
 3. **Single:** tap an odds button, type a stake, **Place bet**.
 4. **Accumulator:** tap **Accumulator**, tap 2–5 games, type one stake, **Place acca** — odds multiply and **all** legs must win.
 
@@ -158,9 +187,8 @@ You link your Discord account once, then you never type your code in chat:
    - *Or* self-link: on the website Bets tab, type your passcode, tap **Connect Discord**, it shows a one-time code, then run `/linkdiscord code:THATCODE` in a DM to the bot.
 
 **Once linked, the betting commands:**
-- `/games` — upcoming games + odds (and a 🎁 note when a free bet is on offer)
-- `/bet team:<name> pick:<home/draw/away> stake:<n>` — preview; add `confirm:true` to place
-- `/claim` — claim today's **5 free betting points** when a drop is on (bet them on any game; win = winnings yours, a loss costs nothing)
+- `/games` — upcoming games + odds
+- `/bet team:<name> pick:<home/draw/away> stake:<n>` — as you type **team**, Discord suggests the actual upcoming games ("Brazil — v Spain"); pick one to lock in the game + team, then choose **pick** (home/draw/away) and **stake**. Preview shows the payout; add `confirm:true` to place.
 - `/mybets` — your open + settled bets
 - `/points` — how many points you have to bet + your current max bet
 - `/allbets` — everyone's open bets
@@ -169,11 +197,8 @@ You link your Discord account once, then you never type your code in chat:
 - `/unlink` — disconnect this Discord (if you linked the wrong player)
 
 ### The rules (so nobody's surprised)
-- **5 free starting points:** everyone begins with 5 betting points so you can bet from the first game. Bet-only — **only winnings reach the leaderboard**, losing them costs nothing.
-- **100-point staking budget per round:** each round you can stake up to 100 points total. Lose and it drops (bet 20, lose → 80 left); win and it tops back up, **never above 100**. Spend it all → locked out of betting until the next round. The budget **resets at the group-stage midpoint** and again at **the start of each knockout round**.
-- **Free points (🎁):** drop the day before the first game and on roughly one match-day a week (up to 5 drops). Each is **5 free betting points** added to your balance to bet on any game — **win and the winnings are yours; lose and it costs nothing**. One per person per drop. Claim on the Bets tab or with `/claim` in Discord.
 - Bet **before kick-off** only; odds **lock** when you place; **no cash-out**.
-- **Max stake per single game rises each round:** Group 30 → R32 35 → R16 40 → QF 45 → SF 50 → **Final 65** (the round dates show on the Bets tab). This is on top of the 100-point budget — both limits apply.
+- **Max stake rises each round:** Group 30 → R32 35 → R16 40 → QF 45 → SF 50 → **Final 65**.
 - **Open-stake limit:** the total you have on open bets at once can't beat the current max — it frees up as bets settle.
 - Up to **8** open bets. **No cap on winnings by default** — the organiser can optionally set a max return per bet.
 - **Accumulator:** up to **3 legs by default** (the organiser can change this); all must win, and **if one leg loses the whole acca pays nothing**; a postponed leg drops out and it pays on the rest.

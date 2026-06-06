@@ -168,6 +168,32 @@ def run():
                         "legs": [{"matchId": "a", "selection": "HOME"}, {"matchId": "b", "selection": "HOME"}],
                         "stake": 2, "pin": "WRONG"})
         check("place_acca rejects a wrong passcode (403)", st == 403, str(st))
+        # --- self-serve passcode: verify + set/change (no admin) ---
+        _p0 = list(pins.keys())[0]; _pin0 = pins[_p0]
+        st, body = req("POST", "/api/wager_check_pin", {"player": _p0, "pin": _pin0})
+        check("wager_check_pin: correct passcode -> valid true", st == 200 and json.loads(body).get("valid") is True, body[:120])
+        st, body = req("POST", "/api/wager_check_pin", {"player": _p0, "pin": "WRONG999"})
+        check("wager_check_pin: wrong passcode -> valid false", st == 200 and json.loads(body).get("valid") is False, body[:120])
+        st, body = req("POST", "/api/wager_set_pin", {"player": _p0, "new_pin": "HIJACK99"})
+        check("wager_set_pin: can't claim a name that's set without the current passcode (403)", st == 403 and json.loads(body).get("bad_pin") is True, body[:140])
+        st, body = req("POST", "/api/wager_set_pin", {"player": _p0, "new_pin": "ab", "current_pin": _pin0})
+        check("wager_set_pin: rejects a too-short passcode (400)", st == 400, body[:120])
+        st, body = req("POST", "/api/wager_set_pin", {"player": _p0, "new_pin": "NEWSELF12", "current_pin": _pin0})
+        check("wager_set_pin: change with correct current -> ok", st == 200 and json.loads(body).get("ok") is True, body[:120])
+        st, body = req("POST", "/api/wager_check_pin", {"player": _p0, "pin": "NEWSELF12"})
+        check("wager_set_pin: the new passcode now works", st == 200 and json.loads(body).get("valid") is True, body[:120])
+        st, body = req("GET", "/api/status")
+        check("status lists which players have a passcode (wager_pins_for)", _p0 in (json.loads(body).get("wager_pins_for") or []), body[:160])
+        pins[_p0] = "NEWSELF12"   # keep local map in sync for later checks
+        # --- Discord login (OAuth) endpoints: inert until creds are configured ---
+        st, body = req("GET", "/api/status")
+        check("status exposes discord_oauth flag (off by default)", json.loads(body).get("discord_oauth") is False, body[:160])
+        st, body = req("GET", "/api/whoami")
+        check("whoami: logged out by default", st == 200 and json.loads(body).get("logged_in") is False, body[:120])
+        st, body = req("POST", "/api/discord_claim_player", {"player": _p0})
+        check("claim-player needs a Discord login (403)", st == 403, str(st) + " " + body[:80])
+        st, body = req("POST", "/api/logout", {})
+        check("logout always 200", st == 200 and json.loads(body).get("ok") is True, body[:80])
         st, _ = req("POST", "/api/wager_unlink", {"admin_key": "nope", "player": "x"})
         check("wager_unlink needs admin key (403)", st == 403, str(st))
         st, body = req("POST", "/api/wager_unlink", {"admin_key": KEY, "player": "x"})
@@ -191,25 +217,6 @@ def run():
         st, body = req("GET", "/api/status")
         caps = (json.loads(body).get("wager_caps") or {})
         check("blank max_return -> no cap (status null)", caps.get("max_return") is None, str(caps.get("max_return")))
-        # --- free points: gated off when no drop; one claim per player when a drop is open ---
-        st, body = req("POST", "/api/place_free_bet", {"admin_key": KEY, "player": "Erol"})
-        check("free points refused when no drop is on", st == 400 and "free points" in body.lower(), body[:140])
-        # open a 'pre' drop: one group game ~2h out so the day-before window is live
-        try:
-            _tn = [t["name"] for t in json.load(open(os.path.join(tmp, "teams.json")))["teams"]][:2]
-        except Exception:
-            _tn = ["A", "B"]
-        if len(_tn) == 2:
-            _soon = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 7200))
-            json.dump({"matches": [{"id": "FBGAME", "home": _tn[0], "away": _tn[1], "stage": "GROUP_STAGE",
-                                    "status": "TIMED", "utcDate": _soon}]}, open(os.path.join(tmp, "results.json"), "w"))
-            st, body = req("GET", "/api/status")
-            check("status shows a free-points drop is open", (json.loads(body).get("free_bet") or {}).get("open") is True, body[:200])
-            _epin = (pins or {}).get("Erol", "")          # claim with the player's own passcode (no match needed now)
-            st, body = req("POST", "/api/place_free_bet", {"player": "Erol", "pin": _epin})
-            check("free points can be claimed when a drop is open", st == 200 and json.loads(body).get("amount") == 5, body[:160])
-            st, body = req("POST", "/api/place_free_bet", {"player": "Erol", "pin": _epin})
-            check("free points can't be claimed twice on the same drop", st == 400 and "already claimed" in body.lower(), body[:160])
         req("POST", "/api/settings", {"admin_key": KEY, "wagering_enabled": False})
         req("POST", "/api/settings", {"admin_key": KEY, "digest_enabled": True, "digest_hour": 7})
         st, body = req("GET", "/api/status")

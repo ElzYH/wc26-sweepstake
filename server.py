@@ -16,6 +16,7 @@ import os
 import random
 import secrets
 import hmac
+import hashlib
 import shutil
 import threading
 import time
@@ -730,6 +731,38 @@ def _pin_ok(player, pin):
     return hmac.compare_digest(str(want), str(pin).strip().upper())
 
 
+def _session_secret():
+    """Key used to sign browser session tokens. Tied to the admin key, so rotating it logs everyone out."""
+    return (load_config().get("admin_key") or "wc26-no-key").encode()
+
+
+def _make_session(discord_id, days=30):
+    """A stateless, signed 'this browser is Discord user X' token (no server-side storage)."""
+    exp = int(time.time()) + int(days * 86400)
+    body = "%s.%d" % (str(discord_id), exp)
+    sig = hmac.new(_session_secret(), body.encode(), hashlib.sha256).hexdigest()[:32]
+    return body + "." + sig
+
+
+def _read_session(token):
+    """Return the Discord id from a valid, unexpired session token, else None."""
+    try:
+        did, exp, sig = (token or "").split(".")
+        good = hmac.new(_session_secret(), ("%s.%s" % (did, exp)).encode(), hashlib.sha256).hexdigest()[:32]
+        if hmac.compare_digest(good, sig) and int(exp) > int(time.time()):
+            return did
+    except Exception:
+        pass
+    return None
+
+
+def _oauth_enabled():
+    """Discord login only turns on once the organiser has filled in the OAuth app credentials."""
+    c = load_config()
+    return bool(c.get("discord_oauth_client_id") and c.get("discord_oauth_client_secret"))
+
+
+
 def _entry_sub(e):
     return e.get("sub", e) if isinstance(e, dict) else e
 
@@ -1170,6 +1203,30 @@ def build_draw_announcement():
 def _active_mode():
     m = (load_config().get("scoring_mode") or "hybrid")
     return m if m in ("points", "survival", "hybrid") else "hybrid"
+
+
+def _bet_team_choices(partial=""):
+    """Autocomplete choices for /bet `team`: every team in an upcoming bettable game,
+    shown as 'Brazil — v Spain' so you're really picking the GAME + team. Filtered by what's typed; Discord caps at 25."""
+    try:
+        d = _load_tracker() or {}
+        fx = sorted([m for m in (d.get("fixtures") or []) if m.get("odds") and m.get("matchId")],
+                    key=lambda m: m.get("utcDate") or "")
+    except Exception:
+        return []
+    q = (partial or "").strip().lower()
+    out, seen = [], set()
+    for m in fx:
+        for team, opp in ((m.get("home", ""), m.get("away", "")), (m.get("away", ""), m.get("home", ""))):
+            if not team or team in seen:
+                continue
+            if q and q not in team.lower():
+                continue
+            out.append({"name": ("%s — v %s" % (team, opp))[:100], "value": team[:100]})
+            seen.add(team)
+            if len(out) >= 25:
+                return out
+    return out
 
 
 def discord_command(name, opts, uid=None):
@@ -1616,7 +1673,7 @@ def register_discord_commands():
         {"name": "games", "description": "Upcoming games and their betting odds", "type": 1},
         {"name": "bet", "description": "Bet your points on a game (shows the payout; add confirm to place)", "type": 1,
          "options": [
-             {"name": "team", "description": "The team you want to back (or that's in the game)", "type": 3, "required": True},
+             {"name": "team", "description": "Start typing — pick the game/team from the list", "type": 3, "required": True, "autocomplete": True},
              {"name": "stake", "description": "Points to stake", "type": 10, "required": True},
              {"name": "pick", "description": "Back them to win, or back the draw (default: win)", "type": 3, "required": False,
               "choices": [{"name": "win", "value": "win"}, {"name": "draw", "value": "draw"}]},
@@ -1917,6 +1974,29 @@ def run_auto_draw(gen, players, mode, t1_cap, leftover, order_gap=1.0, pick_gap=
 
 
 class Handler(BaseHTTPRequestHandler):
+    def _cookie(self, name):
+        for part in (self.headers.get("Cookie", "") or "").split(";"):
+            if "=" in part:
+                k, v = part.strip().split("=", 1)
+                if k == name:
+                    return v
+        return None
+
+    def _session_discord_id(self):
+        return _read_session(self._cookie("wc26_sess"))
+
+    def _session_player(self):
+        did = self._session_discord_id()
+        if not did:
+            return None
+        return (load_config().get("wager_links") or {}).get(str(did))
+
+    def _authed_as(self, player, body):
+        """A bet is authorised by EITHER a logged-in Discord session for this player OR the right passcode."""
+        if player and self._session_player() == player:
+            return True
+        return _pin_ok(player, (body or {}).get("pin"))
+
     def _send(self, code, body, ctype="application/json", extra_headers=None):
         body = body.encode() if isinstance(body, str) else body
         self.send_response(code)
@@ -1977,6 +2057,52 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/wheel":   return self._file("wheel.html")
         if path == "/me":      return self._file("me.html")
         if path == "/watch":   return self._file("watch.html")
+        if path == "/api/whoami":                  # who is this browser logged in as (Discord), if anyone
+            did = self._session_discord_id()
+            if not did:
+                return self._send(200, json.dumps({"logged_in": False, "oauth": _oauth_enabled()}))
+            player = (load_config().get("wager_links") or {}).get(str(did))
+            return self._send(200, json.dumps({"logged_in": True, "player": player, "oauth": True}))
+        if path == "/api/discord_login":           # start "Log in with Discord" (302 to Discord's consent screen)
+            if not _oauth_enabled():
+                self.send_response(302); self.send_header("Location", "/tracker"); self.end_headers(); return
+            cfg = load_config()
+            redirect = (cfg.get("site_url") or ("https://" + (self.headers.get("Host") or ""))).rstrip("/") + "/api/discord_oauth_callback"
+            state = secrets.token_hex(16)
+            qs = urllib.parse.urlencode({"client_id": cfg.get("discord_oauth_client_id"), "redirect_uri": redirect,
+                                         "response_type": "code", "scope": "identify", "state": state, "prompt": "consent"})
+            self.send_response(302)
+            self.send_header("Location", "https://discord.com/api/oauth2/authorize?" + qs)
+            self.send_header("Set-Cookie", "wc26_ostate=%s; Path=/; Max-Age=600; HttpOnly; Secure; SameSite=Lax" % state)
+            self.end_headers(); return
+        if path == "/api/discord_oauth_callback":  # Discord sends the user back here with ?code=&state=
+            if not _oauth_enabled():
+                self.send_response(302); self.send_header("Location", "/tracker"); self.end_headers(); return
+            q = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            code = (q.get("code") or [""])[0]; state = (q.get("state") or [""])[0]
+            if not code or not state or state != (self._cookie("wc26_ostate") or "\x00"):
+                self.send_response(302); self.send_header("Location", "/tracker?login=failed"); self.end_headers(); return
+            cfg = load_config()
+            redirect = (cfg.get("site_url") or ("https://" + (self.headers.get("Host") or ""))).rstrip("/") + "/api/discord_oauth_callback"
+            did = None
+            try:                                   # exchange the code for a token, then read the user's Discord id
+                data = urllib.parse.urlencode({"client_id": cfg.get("discord_oauth_client_id"),
+                                               "client_secret": cfg.get("discord_oauth_client_secret"),
+                                               "grant_type": "authorization_code", "code": code, "redirect_uri": redirect}).encode()
+                tok = json.loads(urllib.request.urlopen(urllib.request.Request(
+                    "https://discord.com/api/oauth2/token", data, {"Content-Type": "application/x-www-form-urlencoded"}), timeout=10).read())
+                me = json.loads(urllib.request.urlopen(urllib.request.Request(
+                    "https://discord.com/api/users/@me", headers={"Authorization": "Bearer " + str(tok.get("access_token"))}), timeout=10).read())
+                did = str(me.get("id") or "")
+            except Exception as e:
+                log("discord oauth callback error:", e)
+            if not did:
+                self.send_response(302); self.send_header("Location", "/tracker?login=failed"); self.end_headers(); return
+            log("discord login ok for", did)
+            self.send_response(302); self.send_header("Location", "/tracker?login=ok")
+            self.send_header("Set-Cookie", "wc26_sess=%s; Path=/; Max-Age=%d; HttpOnly; Secure; SameSite=Lax" % (_make_session(did), 30 * 86400))
+            self.send_header("Set-Cookie", "wc26_ostate=; Path=/; Max-Age=0")
+            self.end_headers(); return
         if path == "/api/live_state": return self._send(200, json.dumps(live_load()))
         if path == "/api/draw_result": return self._file("draw_result.json")
         if path == "/api/summary":
@@ -2041,6 +2167,7 @@ class Handler(BaseHTTPRequestHandler):
                 "wager_locked": bool(cfg.get("wager_locked")),
                 "wager_pins_set": bool(_wager_pins()),
                 "wager_pins_for": sorted(_wager_pins().keys()),
+                "discord_oauth": _oauth_enabled(),
                 "wager_budget": (wager_mod.STAGE_BUDGET if wager_mod is not None else None),
                 "free_bet": ((lambda dr: {"open": True, "id": dr["id"], "closes": dr["closes"], "stake": wager_mod.FREE_BET_STAKE,
                                           "claimed": sorted((cfg.get("free_bet_claims", {}).get(dr["id"]) or {}).keys())}
@@ -2097,6 +2224,15 @@ class Handler(BaseHTTPRequestHandler):
             if data.get("name") in ("bet", "claim", "mybets", "linkdiscord", "mypin", "unlink", "points"):    # private: passcodes, codes, personal bets/points
                 resp["flags"] = 64
             return self._send(200, json.dumps({"type": 4, "data": resp}))
+        if body.get("type") == 4:                          # APPLICATION_COMMAND_AUTOCOMPLETE
+            data = body.get("data") or {}
+            focused = ""
+            for o in (data.get("options") or []):
+                if o.get("focused"):
+                    focused = o.get("value") or ""
+                    break
+            choices = _bet_team_choices(focused) if data.get("name") == "bet" else []
+            return self._send(200, json.dumps({"type": 8, "data": {"choices": choices[:25]}}))
         return self._send(200, json.dumps({"type": 4, "data": {"content": "Unsupported interaction."}}))
 
     def _do_POST(self):
@@ -2439,24 +2575,48 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(403, json.dumps({"ok": False, "error": "Betting is locked to the organiser."}))
             players = [(p if isinstance(p, str) else p.get("name", "")) for p in cfg.get("players", [])]
             player = str(body.get("player", "")).strip()
-            new_pin = str(body.get("pin", "")).strip().upper()
+            new_pin = str(body.get("new_pin") or body.get("pin") or "").strip().upper()
             if player not in players:
                 return self._send(400, json.dumps({"ok": False, "error": "Pick a valid player."}))
-            if not re.fullmatch(r"[A-Z0-9]{4,10}", new_pin):
-                return self._send(400, json.dumps({"ok": False, "error": "Passcode must be 4–10 letters or numbers (no spaces)."}))
+            if not re.fullmatch(r"[A-Z0-9]{4,24}", new_pin):
+                return self._send(400, json.dumps({"ok": False, "error": "Passcode must be 4–24 letters or numbers (no spaces)."}))
             pins = cfg.get("wager_pins") if isinstance(cfg.get("wager_pins"), dict) else {}
             if pins.get(player):                   # already claimed -> must prove ownership to change it
                 if not _pin_ok(player, body.get("current_pin")):
-                    return self._send(403, json.dumps({"ok": False, "claimed": True,
+                    return self._send(403, json.dumps({"ok": False, "claimed": True, "bad_pin": True,
                         "error": "%s already has a passcode. Enter the current one to change it — or DM /resetpin on Discord, or ask the organiser to reset it." % player}))
             pins[player] = new_pin
             cfg["wager_pins"] = pins
             save_config(cfg)
             log("player self-set bet passcode for", player)
             return self._send(200, json.dumps({"ok": True, "set": True}))
+        if path == "/api/wager_check_pin":         # OPEN: verify a passcode is correct (so a wrong one is never saved on the device)
+            player = str(body.get("player", "")).strip()
+            valid = _pin_ok(player, body.get("pin"))
+            return self._send(200, json.dumps({"ok": True, "valid": bool(valid)}))
+        if path == "/api/discord_claim_player":    # first login: bind THIS logged-in Discord account to a player name (first-come)
+            did = self._session_discord_id()
+            if not did:
+                return self._send(403, json.dumps({"ok": False, "error": "Log in with Discord first."}))
+            cfg = load_config()
+            players = [(p if isinstance(p, str) else p.get("name", "")) for p in cfg.get("players", [])]
+            player = str(body.get("player", "")).strip()
+            if player not in players:
+                return self._send(400, json.dumps({"ok": False, "error": "Pick a valid player."}))
+            lk = cfg.get("wager_links") if isinstance(cfg.get("wager_links"), dict) else {}
+            for u, pl in lk.items():               # first-come: can't grab a name another Discord account already holds
+                if pl == player and str(u) != str(did):
+                    return self._send(409, json.dumps({"ok": False, "error": "%s is already claimed by another account — see the organiser if that's wrong." % player}))
+            lk[str(did)] = player
+            cfg["wager_links"] = lk
+            save_config(cfg)
+            log("discord-claim: %s -> %s" % (did, player))
+            return self._send(200, json.dumps({"ok": True, "player": player}))
+        if path == "/api/logout":                  # clear this browser's Discord session
+            return self._send(200, json.dumps({"ok": True}), extra_headers={"Set-Cookie": "wc26_sess=; Path=/; Max-Age=0"})
         if path == "/api/wager_self_unlink":       # OPEN to the player (passcode-gated): disconnect MY Discord
             player = str(body.get("player", "")).strip()
-            if not _pin_ok(player, body.get("pin")):
+            if not self._authed_as(player, body):
                 return self._send(403, json.dumps({"ok": False, "bad_pin": True, "error": "Wrong bet passcode for %s." % (player or "?")}))
             cfg = load_config()
             lk = cfg.get("wager_links") if isinstance(cfg.get("wager_links"), dict) else {}
@@ -2532,7 +2692,7 @@ class Handler(BaseHTTPRequestHandler):
             if not cfg.get("wagering_enabled") or wager_mod is None:
                 return self._send(400, json.dumps({"ok": False, "error": "Betting isn't switched on."}))
             player = str(body.get("player", "")).strip()
-            if not _pin_ok(player, body.get("pin")):
+            if not self._authed_as(player, body):
                 return self._send(403, json.dumps({"ok": False, "bad_pin": True, "error": "Wrong bet passcode for %s." % (player or "?")}))
             now = time.time()
             codes = cfg.get("wager_link_codes") if isinstance(cfg.get("wager_link_codes"), dict) else {}
@@ -2559,7 +2719,7 @@ class Handler(BaseHTTPRequestHandler):
             if not cfg.get("wager_locked"):          # normal mode: prove it's your account with your passcode
                 if not _wager_pins():
                     return self._send(400, json.dumps({"ok": False, "error": "Betting passcodes aren't set up yet — ask the organiser."}))
-                if not _pin_ok(player, body.get("pin")):
+                if not self._authed_as(player, body):
                     return self._send(403, json.dumps({"ok": False, "bad_pin": True,
                         "error": "Wrong bet passcode for %s." % player}))
             try:
@@ -2612,7 +2772,7 @@ class Handler(BaseHTTPRequestHandler):
             if not cfg.get("wager_locked"):
                 if not _wager_pins():
                     return self._send(400, json.dumps({"ok": False, "error": "Betting passcodes aren't set up yet — ask the organiser."}))
-                if not _pin_ok(player, body.get("pin")):
+                if not self._authed_as(player, body):
                     return self._send(403, json.dumps({"ok": False, "bad_pin": True, "error": "Wrong bet passcode for %s." % player}))
             claims = cfg.get("free_bet_claims") if isinstance(cfg.get("free_bet_claims"), dict) else {}
             taken = claims.get(drop["id"]) if isinstance(claims.get(drop["id"]), dict) else {}
@@ -2644,7 +2804,7 @@ class Handler(BaseHTTPRequestHandler):
             if not cfg.get("wager_locked"):
                 if not _wager_pins():
                     return self._send(400, json.dumps({"ok": False, "error": "Betting passcodes aren't set up yet — ask the organiser."}))
-                if not _pin_ok(player, body.get("pin")):
+                if not self._authed_as(player, body):
                     return self._send(403, json.dumps({"ok": False, "bad_pin": True, "error": "Wrong bet passcode for %s." % player}))
             elif not key_ok(body):
                 return self._send(403, json.dumps({"ok": False, "need_key": True}))
