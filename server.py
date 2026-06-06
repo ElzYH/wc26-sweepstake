@@ -1531,18 +1531,20 @@ def update_now(cfg):
         else:
             _write_pretournament(cfg.get("competition", "WC"))
         wlist = None
-        if cfg.get("wagering_enabled") and wager_mod is not None:
+        if wager_mod is not None:
             newly_won = []
             with _lock:                              # guard against a concurrent place_wager losing a bet
-                wlist = load_wagers()
-                try:
-                    _res = json.load(open("results.json"))
-                    _before = {w.get("id"): w.get("status") for w in wlist}
-                    if wager_mod.settle_all(wlist, _res.get("matches", [])):
-                        save_wagers(wlist)
-                        newly_won = [w for w in wlist if w.get("status") == "won" and _before.get(w.get("id")) != "won"]
-                except Exception as e:
-                    log("wager settle failed:", e)
+                _w = load_wagers()
+                if _w:                               # standing bets settle even if NEW betting is now disabled/locked
+                    wlist = _w
+                    try:
+                        _res = json.load(open("results.json"))
+                        _before = {w.get("id"): w.get("status") for w in wlist}
+                        if wager_mod.settle_all(wlist, _res.get("matches", [])):
+                            save_wagers(wlist)
+                            newly_won = [w for w in wlist if w.get("status") == "won" and _before.get(w.get("id")) != "won"]
+                    except Exception as e:
+                        log("wager settle failed:", e)
             if newly_won:                            # network post happens outside the lock
                 try:
                     _announce_wins(newly_won)        # one grouped post per finishing batch; accas only once fully won
@@ -2135,7 +2137,7 @@ class Handler(BaseHTTPRequestHandler):
                 if isinstance(b.get("wagers"), list):
                     save_wagers(b["wagers"])
                 save_config(cfg)
-                wl = load_wagers() if cfg.get("wagering_enabled") else None
+                wl = load_wagers() or None             # standing bets always count, even if NEW betting is switched off
                 try:                                 # rebuild the tracker from the restored data (no network needed)
                     scoring_mod.compute(out="tracker_data.json",
                                         default_mode=cfg.get("scoring_mode", "hybrid"), wagers=wl)
