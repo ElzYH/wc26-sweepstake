@@ -742,7 +742,7 @@ async function placeAcca(){
   const st=document.getElementById('accaStake'); const stake=parseFloat(st&&st.value);
   if(!(stake>0)){ BETMSG='Enter a stake.'; renderBets(); return; }
   let pin='';
-  if(STATUS.wager_pins_set){
+  if(STATUS.wager_pins_set && !(SESSION.logged_in && SESSION.player===BETPLAYER)){
     const pi=document.getElementById('betPinInput'); pin=((pi&&pi.value)||'').trim().toUpperCase();
     if(!pin){ BETMSG='Enter your bet passcode.'; renderBets(); return; }
   }
@@ -799,7 +799,7 @@ async function loadAllBets(){
 }
 async function claimFreePoints(){
   let pin='';
-  if(STATUS.wager_pins_set){
+  if(STATUS.wager_pins_set && !(SESSION.logged_in && SESSION.player===BETPLAYER)){
     const pi=document.getElementById('betPinInput'); pin=((pi&&pi.value)||'').trim().toUpperCase();
     if(!pin){ BETMSG='Enter your bet passcode first, then claim your free points.'; renderBets(); return; }
   }
@@ -817,7 +817,7 @@ async function placeBet(){
   const st=document.getElementById('betStake'); const stake=parseFloat(st&&st.value);
   if(!(stake>0)){ BETMSG='Enter a stake.'; renderBets(); return; }
   let pin='';
-  if(STATUS.wager_pins_set){
+  if(STATUS.wager_pins_set && !(SESSION.logged_in && SESSION.player===BETPLAYER)){
     const pi=document.getElementById('betPinInput'); pin=((pi&&pi.value)||'').trim().toUpperCase();
     if(!pin){ BETMSG='Enter your bet passcode (ask the organiser if you don\'t have it).'; renderBets(); return; }
   }
