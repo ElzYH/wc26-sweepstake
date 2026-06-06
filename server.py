@@ -497,6 +497,20 @@ def _discord_err(e):
             if e.code == 403:
                 return "Discord blocked it (403) — the bot isn't in that server / can't DM you. Re-invite the bot, or use the website instead."
             if e.code in (400, 404):
+                errs = body.get("errors") if isinstance(body, dict) else None
+                if errs:                                   # dig out the exact field Discord rejected
+                    paths = []
+                    def _walk(node, trail):
+                        if isinstance(node, dict):
+                            if "_errors" in node and isinstance(node["_errors"], list):
+                                for er in node["_errors"]:
+                                    paths.append(("/".join(trail) + ": " + er.get("message", "")).strip(" :"))
+                            for kk, vv in node.items():
+                                if kk != "_errors":
+                                    _walk(vv, trail + [str(kk)])
+                    _walk(errs, [])
+                    detail = "; ".join(paths[:4]) if paths else dmsg
+                    return "Discord rejected the command list (HTTP %s): %s. This is a command-definition problem, not your IDs." % (e.code, detail)
                 tail = (": “%s”" % dmsg) if dmsg else ""
                 return ("Discord rejected the request (HTTP %s)%s. For Register commands this is almost always a wrong "
                         "Application ID or Server (Guild) ID — check both in Settings (the Guild ID must be your server's, all digits)." % (e.code, tail))
@@ -1461,9 +1475,9 @@ def register_discord_commands():
         {"name": "bet", "description": "Bet your points on a game (shows the payout; add confirm to place)", "type": 1,
          "options": [
              {"name": "team", "description": "The team you want to back (or that's in the game)", "type": 3, "required": True},
+             {"name": "stake", "description": "Points to stake", "type": 10, "required": True},
              {"name": "pick", "description": "Back them to win, or back the draw (default: win)", "type": 3, "required": False,
               "choices": [{"name": "win", "value": "win"}, {"name": "draw", "value": "draw"}]},
-             {"name": "stake", "description": "Points to stake", "type": 10, "required": True},
              {"name": "confirm", "description": "Set true to actually place the bet", "type": 5, "required": False}]},
         {"name": "mybets", "description": "Your open and settled bets", "type": 1},
         {"name": "linkdiscord", "description": "Link this Discord to your player for betting (code from the website)", "type": 1,
@@ -1474,6 +1488,14 @@ def register_discord_commands():
         {"name": "allbets", "description": "Everyone's open bets right now", "type": 1},
         {"name": "unlink", "description": "Unlink this Discord from betting (if you linked the wrong player)", "type": 1},
     ]
+    for _c in cmds:                                   # Discord rejects required options after optional ones — catch it here
+        _seen_optional = False
+        for _o in _c.get("options") or []:
+            if not _o.get("required"):
+                _seen_optional = True
+            elif _seen_optional:
+                return False, ("Command /%s lists a required option (%s) after an optional one — "
+                               "required options must come first." % (_c["name"], _o.get("name")))
     base = "https://discord.com/api/v10/applications/%s" % app_id
     url = (base + "/guilds/%s/commands" % guild) if guild else (base + "/commands")
     try:
