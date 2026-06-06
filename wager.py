@@ -189,8 +189,8 @@ def budget_remaining(wagers, player, epoch, budget=STAGE_BUDGET):
     spent = 0.0
     back = 0.0
     for w in wagers or []:
-        if w.get("player") != player or w.get("epoch") != epoch or w.get("free"):
-            continue                                    # free bets sit outside the staking budget entirely
+        if w.get("player") != player or w.get("epoch") != epoch or w.get("free") or w.get("credit"):
+            continue                                    # free bets & free-point credits sit outside the staking budget entirely
         st = w.get("status")
         if st in ("pending", "won", "lost"):       # void = refunded, ignore
             spent += w.get("stake", 0) or 0

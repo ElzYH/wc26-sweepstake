@@ -395,6 +395,29 @@ def run():
     ck("the bonus is on top of earned points for staking", wager.available_points("Erol", 40, []) == 40 + wager.STARTING_BONUS,
        wager.available_points("Erol", 40, []))
 
+    # --- at most 2 OPEN accumulators per player (single bets don't count) ---
+    accs = []
+    ck("first acca accepted", wager.place_acca(accs, "Erol", [leg("ac1a", 80, 40), leg("ac1b", 70, 50)], 5, 200)[0])
+    ck("second acca accepted", wager.place_acca(accs, "Erol", [leg("ac2a", 80, 40), leg("ac2b", 70, 50)], 5, 200)[0])
+    _ok3, _r3 = wager.place_acca(accs, "Erol", [leg("ac3a", 80, 40), leg("ac3b", 70, 50)], 5, 200)
+    ck("a 3rd open acca is rejected", (not _ok3) and "accumulators running" in _r3.lower(), _r3)
+    ck("a single bet is still allowed alongside 2 open accas",
+       wager.place(accs, "Erol", fx(mid="solo1"), "HOME", 5, 200, 80, 40)[0], None)
+
+    # --- free-points drops: claiming adds free betting points (bet-only; leaderboard untouched) ---
+    fp = []
+    gok, gw = wager.grant_free_points(fp, "Erol", "drop-1")
+    ck("grant_free_points adds a credit", gok and gw.get("credit") and gw["amount"] == wager.FREE_BET_STAKE, gw)
+    ck("a claimed drop lifts free betting points by 5", wager.free_bonus("Erol", fp) == wager.STARTING_BONUS + 5, wager.free_bonus("Erol", fp))
+    ck("a claimed drop lifts available-to-stake by 5", wager.available_points("Erol", 0, fp) == wager.STARTING_BONUS + 5, wager.available_points("Erol", 0, fp))
+    ck("a claimed drop does NOT touch the leaderboard", wager.applied_points(40, "Erol", fp) == 40, wager.applied_points(40, "Erol", fp))
+    _dd = wager.player_deltas(fp).get("Erol", {})
+    ck("a credit isn't a bet (no pending stake/count)", _dd.get("pending_stake", 0) == 0 and _dd.get("pending_count", 0) == 0, _dd)
+    wager.grant_free_points(fp, "Erol", "drop-2")
+    ck("two claimed drops stack (free = start + 10)", wager.free_bonus("Erol", fp) == wager.STARTING_BONUS + 10, wager.free_bonus("Erol", fp))
+    fp2 = fp + [{"player": "Erol", "epoch": "GROUP_1", "stake": 8, "status": "lost", "return": 0}]
+    ck("losing 8 with start+10 free -> leaderboard unaffected", wager.leaderboard_net("Erol", fp2) == 0.0, wager.leaderboard_net("Erol", fp2))
+
     if FAILS:
         print("\nFAILED (%d): %s" % (len(FAILS), ", ".join(FAILS)))
         sys.exit(1)

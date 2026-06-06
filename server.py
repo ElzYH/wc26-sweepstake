@@ -487,7 +487,7 @@ def _free_bet_drops():
 
 
 def _open_free_drop(now=None):
-    """The free-bet drop currently open (you can still claim it), or None."""
+    """The free-points drop currently open (you can still claim it), or None."""
     now = now if now is not None else time.time()
     for d in _free_bet_drops():
         if d["opens"] <= now < d["closes"]:
@@ -530,7 +530,8 @@ def _apply_wager_caps(cfg=None):
         wager_mod.MAX_ACCA_LEGS = 3
     return {"min_stake": wager_mod.MIN_STAKE, "max_stake": _current_round_max_stake(),
             "base_max_stake": wager_mod.MAX_STAKE, "max_return": wager_mod.MAX_RETURN,
-            "max_pending": wager_mod.MAX_PENDING, "max_acca_legs": wager_mod.MAX_ACCA_LEGS}
+            "max_pending": wager_mod.MAX_PENDING, "max_acca_legs": wager_mod.MAX_ACCA_LEGS,
+            "max_active_accas": wager_mod.MAX_ACTIVE_ACCAS}
 
 
 def _current_round_max_stake():
@@ -1661,15 +1662,22 @@ def update_now(cfg):
         if token:
             import update_results
             update_results.COMPETITION = cfg.get("competition", "WC")
-            data = update_results.fetch(out="results.tmp.json", token=token)
-            if data and data.get("matches"):
-                os.replace("results.tmp.json", "results.json")        # atomic; only swap in good data
-            else:
-                if os.path.exists("results.tmp.json"):
+            try:
+                data = update_results.fetch(out="results.tmp.json", token=token)
+                if data and data.get("matches"):
+                    os.replace("results.tmp.json", "results.json")        # atomic; only swap in good data
+                elif os.path.exists("results.tmp.json"):
                     os.remove("results.tmp.json")
-                if not os.path.exists("results.json"):
-                    return False, "feed returned no matches"
-                # otherwise keep the last good results.json untouched
+            except Exception as e:                                        # a feed blip shouldn't block the recompute
+                log("results fetch failed, keeping last-good results.json:", e)
+                if os.path.exists("results.tmp.json"):
+                    try:
+                        os.remove("results.tmp.json")
+                    except Exception:
+                        pass
+            if not os.path.exists("results.json"):
+                return False, "feed returned no matches"
+            # otherwise fall through and recompute on the last-good results.json (so bets/claims still settle + show)
         else:
             _write_pretournament(cfg.get("competition", "WC"))
         wlist = None
@@ -1762,7 +1770,7 @@ def poller():
 
 
 def _maybe_announce_free_drop(cfg):
-    """Post once to Discord when a free-bet drop opens (idempotent via a stored marker)."""
+    """Post once to Discord when a free-points drop opens (idempotent via a stored marker)."""
     if not (cfg.get("wagering_enabled") and cfg.get("discord_webhook")) or wager_mod is None:
         return
     drop = _open_free_drop()
