@@ -83,6 +83,15 @@ if python3 qa_betting.py >/dev/null; then echo "  ok"; else echo "  FAIL"; pytho
 say "Concurrency QA (free claims strictly one-per-player-per-drop under load)"
 if python3 qa_concurrency.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_concurrency.py | tail -16; FAIL=1; fi
 
+say "Settlement QA (FT, extra time, penalty shootout, abandoned, glitch guard)"
+if python3 qa_settlement.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_settlement.py | tail -20; FAIL=1; fi
+
+say "Resilience QA (corruption recovery, empty-clobber guard, 6h snapshots)"
+if python3 qa_resilience.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_resilience.py | tail -16; FAIL=1; fi
+
+say "HTTP robustness QA (malformed/hostile input never 500s; server survives)"
+if python3 qa_http.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_http.py 2>&1 | tail -16; FAIL=1; fi
+
 say "Bot command tests"
 if python3 test_bot.py; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
 

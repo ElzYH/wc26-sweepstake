@@ -126,16 +126,29 @@ def _atomic_write_json(path, obj, mode=None):
     os.replace(tmp, path)          # atomic on the same filesystem
 
 
-def load_config():
-    if os.path.exists(CONFIG):
+def _load_json_resilient(path, default, validate=None):
+    """Load JSON, but if the live file is missing or corrupt, fall back to the last-good backup
+    before giving up. This means a single bad write (crash mid-save, disk hiccup) can never make
+    real data — bets, claims, links — silently vanish; the worst case is rolling back a few minutes."""
+    base = os.path.basename(path)
+    for candidate in (path, os.path.join("backups", "last_good", base), os.path.join("backups", base)):
         try:
-            with open(CONFIG) as f:
-                return json.load(f)
+            with open(candidate) as f:
+                d = json.load(f)
+        except FileNotFoundError:
+            continue
         except Exception as e:
-            # never let a corrupt/partial config take the whole server down — stay up, degraded
-            print("[warn] config unreadable (%s): %r — using empty config until fixed/restored" % (CONFIG, e))
-            return {}
-    return {}
+            print("[warn] %s unreadable (%r) — trying a backup" % (candidate, e))
+            continue
+        if validate is None or validate(d):
+            if candidate != path:
+                print("[recover] %s was unusable — restored from %s" % (path, candidate))
+            return d
+    return default() if callable(default) else default
+
+
+def load_config():
+    return _load_json_resilient(CONFIG, dict, validate=lambda d: isinstance(d, dict))
 
 
 def save_config(c):
@@ -160,6 +173,40 @@ def backup_data():
         for f in ("draw_result.json", "results.json", "tracker_data.json", "wagers.json"):
             if os.path.exists(f):
                 shutil.copy2(f, os.path.join("backups/last_good", f))
+    except OSError:
+        pass
+
+
+_LAST_SNAPSHOT = [0.0]
+def backup_snapshot(every_seconds=6 * 3600, keep=28):
+    """Every ~6 hours, keep a full timestamped copy of the data in backups/snapshots/<stamp>/.
+    Unlike last_good (overwritten each poll), these accumulate, so there's always a rollback
+    history to a known-good point. Keeps the most recent `keep` (~1 week at 6h). Best-effort."""
+    now = time.time()
+    root = os.path.join("backups", "snapshots")
+    if _LAST_SNAPSHOT[0] == 0.0:                       # on first run, seed from the newest existing snapshot so a restart doesn't over-snapshot
+        try:
+            existing = sorted(d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d)))
+            if existing:
+                _LAST_SNAPSHOT[0] = os.path.getmtime(os.path.join(root, existing[-1]))
+        except OSError:
+            pass
+    if now - _LAST_SNAPSHOT[0] < every_seconds:
+        return
+    try:
+        dst = os.path.join(root, time.strftime("%Y%m%d-%H%M%S", time.gmtime(now)))
+        os.makedirs(dst, exist_ok=True)
+        for f in ("draw_result.json", "results.json", "tracker_data.json", "wagers.json", CONFIG):
+            if os.path.exists(f):
+                try:
+                    shutil.copy2(f, os.path.join(dst, os.path.basename(f)))
+                except OSError:
+                    pass
+        snaps = sorted(d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d)))
+        for old in snaps[:-keep]:
+            shutil.rmtree(os.path.join(root, old), ignore_errors=True)
+        _LAST_SNAPSHOT[0] = now
+        log("snapshot backup written:", dst)
     except OSError:
         pass
 
@@ -425,15 +472,26 @@ WAGERS_FILE = "wagers.json"
 
 
 def load_wagers():
-    try:
-        with open(WAGERS_FILE) as f:
-            d = json.load(f)
-            return d if isinstance(d, list) else []
-    except Exception:
-        return []
+    return _load_json_resilient(WAGERS_FILE, list, validate=lambda d: isinstance(d, list))
 
 
 def save_wagers(w):
+    # Wagers are append-only — they never legitimately go from non-empty back to empty.
+    # So refuse to clobber a healthy non-empty log with an empty list (a sign of an upstream bug
+    # or a transient read failure); stash the current file first so nothing is ever lost.
+    if not w:
+        try:
+            with open(WAGERS_FILE) as f:
+                existing = json.load(f)
+            if isinstance(existing, list) and existing:
+                os.makedirs(os.path.join("backups", "last_good"), exist_ok=True)
+                shutil.copy2(WAGERS_FILE, os.path.join("backups", "last_good", "wagers.json"))
+                print("[guard] refused to overwrite %d existing wagers with an empty list — kept the file intact" % len(existing))
+                return
+        except FileNotFoundError:
+            pass
+        except Exception:
+            pass
     _atomic_write_json(WAGERS_FILE, w)
 
 
@@ -1843,6 +1901,10 @@ def poller():
             _maybe_announce_free_drop(load_config())
         except Exception as e:
             print("[freebet] error:", e)
+        try:
+            backup_snapshot()                 # timestamped rollback history, ~every 6h
+        except Exception as e:
+            print("[backup] snapshot error:", e)
         time.sleep(max(60, mins * 60))
 
 

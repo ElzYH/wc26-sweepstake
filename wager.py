@@ -376,6 +376,8 @@ def _leg_result(leg, match):
     side = _winner_side(match)
     if status not in ("FINISHED", "AWARDED") or side is None:
         return None
+    if side == "DRAW" and _norm_stage(match.get("stage")) != "GROUP_STAGE":
+        return None                      # a knockout can't truly end level — wait for valid (winner/pens) data, don't lose the leg on a glitch
     return "won" if leg["selection"] == side else "lost"
 
 
@@ -423,6 +425,8 @@ def settle(wagers, match, now=None):
             w["status"] = "void"; w["settled_at"] = ts; n += 1; continue
         if status not in ("FINISHED", "AWARDED") or side is None:
             continue
+        if side == "DRAW" and _norm_stage(w.get("stage")) != "GROUP_STAGE":
+            continue                     # knockout shouldn't end level; don't settle side bets as lost on glitchy data — wait for winner/pens
         if w["selection"] == side:
             w["status"] = "won"
         else:
