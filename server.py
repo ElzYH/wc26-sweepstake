@@ -496,6 +496,27 @@ def _open_free_drop(now=None):
     return None
 
 
+def _claim_free_drop(player, drop_id):
+    """Atomically claim a free-points drop, one per player per drop. Returns (status, result):
+      ("ok", credit) granted; ("already", None) this player already claimed THIS drop; ("error", reason) other.
+    The check and the record happen together under the single global lock, re-reading config inside it, so
+    two fast taps — or a web claim and a Discord /claim at the same instant — can never both succeed."""
+    with _lock:
+        cfg = load_config()
+        claims = cfg.get("free_bet_claims") if isinstance(cfg.get("free_bet_claims"), dict) else {}
+        taken = claims.get(drop_id) if isinstance(claims.get(drop_id), dict) else {}
+        if player in taken:                              # authoritative re-check inside the lock
+            return "already", None
+        wl = load_wagers()
+        ok, res = wager_mod.grant_free_points(wl, player, drop_id)
+        if not ok:
+            return "error", res
+        save_wagers(wl)
+        taken[player] = res["id"]; claims[drop_id] = taken
+        cfg["free_bet_claims"] = claims; save_config(cfg)
+        return "ok", res
+
+
 def _group_mid_ts():
     """Calendar midpoint (UTC epoch) of the group-stage games, so the staking budget resets halfway
     through the group stage. Games before it are epoch GROUP_1, on/after it GROUP_2. None if unknown."""
@@ -1400,14 +1421,10 @@ def discord_command(name, opts, uid=None):
             taken = claims.get(drop["id"]) if isinstance(claims.get(drop["id"]), dict) else {}
             if player in taken:
                 return "You've already claimed today's free points 🎁 — the next drop is another day."
-            with _lock:                                  # claim recorded atomically so nobody double-claims
-                wl = load_wagers()
-                ok, res = wager_mod.grant_free_points(wl, player, drop["id"])
-                if ok:
-                    save_wagers(wl)
-                    taken[player] = res["id"]; claims[drop["id"]] = taken
-                    cfgc["free_bet_claims"] = claims; save_config(cfgc)
-            if ok:
+            status, res = _claim_free_drop(player, drop["id"])   # atomic: web + Discord share one lock, re-check inside
+            if status == "already":
+                return "You've already claimed today's free points 🎁 — the next drop is another day."
+            if status == "ok":
                 update_now(load_config())
                 return ("🎁 **%g free betting points added to your balance!** Bet them on any game with `/bet` — "
                         "win and the winnings are yours; lose and it costs you nothing. One claim per drop." % res["amount"])
@@ -2583,14 +2600,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, json.dumps({"ok": False, "error": "Pick a valid player."}))
             if not re.fullmatch(r"[A-Z0-9]{4,24}", new_pin):
                 return self._send(400, json.dumps({"ok": False, "error": "Passcode must be 4–24 letters or numbers (no spaces)."}))
-            pins = cfg.get("wager_pins") if isinstance(cfg.get("wager_pins"), dict) else {}
-            if pins.get(player):                   # already claimed -> must prove ownership to change it
-                if not _pin_ok(player, body.get("current_pin")):
-                    return self._send(403, json.dumps({"ok": False, "claimed": True, "bad_pin": True,
-                        "error": "%s already has a passcode. Enter the current one to change it — or DM /resetpin on Discord, or ask the organiser to reset it." % player}))
-            pins[player] = new_pin
-            cfg["wager_pins"] = pins
-            save_config(cfg)
+            with _lock:                            # atomic: re-read inside the lock so two people can't claim the same name at once, and a concurrent config write can't clobber it
+                cfg = load_config()
+                pins = cfg.get("wager_pins") if isinstance(cfg.get("wager_pins"), dict) else {}
+                if pins.get(player):                   # already claimed -> must prove ownership to change it
+                    if not _pin_ok(player, body.get("current_pin")):
+                        return self._send(403, json.dumps({"ok": False, "claimed": True, "bad_pin": True,
+                            "error": "%s already has a passcode. Enter the current one to change it — or DM /resetpin on Discord, or ask the organiser to reset it." % player}))
+                pins[player] = new_pin
+                cfg["wager_pins"] = pins
+                save_config(cfg)
             log("player self-set bet passcode for", player)
             return self._send(200, json.dumps({"ok": True, "set": True}))
         if path == "/api/wager_check_pin":         # OPEN: verify a passcode is correct (so a wrong one is never saved on the device)
@@ -2606,13 +2625,15 @@ class Handler(BaseHTTPRequestHandler):
             player = str(body.get("player", "")).strip()
             if player not in players:
                 return self._send(400, json.dumps({"ok": False, "error": "Pick a valid player."}))
-            lk = cfg.get("wager_links") if isinstance(cfg.get("wager_links"), dict) else {}
-            for u, pl in lk.items():               # first-come: can't grab a name another Discord account already holds
-                if pl == player and str(u) != str(did):
-                    return self._send(409, json.dumps({"ok": False, "error": "%s is already claimed by another account — see the organiser if that's wrong." % player}))
-            lk[str(did)] = player
-            cfg["wager_links"] = lk
-            save_config(cfg)
+            with _lock:                            # atomic: re-read links inside the lock so two accounts can't grab the same name, and a concurrent write can't clobber it
+                cfg = load_config()
+                lk = cfg.get("wager_links") if isinstance(cfg.get("wager_links"), dict) else {}
+                for u, pl in lk.items():               # first-come: can't grab a name another Discord account already holds
+                    if pl == player and str(u) != str(did):
+                        return self._send(409, json.dumps({"ok": False, "error": "%s is already claimed by another account — see the organiser if that's wrong." % player}))
+                lk[str(did)] = player
+                cfg["wager_links"] = lk
+                save_config(cfg)
             log("discord-claim: %s -> %s" % (did, player))
             return self._send(200, json.dumps({"ok": True, "player": player}))
         if path == "/api/logout":                  # clear this browser's Discord session
@@ -2814,14 +2835,10 @@ class Handler(BaseHTTPRequestHandler):
             taken = claims.get(drop["id"]) if isinstance(claims.get(drop["id"]), dict) else {}
             if player in taken:
                 return self._send(400, json.dumps({"ok": False, "error": "You've already claimed this drop — the next one is another day."}))
-            with _lock:                                  # claim recorded atomically so nobody double-claims
-                wlist = load_wagers()
-                ok, res = wager_mod.grant_free_points(wlist, player, drop["id"])
-                if ok:
-                    save_wagers(wlist)
-                    taken[player] = res["id"]; claims[drop["id"]] = taken
-                    cfg["free_bet_claims"] = claims; save_config(cfg)
-            if ok:
+            status, res = _claim_free_drop(player, drop["id"])   # atomic: re-checks inside the lock so nobody double-claims
+            if status == "already":
+                return self._send(400, json.dumps({"ok": False, "error": "You've already claimed this drop — the next one is another day."}))
+            if status == "ok":
                 update_now(load_config())
                 log("free points claimed:", player, "+%g" % res["amount"], "drop", drop["id"])
                 return self._send(200, json.dumps({"ok": True, "credit": res, "amount": res["amount"]}))

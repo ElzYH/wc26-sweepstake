@@ -80,6 +80,9 @@ if python3 test_wager.py >/dev/null; then echo "  ok"; else echo "  FAIL"; pytho
 say "Betting QA (void lifecycle, mid-game/last-min void, accas, sequencing, free-points)"
 if python3 qa_betting.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_betting.py | tail -20; FAIL=1; fi
 
+say "Concurrency QA (free claims strictly one-per-player-per-drop under load)"
+if python3 qa_concurrency.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_concurrency.py | tail -16; FAIL=1; fi
+
 say "Bot command tests"
 if python3 test_bot.py; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
 
