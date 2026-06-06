@@ -8,6 +8,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 
 import scoring
 
@@ -146,6 +147,20 @@ def run():
           f"got {a['points']} expected {expected}")
     check("survival value reflects SEMI", a["survival"] == scoring.SURVIVAL_VALUE["SEMI_FINALS"],
           f"got {a['survival']}")
+
+    # --- regression: when betting is ON, upcoming fixtures must get odds even before anyone has bet ---
+    # (a None wager list = betting off -> no odds; an empty list = betting on, no bets yet -> odds present)
+    fut = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 3 * 86400))
+    fx3 = _fixtures(tempfile.mkdtemp(), [_m("A", "B", None, None, status="TIMED", date=fut)])
+    d_off = scoring.compute(teams_path=fx3["teams.json"], draw_path=fx3["draw_result.json"],
+                            results_path=fx3["results.json"], out=None, wagers=None)
+    d_on = scoring.compute(teams_path=fx3["teams.json"], draw_path=fx3["draw_result.json"],
+                           results_path=fx3["results.json"], out=None, wagers=[])
+    off_odds = [f for f in (d_off.get("fixtures") or []) if f.get("odds")]
+    on_odds = [f for f in (d_on.get("fixtures") or []) if f.get("odds")]
+    check("betting OFF (wagers=None) -> no odds on fixtures", len(off_odds) == 0, str(len(off_odds)))
+    check("betting ON (wagers=[]) -> upcoming fixtures get odds (so the Bets tab isn't empty)",
+          len(on_odds) >= 1, str(len(on_odds)))
 
     print()
     if FAILS:

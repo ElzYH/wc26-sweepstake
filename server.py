@@ -1599,8 +1599,8 @@ def update_now(cfg):
             newly_won = []
             with _lock:                              # guard against a concurrent place_wager losing a bet
                 _w = load_wagers()
-                if _w:                               # standing bets settle even if NEW betting is now disabled/locked
-                    wlist = _w
+                if _w or cfg.get("wagering_enabled"):   # betting on -> pass the list (even empty) so fixtures get odds;
+                    wlist = _w                          # standing bets also settle even if NEW betting was switched off
                     try:
                         _res = json.load(open("results.json"))
                         _before = {w.get("id"): w.get("status") for w in wlist}

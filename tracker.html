@@ -177,6 +177,8 @@
   .panel h4{font-family:'Anton';font-weight:400;color:var(--gold);text-transform:uppercase;font-size:16px;margin-bottom:8px}
   .panel p,.panel li{color:var(--muted);font-size:13.5px;line-height:1.6}.panel ul{margin:6px 0 0 18px}.panel b{color:var(--ink)}
   .panel input{width:100%;margin:6px 0;padding:9px 11px;border-radius:8px;background:#08180f;border:1px solid var(--line);color:var(--ink);font-family:'Sora'}
+  .panel input[type=checkbox]{width:16px;height:16px;flex:none;margin:0;padding:0}   /* don't let the 100% rule stretch checkboxes (it mashes the betting labels together) */
+  .panel label input[type=checkbox]{width:16px}
   .panel .row2{display:flex;gap:8px}.panel .row2 input{width:50%}
   .panel button{font-family:'Sora';font-weight:700;background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205;border:0;border-radius:999px;padding:10px 20px;cursor:pointer;margin-top:6px}
   .statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
