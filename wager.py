@@ -488,10 +488,12 @@ def stats(wagers):
     """Per-player wager stats for the analysis board: staked, profit won, points lost, biggest win, counts."""
     out = {}
     for w in wagers or []:
+        if w.get("credit") or w.get("status") == "void":
+            continue                              # free-points credits and cancelled/voided bets aren't real bets — don't tally them
         d = out.setdefault(w["player"], {"player": w["player"], "staked": 0.0, "won": 0.0, "lost": 0.0,
                                          "net": 0.0, "bets": 0, "open": 0, "biggest_win": 0.0})
         d["bets"] += 1
-        d["staked"] = round(d["staked"] + w["stake"], 1)
+        d["staked"] = round(d["staked"] + w.get("stake", 0), 1)
         st = w.get("status")
         if st == "pending":
             d["open"] += 1
