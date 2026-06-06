@@ -2090,9 +2090,9 @@ class Handler(BaseHTTPRequestHandler):
                                                "client_secret": cfg.get("discord_oauth_client_secret"),
                                                "grant_type": "authorization_code", "code": code, "redirect_uri": redirect}).encode()
                 tok = json.loads(urllib.request.urlopen(urllib.request.Request(
-                    "https://discord.com/api/oauth2/token", data, {"Content-Type": "application/x-www-form-urlencoded"}), timeout=10).read())
+                    "https://discord.com/api/oauth2/token", data, {"Content-Type": "application/x-www-form-urlencoded", "User-Agent": "wc26-sweepstake (https://github.com/ElzYH/wc26-sweepstake, 1.0)"}), timeout=10).read())
                 me = json.loads(urllib.request.urlopen(urllib.request.Request(
-                    "https://discord.com/api/users/@me", headers={"Authorization": "Bearer " + str(tok.get("access_token"))}), timeout=10).read())
+                    "https://discord.com/api/users/@me", headers={"Authorization": "Bearer " + str(tok.get("access_token")), "User-Agent": "wc26-sweepstake (https://github.com/ElzYH/wc26-sweepstake, 1.0)"}), timeout=10).read())
                 did = str(me.get("id") or "")
             except Exception as e:
                 log("discord oauth callback error:", e)
