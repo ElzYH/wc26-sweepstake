@@ -191,10 +191,10 @@ def run():
         st, body = req("GET", "/api/status")
         caps = (json.loads(body).get("wager_caps") or {})
         check("blank max_return -> no cap (status null)", caps.get("max_return") is None, str(caps.get("max_return")))
-        # --- free bet: gated off when no drop; one claim per player when a drop is open ---
-        st, body = req("POST", "/api/place_free_bet", {"admin_key": KEY, "player": "Erol", "matchId": "x", "selection": "HOME"})
-        check("free bet refused when none is on offer", st == 400 and "free bet" in body.lower(), body[:140])
-        # open a 'pre' drop: one group game ~2h out, between two real teams; lock betting so no pins needed
+        # --- free points: gated off when no drop; one claim per player when a drop is open ---
+        st, body = req("POST", "/api/place_free_bet", {"admin_key": KEY, "player": "Erol"})
+        check("free points refused when no drop is on", st == 400 and "free points" in body.lower(), body[:140])
+        # open a 'pre' drop: one group game ~2h out so the day-before window is live
         try:
             _tn = [t["name"] for t in json.load(open(os.path.join(tmp, "teams.json")))["teams"]][:2]
         except Exception:
@@ -204,12 +204,12 @@ def run():
             json.dump({"matches": [{"id": "FBGAME", "home": _tn[0], "away": _tn[1], "stage": "GROUP_STAGE",
                                     "status": "TIMED", "utcDate": _soon}]}, open(os.path.join(tmp, "results.json"), "w"))
             st, body = req("GET", "/api/status")
-            check("status shows a free-bet drop is open", (json.loads(body).get("free_bet") or {}).get("open") is True, body[:200])
-            _epin = (pins or {}).get("Erol", "")          # claim with the player's own passcode (no admin/lock toggles → no extra rate-limited POSTs)
-            st, body = req("POST", "/api/place_free_bet", {"player": "Erol", "matchId": "FBGAME", "selection": "HOME", "pin": _epin})
-            check("free bet can be claimed when a drop is open", st == 200 and json.loads(body).get("ok") is True, body[:160])
-            st, body = req("POST", "/api/place_free_bet", {"player": "Erol", "matchId": "FBGAME", "selection": "AWAY", "pin": _epin})
-            check("free bet can't be claimed twice by the same player", st == 400 and "already used" in body.lower(), body[:160])
+            check("status shows a free-points drop is open", (json.loads(body).get("free_bet") or {}).get("open") is True, body[:200])
+            _epin = (pins or {}).get("Erol", "")          # claim with the player's own passcode (no match needed now)
+            st, body = req("POST", "/api/place_free_bet", {"player": "Erol", "pin": _epin})
+            check("free points can be claimed when a drop is open", st == 200 and json.loads(body).get("amount") == 5, body[:160])
+            st, body = req("POST", "/api/place_free_bet", {"player": "Erol", "pin": _epin})
+            check("free points can't be claimed twice on the same drop", st == 400 and "already claimed" in body.lower(), body[:160])
         req("POST", "/api/settings", {"admin_key": KEY, "wagering_enabled": False})
         req("POST", "/api/settings", {"admin_key": KEY, "digest_enabled": True, "digest_hour": 7})
         st, body = req("GET", "/api/status")

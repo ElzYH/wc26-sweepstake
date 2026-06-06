@@ -73,13 +73,13 @@ def run_all():
     #    Brazil = 2 goals + win + WINNER bonus ; survival = WINNER value ; status alive @ WINNER.
     d = run([M(1, "Brazil", "Spain", "FINAL", 2, 1, "HOME")], tmp)
     b = team(d, "Brazil")
-    check("champion points = goals + win + WINNER bonus",
-          b["points"], 2 * SC["per_goal"] + SC["win"] + SC["stage_bonus"]["WINNER"])
+    check("champion points = goals + win (stage reward is via Survival)",
+          b["points"], 2 * SC["per_goal"] + SC["win"] + SC["stage_bonus"].get("WINNER", 0))
     check("champion survival = WINNER value", b["survival"], SV["WINNER"])
     check("champion status is alive", b["status"], "alive")
     check("champion furthest stage is WINNER", b["stage"], "WINNER")
     s = team(d, "Spain")
-    check("runner-up points = goal + FINAL bonus", s["points"], 1 * SC["per_goal"] + SC["stage_bonus"]["FINAL"])
+    check("runner-up points = goal (stage reward is via Survival)", s["points"], 1 * SC["per_goal"] + SC["stage_bonus"].get("FINAL", 0))
     check("runner-up survival = FINAL value", s["survival"], SV["FINAL"])
     check("runner-up is out", s["status"], "out")
     check("champion_decided team", (d.get("champion_decided") or {}).get("team"), "Brazil")
@@ -89,8 +89,8 @@ def run_all():
     d = run([M(1, "Brazil", "Spain", "FINAL", 1, 1, "HOME", duration="PENALTY_SHOOTOUT", penH=4, penA=3)], tmp)
     b = team(d, "Brazil")
     check("pens champion record shows a win (1-0-0)", b["record"], "1-0-0")
-    check("pens champion points = goal + win + WINNER bonus",
-          b["points"], 1 * SC["per_goal"] + SC["win"] + SC["stage_bonus"]["WINNER"])
+    check("pens champion points = goal + win (stage reward is via Survival)",
+          b["points"], 1 * SC["per_goal"] + SC["win"] + SC["stage_bonus"].get("WINNER", 0))
     check("pens runner-up record shows a loss (0-0-1)", team(d, "Spain")["record"], "0-0-1")
     check("pens winner is champion", (d.get("champion_decided") or {}).get("team"), "Brazil")
 
@@ -132,7 +132,7 @@ def run_all():
                 M(5, "Brazil", "Spain", "FINAL", 1, 0, "HOME"),          # Brazil to the final & wins it; Spain runner-up
                 M(6, "Japan", "X5", "LAST_32", 0, 1, "AWAY")], tmp)      # Erol's other team out in the R32
     b, jp = team(deep, "Brazil"), team(deep, "Japan")
-    check("a deep run massively out-points an early exit (points)", b["points"] > jp["points"] + 50, True)
+    check("a deep run out-points an early exit on match points (more games won)", b["points"] > jp["points"] + 15, True)
     check("a deep run out-scores on Both too (survival + points)",
           (b["points"] + b["survival"]) > (jp["points"] + jp["survival"]) + 50, True)
     check("the deeper team is worth more survival", b["survival"] > jp["survival"], True)

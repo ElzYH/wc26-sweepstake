@@ -141,9 +141,10 @@ def run():
                          results_path=fx2["results.json"], out=None)
     a = next(t for pl in d2["players"] for t in pl["teams"] if t["name"] == "A")
     sb = scoring.SCORING["stage_bonus"]
-    # A: group win 1 goal + win(3) + cs(1) = 5, semi 1 goal + win(3) + cs(1) = 5, plus furthest bonus (SEMI only)
-    expected = 5 + 5 + sb["SEMI_FINALS"]
-    check("furthest-stage bonus only (SEMI, not stacked)", a["points"] == expected,
+    # Stage progression is rewarded ONCE, via Survival — POINTS is goals/wins/clean sheets only (stage_bonus is {} now).
+    # A: group win 1 goal + win(3) + cs(1) = 5, semi 1 goal + win(3) + cs(1) = 5, plus any points stage bonus (0).
+    expected = 5 + 5 + sb.get("SEMI_FINALS", 0)
+    check("points = match points only (stage reward is via Survival, not stacked)", a["points"] == expected,
           f"got {a['points']} expected {expected}")
     check("survival value reflects SEMI", a["survival"] == scoring.SURVIVAL_VALUE["SEMI_FINALS"],
           f"got {a['survival']}")

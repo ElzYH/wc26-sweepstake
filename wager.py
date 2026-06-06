@@ -23,6 +23,7 @@ MAX_STAKE = 30           # base single-bet cap (group stage); rises each knockou
 MAX_RETURN = None         # most a single bet can return; None = no limit (admin can set a number)
 MAX_PENDING = 8           # most simultaneous open bets per player
 MAX_ACCA_LEGS = 3         # default legs in one accumulator; admin can raise
+MAX_ACTIVE_ACCAS = 2      # most simultaneous OPEN accumulators per player (single bets are unlimited)
 FREE_BET_STAKE = 5        # a claimed free bet stakes this many points; the stake is NEVER credited — only winnings (profit) count
 STARTING_BONUS = 5        # everyone starts with this many free betting points so they can bet before earning any.
                           # It's bet-only: it never sits on the leaderboard, and it cushions the first 5 of net losses.
@@ -144,6 +145,8 @@ def player_deltas(wagers):
     """Per-player effect of the wager log: settled profit/loss, points held in open bets, open count."""
     out = {}
     for w in wagers or []:
+        if w.get("credit"):                              # a claimed free-points drop: not a bet (see free_bonus); skip
+            continue
         d = out.setdefault(w["player"], {"settled_net": 0.0, "pending_stake": 0.0, "pending_count": 0})
         st = w.get("status")
         if w.get("free"):                                # a free bet: only a WIN matters, and only its profit counts.
@@ -196,23 +199,44 @@ def budget_remaining(wagers, player, epoch, budget=STAGE_BUDGET):
     return max(0.0, min(float(budget), round(budget - spent + back, 1)))
 
 
+def free_bonus(player, wagers):
+    """A player's total FREE betting points: the 5 everyone starts with, plus 5 for each free-points drop they've
+    claimed. These never sit on the leaderboard — they let you bet, and they cushion the first `free_bonus` of net
+    losses (so only genuine winnings, and losses beyond your free points, move the leaderboard)."""
+    extra = sum(w.get("amount", 0) for w in (wagers or []) if w.get("credit") and w.get("player") == player)
+    return float(STARTING_BONUS + extra)
+
+
 def available_points(player, settled_points, wagers):
-    """Points a player can still stake: their earned points + the free STARTING_BONUS + settled bet profit/loss
-    - points already on open bets, floored at 0. The bonus lets everyone bet from kick-off, before any points are earned."""
+    """Points a player can still stake: their earned points + their free points (starting bonus + claimed drops)
+    + settled bet profit/loss - points already on open bets, floored at 0."""
     d = player_deltas(wagers).get(player, {})
-    return max(0.0, round(settled_points + STARTING_BONUS + d.get("settled_net", 0.0) - d.get("pending_stake", 0.0), 1))
+    return max(0.0, round(settled_points + free_bonus(player, wagers) + d.get("settled_net", 0.0) - d.get("pending_stake", 0.0), 1))
 
 
-def leaderboard_net(player, wagers, bonus=STARTING_BONUS):
-    """The bet profit/loss that should hit a player's LEADERBOARD total. The free STARTING_BONUS (and any free-bet
-    winnings already in settled_net) means the first `bonus` points of net losses are absorbed and never cost the
-    player real points — only genuine winnings, and losses beyond the free bonus, move the leaderboard."""
+def leaderboard_net(player, wagers, bonus=None):
+    """The bet profit/loss that should hit a player's LEADERBOARD total. The free points (and any free-bet winnings
+    already in settled_net) mean the first `bonus` points of net losses are absorbed and never cost real points —
+    only genuine winnings, and losses beyond the free points, move the leaderboard."""
+    b = free_bonus(player, wagers) if bonus is None else float(bonus)
     net = player_deltas(wagers).get(player, {}).get("settled_net", 0.0)
-    return round(net + min(float(bonus), max(0.0, -net)), 1)
+    return round(net + min(b, max(0.0, -net)), 1)
+
+
+def grant_free_points(wagers, player, drop_id, amount=None, now=None):
+    """Claim a free-points drop: append a non-bet credit that boosts the player's free betting points by `amount`.
+    Returns (ok, credit_record). Caller is responsible for one-claim-per-drop enforcement."""
+    if not player or player in ("—", "-"):
+        return False, "Pick which player is claiming first."
+    amt = FREE_BET_STAKE if amount is None else amount
+    rec = {"id": uuid.uuid4().hex[:12], "player": player, "credit": True, "amount": amt,
+           "drop": drop_id, "status": "credit", "placed_at": int(now if now is not None else time.time())}
+    wagers.append(rec)
+    return True, rec
 
 
 def applied_points(base_points, player, wagers):
-    """A player's displayed points once wagers are applied: base + leaderboard net (bonus-cushioned) - open stakes, floored at 0."""
+    """A player's displayed points once wagers are applied: base + leaderboard net (free-cushioned) - open stakes, floored at 0."""
     d = player_deltas(wagers).get(player, {})
     return max(0.0, round(base_points + leaderboard_net(player, wagers) - d.get("pending_stake", 0.0), 1))
 
@@ -402,6 +426,11 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
     d = player_deltas(wagers).get(player, {})
     if d.get("pending_count", 0) >= MAX_PENDING:
         return False, "You already have %d open bets — settle some first." % MAX_PENDING
+    open_accas = sum(1 for w in (wagers or [])
+                     if w.get("player") == player and w.get("status") == "pending" and w.get("legs"))
+    if open_accas >= MAX_ACTIVE_ACCAS:
+        return False, ("You can only have %d accumulators running at once — wait for one to settle "
+                       "(single bets don't count toward this)." % MAX_ACTIVE_ACCAS)
     pending = d.get("pending_stake", 0.0)
     if pending + stake > cap + 1e-9:
         return False, ("You can have at most %d points riding on open bets at once — you've already got %g out there, "

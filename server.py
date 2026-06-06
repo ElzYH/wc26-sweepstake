@@ -444,8 +444,8 @@ def _gen_pin(n=5):
 
 
 def _free_bet_drops():
-    """Days a free bet is on offer: the day before the first game, plus a few deterministic 'random' game-days.
-    Returns a sorted list of {id, opens, closes} UTC-epoch windows. Stable across restarts (seeded once)."""
+    """Days free betting points are on offer: the day before the first game, plus roughly one match-day per week
+    (deterministic 'random' pick, stable across restarts). At most 5 drops in total."""
     if wager_mod is None:
         return []
     try:
@@ -474,7 +474,11 @@ def _free_bet_drops():
         save_config(cfg)
     pool = days[1:] if len(days) > 1 else days           # don't double up the first day
     rnd = random.Random(seed)
-    pick = sorted(rnd.sample(pool, min(3, len(pool)))) if pool else []
+    weeks = {}                                           # bucket match-days into 7-day weeks from matchday 1
+    for d in pool:
+        weeks.setdefault(int((day_ts[d] - first) // (7 * DAY)), []).append(d)
+    pick = [rnd.choice(sorted(weeks[wk])) for wk in sorted(weeks)]   # ~one drop per week (deterministic)
+    pick = sorted(pick)[: max(0, 5 - len(drops))]        # at most 5 drops total (the pre-drop counts as one)
     for d in pick:
         midnight = wager_mod._utc_ts(d + "T00:00:00Z")   # 00:00 UTC of that match-day
         if midnight is not None:
@@ -1293,7 +1297,7 @@ def discord_command(name, opts, uid=None):
                 return "No upcoming games to bet on right now — check back before kick-off."
             rows = ["**Upcoming games & odds**", "_Bet with_ `/bet team:<name> stake:<n>` _(your team to win), or add_ `pick:draw`_._"]
             if _open_free_drop():
-                rows.append("🎁 _A **free 5-point bet** is on offer right now — claim it with_ `/claim team:<name>` _(win and it's all profit; a loss costs nothing)._")
+                rows.append("🎁 _**Free betting points** are on offer right now — claim 5 with_ `/claim` _and bet them on any game (win and it's all profit; a loss costs nothing)._")
             for m in fx[:12]:
                 ko = m.get("stage") and m["stage"] != "GROUP_STAGE"
                 o = m["odds"]
@@ -1320,7 +1324,7 @@ def discord_command(name, opts, uid=None):
                 rows.append("%s %s v %s — %s @ %s · %s"
                             % (tag.get(w["status"], ""), w["home"], w["away"], pick, w["frac"], out))
             return "\n".join(rows)
-        # ---- /claim (today's free bet) ----
+        # ---- /claim (today's free betting points) ----
         if name == "claim":
             if wager_mod.betting_locked(d):
                 return "Betting is closed — the tournament is over."
@@ -1330,60 +1334,23 @@ def discord_command(name, opts, uid=None):
                         "tap **Connect Discord**, then `/linkdiscord code:<the code>`. Then `/claim` works here.")
             drop = _open_free_drop()
             if not drop:
-                return "No free bet on offer right now — they drop the day before the first game and on a few match-days. I'll post here the moment one's live."
+                return "No free points on offer right now — drops land on a handful of match-days through the tournament. I'll post here the moment one is live."
             cfgc = load_config()
             claims = cfgc.get("free_bet_claims") if isinstance(cfgc.get("free_bet_claims"), dict) else {}
             taken = claims.get(drop["id"]) if isinstance(claims.get(drop["id"]), dict) else {}
             if player in taken:
-                return "You've already used today's free bet 🎁 — the next one drops another day."
-            team = str(opts.get("team", "")).strip()
-            pick = str(opts.get("pick", "")).strip().lower() or "win"
-            confirm = bool(opts.get("confirm"))
-            if pick in ("w", "winner"):
-                pick = "win"
-            if pick not in ("win", "draw"):
-                return "Pick **win** (your team to win) or **draw**."
-            tl = team.lower()
-            m = next((x for x in fx if tl in (x["home"].lower(), x["away"].lower())), None) \
-                or next((x for x in fx if tl and (tl in x["home"].lower() or tl in x["away"].lower())), None)
-            if not m:
-                return "No upcoming game found for **%s**. Use `/games` to see what's on, then `/claim team:<name>`." % (team or "?")
-            team_is_home = tl in m["home"].lower()
-            selection = "DRAW" if pick == "draw" else ("HOME" if team_is_home else "AWAY")
-            if selection == "DRAW" and m.get("stage") and m["stage"] != "GROUP_STAGE":
-                return "Knockout games can't end in a draw — back **%s** or **%s** to win." % (m["home"], m["away"])
-            o = m["odds"][selection]
-            ret = wager_mod.potential_return(wager_mod.FREE_BET_STAKE, o["num"], o["den"])
-            who = ("a draw" if selection == "DRAW" else "%s to win" % (m["home"] if selection == "HOME" else m["away"]))
-            if not confirm:
-                return ("🎁 **Free bet preview** — %s v %s\n"
-                        "Backing **%s** at **%s** with your FREE **%g** points.\n"
-                        "Returns **%g** if it wins — that's **all profit**, and a loss costs you nothing.\n"
-                        "Run `/claim team:%s%s confirm: True` to place it. One free bet per drop."
-                        % (m["home"], m["away"], who, o["frac"], wager_mod.FREE_BET_STAKE, ret,
-                           team, (" pick:draw" if selection == "DRAW" else "")))
-            try:
-                results = json.load(open("results.json"))
-                teams = {t["name"]: t for t in json.load(open("teams.json"))["teams"]}
-            except Exception:
-                return "Couldn't load the data to place that bet."
-            raw = next((x for x in results.get("matches", []) if wager_mod.match_id(x) == m["matchId"]), None)
-            if raw is None or raw.get("home") not in teams or raw.get("away") not in teams:
-                return "You can only bet once both teams are confirmed."
-            ch = (teams.get(m["home"], {}) or {}).get("composite", 0)
-            ca = (teams.get(m["away"], {}) or {}).get("composite", 0)
-            with _lock:                                  # claim recorded atomically with the wager so nobody double-claims
+                return "You've already claimed today's free points 🎁 — the next drop is another day."
+            with _lock:                                  # claim recorded atomically so nobody double-claims
                 wl = load_wagers()
-                ok, res = wager_mod.place_free(wl, player, raw, selection, ch, ca)
+                ok, res = wager_mod.grant_free_points(wl, player, drop["id"])
                 if ok:
                     save_wagers(wl)
                     taken[player] = res["id"]; claims[drop["id"]] = taken
                     cfgc["free_bet_claims"] = claims; save_config(cfgc)
             if ok:
                 update_now(load_config())
-                _announce_bet(player, res)
-                return ("✅ **Free bet placed!** %g on **%s** @ %s — returns **%g** if it wins, and a loss costs you nothing. Good luck! 🎁"
-                        % (res["stake"], who, res["frac"], res["return"]))
+                return ("🎁 **%g free betting points added to your balance!** Bet them on any game with `/bet` — "
+                        "win and the winnings are yours; lose and it costs you nothing. One claim per drop." % res["amount"])
             return "❌ %s" % res
         # ---- /bet ----
         if wager_mod.betting_locked(d):
@@ -1481,7 +1448,7 @@ def discord_command(name, opts, uid=None):
                 "/games - upcoming games + betting odds\n"
                 "/linkdiscord <code> - link your account to bet (code from the tracker's Bets tab)\n"
                 "/bet team:<name> stake:<n> - back your team to win (add pick:draw for a draw; shows payout, points & stake left; add confirm to place). Bets are final\n"
-                "/claim team:<name> - claim today's FREE 5-point bet when one's on offer (win = all profit, a loss costs nothing; add confirm to place)\n"
+                "/claim - claim today's FREE 5 betting points when a drop is on (bet them on any game; win = winnings yours, a loss costs nothing)\n"
                 "/mybets - your open and settled bets\n"
                 "/allbets - everyone's open bets right now\n"
                 "/points - how many points you have to bet (and your max bet)\n"
@@ -1653,12 +1620,7 @@ def register_discord_commands():
              {"name": "pick", "description": "Back them to win, or back the draw (default: win)", "type": 3, "required": False,
               "choices": [{"name": "win", "value": "win"}, {"name": "draw", "value": "draw"}]},
              {"name": "confirm", "description": "Set true to actually place the bet", "type": 5, "required": False}]},
-        {"name": "claim", "description": "Claim today's FREE 5-point bet (when one's on offer) — pick a team", "type": 1,
-         "options": [
-             {"name": "team", "description": "The team to put your free bet on", "type": 3, "required": True},
-             {"name": "pick", "description": "Back them to win, or back the draw (default: win)", "type": 3, "required": False,
-              "choices": [{"name": "win", "value": "win"}, {"name": "draw", "value": "draw"}]},
-             {"name": "confirm", "description": "Set true to actually place the free bet", "type": 5, "required": False}]},
+        {"name": "claim", "description": "Claim today's FREE 5 betting points (when a drop is on) — bet them on any game", "type": 1},
         {"name": "mybets", "description": "Your open and settled bets", "type": 1},
         {"name": "linkdiscord", "description": "Link this Discord to your player for betting (code from the website)", "type": 1,
          "options": [{"name": "code", "description": "The code shown on the tracker's Bets tab", "type": 3, "required": True}]},
@@ -1806,9 +1768,9 @@ def _maybe_announce_free_drop(cfg):
     drop = _open_free_drop()
     if not drop or cfg.get("free_bet_announced") == drop["id"]:
         return
-    discord_send("🎁 **Free bet!** Everyone gets a free %d-point bet today — claim it with `/claim team:<name>` here, "
-                 "or on the tracker's 💷 Bets tab. Win and the points are yours; lose and it costs you nothing. One per person, today only."
-                 % wager_mod.FREE_BET_STAKE)
+    discord_send("🎁 **Free points!** Everyone can claim **%d free betting points** today — `/claim` here, or on the "
+                 "tracker's 💷 Bets tab. Bet them on any game: win and the winnings are yours; lose and it costs you nothing. "
+                 "One claim per person, today only." % wager_mod.FREE_BET_STAKE)
     cfg["free_bet_announced"] = drop["id"]
     save_config(cfg)
 
@@ -2626,18 +2588,15 @@ class Handler(BaseHTTPRequestHandler):
                 _announce_bet(player, res)
                 return self._send(200, json.dumps({"ok": True, "wager": res}))
             return self._send(400, json.dumps({"ok": False, "error": res}))
-        if path == "/api/place_free_bet":          # OPEN (passcode-gated): claim + place the current free bet (5 pts, free)
+        if path == "/api/place_free_bet":          # OPEN (passcode-gated): claim today's free betting points (no match)
             cfg = load_config()
             if not cfg.get("wagering_enabled") or wager_mod is None:
                 return self._send(400, json.dumps({"ok": False, "error": "Betting isn't switched on."}))
             drop = _open_free_drop()
             if not drop:
-                return self._send(400, json.dumps({"ok": False, "error": "No free bet is available right now — they drop the day before the first match and on some match-days."}))
-            _apply_wager_caps(cfg)
+                return self._send(400, json.dumps({"ok": False, "error": "No free points are available right now — drops land on a few match-days through the tournament."}))
             players = [(p if isinstance(p, str) else p.get("name", "")) for p in cfg.get("players", [])]
             player = str(body.get("player", "")).strip()
-            selection = str(body.get("selection", "")).strip().upper()
-            mid_q = str(body.get("matchId", "")).strip()
             if player not in players:
                 return self._send(400, json.dumps({"ok": False, "error": "Pick a valid player."}))
             if cfg.get("wager_locked") and not key_ok(body):
@@ -2650,35 +2609,18 @@ class Handler(BaseHTTPRequestHandler):
             claims = cfg.get("free_bet_claims") if isinstance(cfg.get("free_bet_claims"), dict) else {}
             taken = claims.get(drop["id"]) if isinstance(claims.get(drop["id"]), dict) else {}
             if player in taken:
-                return self._send(400, json.dumps({"ok": False, "error": "You've already used this free bet — the next one drops another day."}))
-            try:
-                results = json.load(open("results.json"))
-            except Exception:
-                return self._send(400, json.dumps({"ok": False, "error": "No data yet."}))
-            match = next((m for m in results.get("matches", []) if wager_mod.match_id(m) == mid_q), None)
-            if not match:
-                return self._send(400, json.dumps({"ok": False, "error": "That game could not be found."}))
-            teams = {}
-            try:
-                teams = {t["name"]: t for t in json.load(open("teams.json"))["teams"]}
-            except Exception:
-                pass
-            if match.get("home") not in teams or match.get("away") not in teams:
-                return self._send(400, json.dumps({"ok": False, "error": "You can only bet once both teams are confirmed."}))
-            ch = (teams.get(match.get("home"), {}) or {}).get("composite", 0)
-            ca = (teams.get(match.get("away"), {}) or {}).get("composite", 0)
-            with _lock:                                  # claim is recorded atomically with the wager so nobody double-claims
+                return self._send(400, json.dumps({"ok": False, "error": "You've already claimed this drop — the next one is another day."}))
+            with _lock:                                  # claim recorded atomically so nobody double-claims
                 wlist = load_wagers()
-                ok, res = wager_mod.place_free(wlist, player, match, selection, ch, ca)
+                ok, res = wager_mod.grant_free_points(wlist, player, drop["id"])
                 if ok:
                     save_wagers(wlist)
                     taken[player] = res["id"]; claims[drop["id"]] = taken
                     cfg["free_bet_claims"] = claims; save_config(cfg)
             if ok:
                 update_now(load_config())
-                log("free bet placed:", player, selection, "on", mid_q)
-                _announce_bet(player, res)
-                return self._send(200, json.dumps({"ok": True, "wager": res, "free": True}))
+                log("free points claimed:", player, "+%g" % res["amount"], "drop", drop["id"])
+                return self._send(200, json.dumps({"ok": True, "credit": res, "amount": res["amount"]}))
             return self._send(400, json.dumps({"ok": False, "error": res}))
         if path == "/api/place_acca":              # OPEN: an accumulator (one stake, combined odds)
             cfg = load_config()
