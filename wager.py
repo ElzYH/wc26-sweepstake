@@ -23,6 +23,8 @@ MAX_STAKE = 30           # base single-bet cap (group stage); rises each knockou
 MAX_RETURN = None         # most a single bet can return; None = no limit (admin can set a number)
 MAX_PENDING = 8           # most simultaneous open bets per player
 MAX_ACCA_LEGS = 3         # default legs in one accumulator; admin can raise
+STAGE_BUDGET = 100        # staking allowance per "epoch": group 1st half, group 2nd half, then each KO round.
+                          # Resets automatically because budget_remaining only sums bets within the same epoch.
 OVERROUND = 1.08          # ~8% bookmaker margin
 MAX_PROB = 0.95           # favourites can be priced shorter (down to ~1/20) so the margin holds on them too
 
@@ -149,6 +151,41 @@ def player_deltas(wagers):
     return out
 
 
+def _norm_stage(s):
+    return s or "GROUP_STAGE"
+
+
+def epoch_of(match, group_mid_ts=None):
+    """Which staking 'epoch' a match falls in. The group stage splits in two at group_mid_ts
+    (the calendar midpoint of the group games); each knockout round is its own epoch. Every epoch
+    gets a fresh STAGE_BUDGET, so the allowance resets at the group midpoint and at each KO round."""
+    stage = _norm_stage(match.get("stage"))
+    if stage == "GROUP_STAGE":
+        ts = _utc_ts(match.get("utcDate") or "")
+        if group_mid_ts is not None and ts is not None and ts >= group_mid_ts:
+            return "GROUP_2"
+        return "GROUP_1"
+    return stage
+
+
+def budget_remaining(wagers, player, epoch, budget=STAGE_BUDGET):
+    """Points a player can still stake in this epoch:
+    budget - (stakes placed this epoch) + (returns from won bets this epoch), clamped to [0, budget].
+    Losing leaves the budget down (you climb back only by winning); winnings top it up, never above budget.
+    Void bets refund so they don't count. Resets per epoch because we only sum bets tagged with this `epoch`."""
+    spent = 0.0
+    back = 0.0
+    for w in wagers or []:
+        if w.get("player") != player or w.get("epoch") != epoch:
+            continue
+        st = w.get("status")
+        if st in ("pending", "won", "lost"):       # void = refunded, ignore
+            spent += w.get("stake", 0) or 0
+        if st == "won":
+            back += w.get("return", 0) or 0
+    return max(0.0, min(float(budget), round(budget - spent + back, 1)))
+
+
 def available_points(player, settled_points, wagers):
     """Points a player can still stake: settled points + settled wager profit/loss - points already on open bets, floored at 0."""
     d = player_deltas(wagers).get(player, {})
@@ -161,7 +198,7 @@ def applied_points(base_points, player, wagers):
     return max(0.0, round(base_points + d.get("settled_net", 0.0) - d.get("pending_stake", 0.0), 1))
 
 
-def place(wagers, player, match, selection, stake, settled_points, comp_home, comp_away, now=None):
+def place(wagers, player, match, selection, stake, settled_points, comp_home, comp_away, now=None, group_mid_ts=None):
     """
     Validate and append a pending wager. Returns (ok, wager_or_error_string).
     `wagers` is mutated only on success. The server prices the match here (odds can't be spoofed by the client).
@@ -199,13 +236,21 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
     avail = available_points(player, settled_points, wagers)
     if stake > avail + 1e-9:
         return False, "You only have %g points available to stake." % avail
+    epoch = epoch_of(match, group_mid_ts)              # per-round staking budget (both this and the per-bet cap apply)
+    brem = budget_remaining(wagers, player, epoch)
+    if brem <= 1e-9:
+        return False, ("You've used up your %d-point staking budget for this round. It resets at the next round "
+                       "(the group-stage midpoint, then each knockout round) — you can't bet again until then." % STAGE_BUDGET)
+    if stake > brem + 1e-9:
+        return False, ("Your staking budget left this round is %g of %d points — stake that or less. "
+                       "It tops back up when your bets win (never above %d) and resets next round." % (brem, STAGE_BUDGET, STAGE_BUDGET))
     odds = match_odds(comp_home, comp_away).get(selection)
     ret = potential_return(stake, odds["num"], odds["den"])
     if MAX_RETURN is not None and ret > MAX_RETURN + 1e-9:
         return False, "That would return %g — the cap is %g per bet. Lower your stake." % (ret, MAX_RETURN)
     w = {"id": uuid.uuid4().hex[:12], "player": player, "matchId": match_id(match),
          "home": match.get("home"), "away": match.get("away"), "stage": match.get("stage"),
-         "utcDate": match.get("utcDate"), "selection": selection, "stake": stake,
+         "utcDate": match.get("utcDate"), "selection": selection, "stake": stake, "epoch": epoch,
          "num": odds["num"], "den": odds["den"], "frac": odds["frac"], "return": ret,
          "status": "pending", "placed_at": int(now if now is not None else time.time())}
     wagers.append(w)
@@ -276,7 +321,7 @@ def settle(wagers, match, now=None):
     return n
 
 
-def place_acca(wagers, player, selections, stake, settled_points, now=None):
+def place_acca(wagers, player, selections, stake, settled_points, now=None, group_mid_ts=None):
     """
     Place a 1-3 leg accumulator. `selections` is a list of dicts:
         {"match": <fixture>, "selection": "HOME|DRAW|AWAY", "comp_home": int, "comp_away": int}
@@ -289,7 +334,7 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None):
     if len(selections) == 1:                       # a 1-leg acca is just a normal single
         s = selections[0]
         return place(wagers, player, s["match"], s["selection"], stake, settled_points,
-                     s["comp_home"], s["comp_away"], now)
+                     s["comp_home"], s["comp_away"], now, group_mid_ts)
     ids = [match_id(s["match"]) for s in selections]
     if len(set(ids)) != len(ids):
         return False, "You can't pick the same game twice in one accumulator."
@@ -316,6 +361,12 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None):
     avail = available_points(player, settled_points, wagers)
     if stake > avail + 1e-9:
         return False, "You only have %g points available to stake." % avail
+    epoch = epoch_of(min(selections, key=lambda s: _utc_ts(s["match"].get("utcDate") or "") or 0)["match"], group_mid_ts)
+    brem = budget_remaining(wagers, player, epoch)
+    if brem <= 1e-9:
+        return False, ("You've used up your %d-point staking budget for this round (resets next round)." % STAGE_BUDGET)
+    if stake > brem + 1e-9:
+        return False, ("Your staking budget left this round is %g of %d points — stake that or less." % (brem, STAGE_BUDGET))
     legs = []
     dec = 1.0
     for s in selections:
@@ -333,7 +384,7 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None):
     ret = round(stake * dec, 1)
     if MAX_RETURN is not None and ret > MAX_RETURN + 1e-9:
         return False, "That acca would return %g — the cap is %g per bet. Lower your stake." % (ret, MAX_RETURN)
-    w = {"id": uuid.uuid4().hex[:12], "player": player, "type": "acca", "legs": legs,
+    w = {"id": uuid.uuid4().hex[:12], "player": player, "type": "acca", "legs": legs, "epoch": epoch,
          "home": legs[0]["home"], "away": legs[0]["away"], "selection": "ACCA",
          "stake": stake, "decimal": round(dec, 3), "frac": "%d-fold" % len(legs),
          "return": ret, "status": "pending", "placed_at": int(now if now is not None else time.time())}

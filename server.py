@@ -443,6 +443,22 @@ def _gen_pin(n=5):
     return "".join(secrets.choice(_PIN_ALPHABET) for _ in range(n))
 
 
+def _group_mid_ts():
+    """Calendar midpoint (UTC epoch) of the group-stage games, so the staking budget resets halfway
+    through the group stage. Games before it are epoch GROUP_1, on/after it GROUP_2. None if unknown."""
+    if wager_mod is None:
+        return None
+    try:
+        ms = json.load(open("results.json")).get("matches", [])
+    except Exception:
+        return None
+    ts = [t for m in ms if (m.get("stage") or "GROUP_STAGE") == "GROUP_STAGE"
+          for t in (wager_mod._utc_ts(m.get("utcDate") or ""),) if t is not None]
+    if len(ts) < 2:
+        return None
+    return (min(ts) + max(ts)) / 2.0
+
+
 def _apply_wager_caps(cfg=None):
     """Apply admin-configurable betting limits to the engine and return the caps dict.
     max_return: None = unlimited winnings (default); a number caps each bet's return.
@@ -1286,7 +1302,7 @@ def discord_command(name, opts, uid=None):
         ca = (teams.get(m["away"], {}) or {}).get("composite", 0)
         with _lock:
             wl = load_wagers()
-            ok, res = wager_mod.place(wl, player, raw, selection, stake, settled, ch, ca)
+            ok, res = wager_mod.place(wl, player, raw, selection, stake, settled, ch, ca, group_mid_ts=_group_mid_ts())
             if ok:
                 save_wagers(wl)
         if ok:
@@ -1873,6 +1889,8 @@ class Handler(BaseHTTPRequestHandler):
                 "wager_locked": bool(cfg.get("wager_locked")),
                 "wager_pins_set": bool(_wager_pins()),
                 "wager_pins_for": sorted(_wager_pins().keys()),
+                "wager_budget": (wager_mod.STAGE_BUDGET if wager_mod is not None else None),
+                "group_mid": (_group_mid_ts() if wager_mod is not None else None),
                 "wager_caps": (_apply_wager_caps(cfg) or {"min_stake": wager_mod.MIN_STAKE, "max_stake": _current_round_max_stake(),
                                 "base_max_stake": wager_mod.MAX_STAKE, "max_return": wager_mod.MAX_RETURN,
                                 "max_pending": wager_mod.MAX_PENDING, "max_acca_legs": wager_mod.MAX_ACCA_LEGS}
@@ -2412,7 +2430,7 @@ class Handler(BaseHTTPRequestHandler):
                 settled = round((prow.get("points", 0) or 0) - (prow.get("live", 0) or 0), 1)
             with _lock:
                 wlist = load_wagers()
-                ok, res = wager_mod.place(wlist, player, match, selection, stake, settled, ch, ca)
+                ok, res = wager_mod.place(wlist, player, match, selection, stake, settled, ch, ca, group_mid_ts=_group_mid_ts())
                 if ok:
                     save_wagers(wlist)
             if ok:

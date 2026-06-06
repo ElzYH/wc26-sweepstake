@@ -325,6 +325,37 @@ def run():
        [{"match": fx(mid="kaL", stage="LAST_16"), "selection": "DRAW", "comp_home": 70, "comp_away": 60},
         {"match": fx(mid="kbL", stage="LAST_16"), "selection": "HOME", "comp_home": 80, "comp_away": 40}], 4, 200)[0])
 
+    # --- per-epoch staking budget (STAGE_BUDGET); both this and the per-bet cap apply ---
+    B = wager.STAGE_BUDGET
+    g1 = "2026-06-15T18:00:00Z"; g2 = "2026-06-25T18:00:00Z"
+    mid = wager._utc_ts("2026-06-20T00:00:00Z")          # split the group stage in half here
+    ck("fresh epoch budget == STAGE_BUDGET", wager.budget_remaining([], "Erol", "GROUP_1") == B)
+    ck("group first/second halves are different epochs",
+       wager.epoch_of(fx(utc=g1), mid) == "GROUP_1" and wager.epoch_of(fx(utc=g2), mid) == "GROUP_2")
+    ck("each knockout round is its own epoch", wager.epoch_of(fx(stage="LAST_16"), mid) == "LAST_16")
+    # budget = budget - stakes + returns(won), clamped [0, B]
+    net = [{"player": "Erol", "epoch": "GROUP_1", "stake": 50, "status": "lost", "return": 0},
+           {"player": "Erol", "epoch": "GROUP_1", "stake": 10, "status": "won", "return": 25}]
+    ck("budget tracks net losses+wins (100-60+25=65)", wager.budget_remaining(net, "Erol", "GROUP_1") == 65,
+       wager.budget_remaining(net, "Erol", "GROUP_1"))
+    topped = [{"player": "Erol", "epoch": "GROUP_1", "stake": 20, "status": "lost", "return": 0},
+              {"player": "Erol", "epoch": "GROUP_1", "stake": 10, "status": "won", "return": 40}]
+    ck("winnings top budget up but never above B", wager.budget_remaining(topped, "Erol", "GROUP_1") == B,
+       wager.budget_remaining(topped, "Erol", "GROUP_1"))
+    locked = [{"player": "Erol", "epoch": "GROUP_1", "stake": 100, "status": "lost", "return": 0}]
+    ck("budget can hit 0", wager.budget_remaining(locked, "Erol", "GROUP_1") == 0)
+    lk_ok, lk_msg = wager.place(locked, "Erol", fx(mid="lk1", utc=g1), "HOME", 1, 500, 80, 40, group_mid_ts=mid)
+    ck("0 budget = locked out of this epoch", not lk_ok and "budget" in lk_msg.lower(), lk_msg)
+    ck("a different epoch (GROUP_2) is unaffected by GROUP_1 losses",
+       wager.budget_remaining(locked, "Erol", "GROUP_2") == B and wager.budget_remaining(locked, "Erol", "LAST_16") == B)
+    cap_ok, cap_msg = wager.place([], "Erol", fx(mid="cp1", utc=g1), "HOME", 40, 500, 80, 40, group_mid_ts=mid)
+    ck("per-bet cap (30) still applies even with full budget", not cap_ok and "30" in cap_msg, cap_msg)
+    # a real placement lands in the right epoch and reduces that epoch's budget
+    liveb = []
+    wager.place(liveb, "Erol", fx(mid="e1", utc=g1), "HOME", 20, 500, 80, 40, group_mid_ts=mid)
+    ck("placement tags the epoch + spends from it", liveb[0]["epoch"] == "GROUP_1"
+       and wager.budget_remaining(liveb, "Erol", "GROUP_1") == B - 20, liveb[0].get("epoch"))
+
     if FAILS:
         print("\nFAILED (%d): %s" % (len(FAILS), ", ".join(FAILS)))
         sys.exit(1)
