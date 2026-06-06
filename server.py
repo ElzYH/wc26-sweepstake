@@ -2255,6 +2255,7 @@ class Handler(BaseHTTPRequestHandler):
                     results["discord_channel"] = "failed: %s" % e
             log("test notification:", results)
             return self._send(200, json.dumps({"ok": True, "results": results}))
+        if path == "/api/wager_link_code":          # OPEN (passcode-gated): mint a one-time code to link Discord
             cfg = load_config()
             if not cfg.get("wagering_enabled") or wager_mod is None:
                 return self._send(400, json.dumps({"ok": False, "error": "Betting isn't switched on."}))

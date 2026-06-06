@@ -158,6 +158,9 @@ def run():
             check("admin clear removes that player's code", st == 200 and _who not in json.loads(body).get("pins", {}), body[:140])
             st, _ = req("POST", "/api/wager_pins", {"clear_player": _who})
             check("clear needs admin key (403)", st == 403, str(st))
+            # the "Connect Discord" route must be registered (regression guard: it once 404'd)
+            st, _ = req("POST", "/api/wager_link_code", {"player": _who, "pin": "WRONGPIN"})
+            check("wager_link_code route is registered (not 404)", st != 404, "got %s" % st)
             pins = newpins
         # self-service: a player sets their OWN passcode (first-come), then needs the current one to change it
         req("POST", "/api/settings", {"admin_key": KEY, "wagering_enabled": True})
