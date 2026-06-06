@@ -2297,6 +2297,8 @@ class Handler(BaseHTTPRequestHandler):
             url = (cfg.get("discord_webhook") or "").strip()    # the channel that gets bet + win announcements
             if not url.startswith("https://"):
                 results["discord_channel"] = "not set up"
+            elif "/api/webhooks/" not in url:
+                results["discord_channel"] = "that isn't a channel webhook URL — it must contain /api/webhooks/ (Discord → channel → Edit → Integrations → Webhooks → Copy Webhook URL)"
             else:
                 try:
                     req = urllib.request.Request(url, data=json.dumps({"content": msg}).encode(),
@@ -2304,7 +2306,10 @@ class Handler(BaseHTTPRequestHandler):
                     urllib.request.urlopen(req, timeout=8)
                     results["discord_channel"] = "sent ✓ (check your Discord channel)"
                 except Exception as e:
-                    results["discord_channel"] = "failed: %s" % _discord_err(e)
+                    _m = _discord_err(e)
+                    if "HTTP 400" in _m or "HTTP 404" in _m:
+                        _m = "Discord rejected the webhook — it's probably deleted or mistyped. Make a fresh one (channel → Edit → Integrations → Webhooks → New Webhook → Copy URL) and paste it in."
+                    results["discord_channel"] = "failed: %s" % _m
             log("test notification:", results)
             return self._send(200, json.dumps({"ok": True, "results": results}))
         if path == "/api/wager_link_code":          # OPEN (passcode-gated): mint a one-time code to link Discord
