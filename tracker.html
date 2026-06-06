@@ -896,7 +896,12 @@ async function load(){
   gate.style.display='none'; tabs.style.display='';
   secs.forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='';});
   render(DATA); await refreshStatus();        // wait for who-am-I before landing, so the right name shows (no flash)
-  if(loginParam && STATUS.wagering_enabled) activateTab('bets');   // after a Discord login, drop you straight on the Bets tab
+  if(loginParam && STATUS.wagering_enabled){ activateTab('bets'); }   // after a Discord login, drop you straight on the Bets tab
+  else {                                                              // otherwise restore whatever tab you were last on, so a refresh keeps your place
+    let saved=null; try{ saved=localStorage.getItem('wc26_tab'); }catch(e){}
+    const st=saved && document.querySelector('.tab[data-s="'+saved+'"]');
+    if(st && st.style.display!=='none' && !st.classList.contains('on')) activateTab(saved);
+  }
 }
 
 let H2H_A=null, H2H_B=null;
@@ -1122,6 +1127,7 @@ function activateTab(s){
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
   document.querySelectorAll('section').forEach(x=>x.classList.remove('on'));
   t.classList.add('on'); document.getElementById(s).classList.add('on');
+  try{ localStorage.setItem('wc26_tab', s); }catch(e){}      // remember the tab so a refresh keeps you here
   if(s==='bets' && STATUS.wagering_enabled && !document.getElementById('betWho')) renderBets();
 }
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>activateTab(t.dataset.s));

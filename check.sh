@@ -77,11 +77,18 @@ if python3 test_results.py >/dev/null; then echo "  ok"; else echo "  FAIL"; pyt
 say "Wagering engine tests (odds, payout, caps, pre-kickoff lock, settlement, balances)"
 if python3 test_wager.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_wager.py | tail -14; FAIL=1; fi
 
+say "Betting QA (void lifecycle, mid-game/last-min void, accas, sequencing, free-points)"
+if python3 qa_betting.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_betting.py | tail -20; FAIL=1; fi
+
 say "Bot command tests"
 if python3 test_bot.py; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
 
 say "Win-odds forecast (live-aware sim) tests"
-if node test_sim.js; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
+if command -v node >/dev/null 2>&1; then
+  if node test_sim.js; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
+else
+  echo "  (node not found — skipping; run this gate on your Mac for the JS checks)"
+fi
 
 say "Live smoke + security tests"
 if python3 smoke_test.py; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi

@@ -5,6 +5,18 @@ bracket + leaderboard using historical data (no API / live games needed).
 """
 import json
 import scoring
+import os, tempfile, shutil
+# Run from a writable scratch dir with copies of the inputs, so this works even when the
+# repo directory is root-owned (e.g. on the deployed server). Writes never touch the repo.
+_SRC = os.path.dirname(os.path.abspath(__file__))
+_TMP = tempfile.mkdtemp(prefix="wc26_2022_")
+for _fn in os.listdir(_SRC):
+    if _fn.endswith((".json", ".py")):
+        try:
+            shutil.copy(os.path.join(_SRC, _fn), _TMP)
+        except Exception:
+            pass
+os.chdir(_TMP)
 
 # 16 round-of-16 teams (minimal teams file: tier just drives chip colour)
 R16 = {
