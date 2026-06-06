@@ -538,7 +538,7 @@ function renderBets(){
       +'<div style="color:var(--ink);font-weight:600">Bet on Discord (optional)</div><ol style="margin:4px 0 6px;padding-left:20px"><li>Join the group Discord (ask the organiser for the invite link).</li><li>Type your passcode below and tap <b>Connect Discord</b> for a one-time code, then in a <b>DM to the bot</b> run <code>/linkdiscord code:THATCODE</code>. That links your Discord for betting.</li><li>After that just use <code>/bet</code>, <code>/claim</code> (free points), <code>/games</code>, <code>/points</code> — your passcode is never typed in a channel.</li><li><i>Optional:</i> run <code>/notifyme '+esc(BETPLAYER)+'</code> for match alerts.</li></ol>'
       +'<div style="opacity:.85;font-size:12px">The organiser can also link you instantly with “DM via bot”. Linked the wrong name? Use <b>Unlink</b> below or run <code>/unlink</code> in Discord.</div>'
       +'<div style="opacity:.85;font-size:12px;margin-top:4px"><b style="color:#ffd97a">Forgot or leaked your passcode?</b> If your Discord is linked, DM the bot <code>/mypin</code> to see it again, or <code>/resetpin</code> to roll a fresh one — no organiser needed, and only <i>your</i> linked account can do it. If you\'re not linked, ask the organiser; they can re-send or reset it for you.</div></details>';
-    h+='<div style="margin:0 0 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">🔒 <input id="betPinInput" type="text" autocomplete="off" placeholder="your bet passcode" value="'+esc(cached)+'" style="width:160px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:14px;letter-spacing:1px;text-transform:uppercase"><button id="linkDiscordBtn" class="mini">Connect Discord</button><button id="selfUnlinkBtn" class="mini" title="Disconnect your Discord from this player">Unlink my Discord</button></div>';
+    h+='<div style="margin:0 0 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">🔒 <input id="betPinInput" type="text" autocomplete="off" placeholder="your bet passcode" value="'+esc(cached)+'" style="width:160px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:14px;letter-spacing:1px;text-transform:uppercase"><button id="savePinBtn" class="mini" title="Save your passcode on this device so you only enter it once">Save</button><button id="linkDiscordBtn" class="mini">Connect Discord</button><button id="selfUnlinkBtn" class="mini" title="Disconnect your Discord from this player">Unlink my Discord</button>'+(cached?'<span style="color:var(--muted);font-size:12px">🔒 saved on this device</span>':'')+'</div>';
     h+='<div id="linkCodeBox" style="display:none;margin:0 0 12px;padding:8px 12px;border:1px solid var(--gold);border-radius:8px;font-size:13px"></div>';
   } else {
     h+='<div style="margin:0 0 12px;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--muted);line-height:1.6"><div style="color:var(--ink);font-weight:700;font-size:14px;margin-bottom:4px">How to bet</div><ol style="margin:4px 0 4px;padding-left:20px"><li>Pick <b>your name</b> above.</li><li>Tap a team\'s odds → enter a stake → <b>Place bet</b>, or use <b>🎰 Accumulator</b> for several games in one bet.</li><li>Winnings land in your total <b>when that game ends</b>. All bets are <b>final</b>.</li></ol></div>';
@@ -594,6 +594,14 @@ function renderBets(){
   h+='<div class="ovsec"><div class="ovh">Everyone\'s open bets</div><div id="allBets"><div class="empty">Loading…</div></div></div>';
   el.innerHTML=h;
   const ws=document.getElementById('betWho'); if(ws) ws.onchange=()=>{ BETPLAYER=ws.value; BETPICK=null; BETMSG=''; renderBets(); loadMyBets(); };
+  const bpi=document.getElementById('betPinInput');
+  if(bpi) bpi.oninput=()=>{ setBetPin(BETPLAYER,(bpi.value||'').trim().toUpperCase()); };   // keep it as you type so starting a new bet (re-render) never wipes it
+  const sp=document.getElementById('savePinBtn'); if(sp) sp.onclick=()=>{
+    const v=((document.getElementById('betPinInput')||{}).value||'').trim().toUpperCase();
+    setBetPin(BETPLAYER,v);
+    BETMSG = v ? '🔒 Passcode saved on this device — you won\'t need to type it again (until you bet from another device or clear it).' : 'Type your passcode first, then tap Save.';
+    renderBets();
+  };
   const ld=document.getElementById('linkDiscordBtn'); if(ld) ld.onclick=async()=>{
     const pi=document.getElementById('betPinInput'); const pin=((pi&&pi.value)||'').trim().toUpperCase();
     const box=document.getElementById('linkCodeBox');
