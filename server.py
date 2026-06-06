@@ -482,20 +482,25 @@ def _discord_err(e):
     try:
         import urllib.error
         if isinstance(e, urllib.error.HTTPError):
+            body = {}
+            try:
+                body = json.loads(e.read().decode() or "{}")
+            except Exception:
+                body = {}
+            dmsg = body.get("message") if isinstance(body, dict) else ""
             if e.code == 429:
-                ra = e.headers.get("Retry-After") if e.headers else None
-                try:
-                    body = json.loads(e.read().decode() or "{}")
-                    ra = ra or body.get("retry_after")
-                except Exception:
-                    body = {}
+                ra = (e.headers.get("Retry-After") if e.headers else None) or (body.get("retry_after") if isinstance(body, dict) else None)
                 secs = int(float(ra)) + 1 if ra else 30
                 return "Discord is rate-limiting us (429). Wait about %d second%s and try again — don't tap it repeatedly." % (secs, "" if secs == 1 else "s")
             if e.code == 401:
-                return "Discord rejected the bot token (401) — re-check the bot token in Settings."
+                return "Discord rejected the bot token (401) — re-check the Bot Token in Settings."
             if e.code == 403:
-                return "Discord blocked the message (403) — the bot may not share a server with you, or your DMs are closed. Open the tracker and use the passcode there instead."
-            return "Discord returned HTTP %s." % e.code
+                return "Discord blocked it (403) — the bot isn't in that server / can't DM you. Re-invite the bot, or use the website instead."
+            if e.code in (400, 404):
+                tail = (": “%s”" % dmsg) if dmsg else ""
+                return ("Discord rejected the request (HTTP %s)%s. For Register commands this is almost always a wrong "
+                        "Application ID or Server (Guild) ID — check both in Settings (the Guild ID must be your server's, all digits)." % (e.code, tail))
+            return "Discord returned HTTP %s%s." % (e.code, (": “%s”" % dmsg) if dmsg else "")
     except Exception:
         pass
     return str(e)
@@ -2017,6 +2022,8 @@ class Handler(BaseHTTPRequestHandler):
                 _bot_user["name"] = None        # re-fetch username for the new bot
             if "discord_webhook" in body:
                 w = str(body["discord_webhook"]).strip()
+                w = re.sub(r"/(slack|github)/?$", "", w)        # a /slack or /github webhook 400s our normal posts — use the plain one
+                w = w.split("?")[0].rstrip("/")                 # drop query string / trailing slash
                 cfg["discord_webhook"] = w if (w == "" or w.startswith("https://")) else cfg.get("discord_webhook", "")
             if "discord_invite" in body:
                 inv = str(body["discord_invite"]).strip()
@@ -2053,7 +2060,12 @@ class Handler(BaseHTTPRequestHandler):
                     pass
             for f in ("discord_app_id", "discord_guild_id", "discord_pubkey", "discord_bot_token"):
                 if f in body:
-                    cfg[f] = str(body[f]).strip()[:120]
+                    val = str(body[f]).strip()[:120]
+                    if f in ("discord_app_id", "discord_guild_id") and val and not val.isdigit():
+                        label = "Application ID" if f == "discord_app_id" else "Server (Guild) ID"
+                        hint = " (that looks like the Public Key — it has letters; the Application ID is all digits, on the General Information page)" if f == "discord_app_id" else " (right-click your server → Copy Server ID)"
+                        return self._send(400, json.dumps({"ok": False, "error": "%s must be all digits%s." % (label, hint)}))
+                    cfg[f] = val
             if body.get("vapid_sub"):
                 cfg["vapid_sub"] = str(body["vapid_sub"]).strip()[:120]
             with _lock:
