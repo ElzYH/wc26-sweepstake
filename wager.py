@@ -99,6 +99,44 @@ def match_odds(comp_home, comp_away):
     return out
 
 
+FORM_SWING = 0.12             # tournament form can move a team's strength by at most ±12% (FIFA ranking still dominates)
+
+
+def team_form(team, matches):
+    """A bounded form multiplier (~0.88..1.12) from a team's FINISHED games so far.
+    Returns 1.0 until they've played once. Uses win/draw/loss plus a capped goal-difference nudge.
+    Pure function of results -> deterministic (same data, same number), so the board never wobbles."""
+    played, score = 0, 0.0
+    for m in matches or []:
+        if team not in (m.get("home"), m.get("away")):
+            continue
+        hs, as_ = m.get("homeScore"), m.get("awayScore")
+        if hs is None or as_ is None:
+            continue
+        is_home = (m.get("home") == team)
+        gf, ga = (hs, as_) if is_home else (as_, hs)
+        side = _winner_side(m)
+        if side == "DRAW":
+            res = 0.0
+        elif side == ("HOME" if is_home else "AWAY"):
+            res = 1.0
+        else:
+            res = -1.0
+        gd = max(-3, min(3, gf - ga)) / 3.0       # goal difference, capped to ±3 then scaled to ±1
+        score += res + 0.5 * gd                    # one game ranges roughly -1.5 (heavy loss) .. +1.5 (big win)
+        played += 1
+    if played == 0:
+        return 1.0
+    f = max(-1.0, min(1.0, (score / played) / 1.5))   # average per game, normalised to -1..+1
+    return 1.0 + FORM_SWING * f
+
+
+def live_strength(base, team, matches):
+    """A team's base FIFA strength nudged by current tournament form (bounded). Used only for pricing odds —
+    never touches an already-placed bet, which keeps the odds it was struck at."""
+    return (base or 0) * team_form(team, matches)
+
+
 def potential_return(stake, num, den):
     """Total returned if it wins = stake + profit (profit = stake * num/den). e.g. 5 @ 9/2 -> 27.5."""
     return round(stake * (1.0 + num / den), 1)
@@ -488,12 +526,10 @@ def stats(wagers):
     """Per-player wager stats for the analysis board: staked, profit won, points lost, biggest win, counts."""
     out = {}
     for w in wagers or []:
-        if w.get("credit") or w.get("status") == "void":
-            continue                              # free-points credits and cancelled/voided bets aren't real bets — don't tally them
         d = out.setdefault(w["player"], {"player": w["player"], "staked": 0.0, "won": 0.0, "lost": 0.0,
                                          "net": 0.0, "bets": 0, "open": 0, "biggest_win": 0.0})
         d["bets"] += 1
-        d["staked"] = round(d["staked"] + w.get("stake", 0), 1)
+        d["staked"] = round(d["staked"] + w["stake"], 1)
         st = w.get("status")
         if st == "pending":
             d["open"] += 1

@@ -412,8 +412,8 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                 m = next((x for x in matches if x.get("home") == f["home"] and x.get("away") == f["away"]
                           and (x.get("utcDate") or "")[:16] == (f.get("utcDate") or "")[:16]), None)
                 if m and wager.can_bet_on(f) and f.get("home") in teams and f.get("away") in teams:
-                    ch = teams.get(f["home"], {}).get("composite", 0)
-                    ca = teams.get(f["away"], {}).get("composite", 0)
+                    ch = wager.live_strength(teams.get(f["home"], {}).get("composite", 0), f["home"], matches)
+                    ca = wager.live_strength(teams.get(f["away"], {}).get("composite", 0), f["away"], matches)
                     f["odds"] = wager.match_odds(ch, ca)
                     f["matchId"] = wager.match_id(m)
                     f["maxStake"] = wager.stage_max_stake(f.get("stage"))

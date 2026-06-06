@@ -1482,8 +1482,9 @@ def discord_command(name, opts, uid=None):
         except Exception:
             return "Couldn't load the data to place that bet."
         raw = next((x for x in results.get("matches", []) if wager_mod.match_id(x) == m["matchId"]), None)
-        ch = (teams.get(m["home"], {}) or {}).get("composite", 0)
-        ca = (teams.get(m["away"], {}) or {}).get("composite", 0)
+        _M = results.get("matches", [])
+        ch = wager_mod.live_strength((teams.get(m["home"], {}) or {}).get("composite", 0), m["home"], _M)
+        ca = wager_mod.live_strength((teams.get(m["away"], {}) or {}).get("composite", 0), m["away"], _M)
         with _lock:
             wl = load_wagers()
             ok, res = wager_mod.place(wl, player, raw, selection, stake, settled, ch, ca, group_mid_ts=_group_mid_ts())
@@ -2770,8 +2771,12 @@ class Handler(BaseHTTPRequestHandler):
                 pass
             if match.get("home") not in teams or match.get("away") not in teams:
                 return self._send(400, json.dumps({"ok": False, "error": "You can only bet once both teams are confirmed — this game isn't set yet."}))
-            ch = (teams.get(match.get("home"), {}) or {}).get("composite", 0)
-            ca = (teams.get(match.get("away"), {}) or {}).get("composite", 0)
+            try:
+                _M = json.load(open("results.json")).get("matches", [])
+            except Exception:
+                _M = []
+            ch = wager_mod.live_strength((teams.get(match.get("home"), {}) or {}).get("composite", 0), match.get("home"), _M)
+            ca = wager_mod.live_strength((teams.get(match.get("away"), {}) or {}).get("composite", 0), match.get("away"), _M)
             prow = next((p for p in (td.get("players") or []) if p.get("name") == player), {})
             settled = prow.get("points_settled")
             if settled is None:
@@ -2857,8 +2862,8 @@ class Handler(BaseHTTPRequestHandler):
                 if m.get("home") not in teams or m.get("away") not in teams:
                     return self._send(400, json.dumps({"ok": False, "error": "You can only bet once both teams are confirmed — one of those games isn't set yet."}))
                 selections.append({"match": m, "selection": str(lg.get("selection", "")).upper(),
-                                   "comp_home": (teams.get(m.get("home"), {}) or {}).get("composite", 0),
-                                   "comp_away": (teams.get(m.get("away"), {}) or {}).get("composite", 0)})
+                                   "comp_home": wager_mod.live_strength((teams.get(m.get("home"), {}) or {}).get("composite", 0), m.get("home"), results.get("matches", [])),
+                                   "comp_away": wager_mod.live_strength((teams.get(m.get("away"), {}) or {}).get("composite", 0), m.get("away"), results.get("matches", []))})
             prow = next((p for p in (td.get("players") or []) if p.get("name") == player), {})
             settled = prow.get("points_settled")
             if settled is None:
