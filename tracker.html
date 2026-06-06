@@ -177,9 +177,7 @@
   .panel h4{font-family:'Anton';font-weight:400;color:var(--gold);text-transform:uppercase;font-size:16px;margin-bottom:8px}
   .panel p,.panel li{color:var(--muted);font-size:13.5px;line-height:1.6}.panel ul{margin:6px 0 0 18px}.panel b{color:var(--ink)}
   .panel input{width:100%;margin:6px 0;padding:9px 11px;border-radius:8px;background:#08180f;border:1px solid var(--line);color:var(--ink);font-family:'Sora'}
-  .panel input[type=checkbox]{width:16px;height:16px;flex:none;margin:0;padding:0}
   .panel .row2{display:flex;gap:8px}.panel .row2 input{width:50%}
-  .panel .row2 input[type=checkbox]{width:16px}
   .panel button{font-family:'Sora';font-weight:700;background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205;border:0;border-radius:999px;padding:10px 20px;cursor:pointer;margin-top:6px}
   .statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
   .statcard{background:#0a1f15;border:1px solid var(--line);border-radius:12px;padding:12px 14px}
@@ -350,20 +348,20 @@
         <div class="row2" style="margin-top:6px"><button id="setSaveSite">Save link</button></div>
         <div class="hint" id="setSiteMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
         <p style="margin:12px 0 6px;color:var(--muted);font-size:12.5px">• <b>Daily summary</b> — automatically post the standings digest to Discord once a day.</p>
-        <div class="row2" style="align-items:center"><label style="font-size:13.5px"><input type="checkbox" id="setDigest" style="vertical-align:middle;margin-right:8px"><span style="vertical-align:middle">Post a daily summary</span></label><label style="font-size:12.5px;color:var(--muted)"><span style="vertical-align:middle">at</span> <input id="setDigestHour" type="number" min="0" max="23" style="width:60px;vertical-align:middle"> <span style="vertical-align:middle">:00 UTC</span></label></div>
+        <div class="row2" style="align-items:center"><label style="display:flex;align-items:center;gap:8px;font-size:13.5px"><input type="checkbox" id="setDigest"> Post a daily summary</label><label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)">at <input id="setDigestHour" type="number" min="0" max="23" style="width:60px"> :00 UTC</label></div>
         <div class="row2" style="margin-top:6px"><button id="setSaveDigest">Save daily summary</button><button id="setTestDigest" class="mini">Send a test now</button></div>
         <div class="hint" id="setDigestMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
       </div>
       <div id="wagerSetup" style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
         <p style="margin:0 0 8px"><b>💷 Betting.</b> Let players stake the points they've earned on games (fractional odds, capped, no cash-out). Off until you switch it on.</p>
-        <label style="display:flex;align-items:flex-start;gap:8px;font-size:13.5px;margin-bottom:8px;line-height:1.5;max-width:580px"><input type="checkbox" id="setWager" style="margin-top:3px;flex:none;width:16px;height:16px"><span>Enable betting</span></label>
-        <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--muted);margin-bottom:8px;line-height:1.5;max-width:580px"><input type="checkbox" id="setWagerLock" style="margin-top:3px;flex:none;width:16px;height:16px"><span>Lock betting to the organiser only (admin key instead of passcodes)</span></label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;margin-bottom:6px"><input type="checkbox" id="setWager"> Enable betting</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin-bottom:8px"><input type="checkbox" id="setWagerLock"> Lock betting to the organiser only (admin key instead of passcodes)</label>
         <div class="row2" style="align-items:flex-end;margin-bottom:6px">
           <label style="flex:1;font-size:12.5px;color:var(--muted)">Max winnings per bet <span style="opacity:.7">(blank = no limit)</span><input id="setMaxReturn" type="number" min="1" step="1" placeholder="no limit" style="margin-top:4px"></label>
           <label style="flex:1;font-size:12.5px;color:var(--muted)">Max accumulator legs <span style="opacity:.7">(default 3)</span><input id="setMaxAcca" type="number" min="2" max="10" step="1" placeholder="3" style="margin-top:4px"></label>
         </div>
         <button id="setSaveCaps" class="mini">Save bet limits</button>
-        <p style="margin:8px 0 6px;color:var(--muted);font-size:12.5px">• <b>Bet passcodes</b> — players now <b>set their own</b> on the Bets tab (pick name → choose a passcode), so you don't have to hand anything out. These buttons are just a fallback: <b>Generate / show</b> creates codes for anyone who hasn't set one (and lets you read them), and you can <b>Reset</b> a single player or <b>Regenerate all</b> if someone claims the wrong name or forgets.</p>
+        <p style="margin:8px 0 6px;color:var(--muted);font-size:12.5px">• <b>Bet passcodes</b> — each player gets a private code so only they can stake their own points. Generate them, then send each person their code. Players enter it once on the Bets tab (and once on Discord via <code>/bet … pin:CODE</code>).</p>
         <div class="row2"><button id="setGenPins" class="mini">Generate / show passcodes</button><button id="setRegenPins" class="mini">Regenerate all</button></div>
         <div id="pinList" style="margin-top:8px;font-size:13px"></div>
         <div class="hint" id="setWagerMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
@@ -528,27 +526,19 @@ function renderBets(){
     +'<div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px"><div style="color:var(--muted);font-size:11.5px;letter-spacing:.04em">'+esc(BETPLAYER.toUpperCase())+' CAN BET NOW</div><div style="font-family:\'Anton\';font-size:26px;line-height:1.1;color:'+(headroom>0?'var(--ink)':'#ff9a9a')+'" id="betAvail">'+Math.min(avail,headroom)+'</div><div style="color:var(--muted);font-size:11px">'+avail+' pts available'+(held>0?' · '+held+' already riding':'')+'</div></div>'
     +'</div>';
   h+='<div style="margin:0 0 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px">Betting as <select id="betWho" style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:14px">'+players.map(p=>`<option${p===BETPLAYER?' selected':''}>${esc(p)}</option>`).join('')+'</select></div>';
-  const myPinSet=(STATUS.wager_pins_for||[]).indexOf(BETPLAYER)>=0;
-  if(STATUS.wager_locked){
-    h+='<div style="margin:0 0 12px;border:1px solid #ffc83d;border-radius:10px;padding:12px 14px;font-size:13px;background:#2a2210;color:#ffd97a;line-height:1.6"><b>Betting is locked to the organiser.</b> Only the organiser can place bets (with the admin key). Other players can\'t stake right now.</div>';
-  } else if(myPinSet){
+  if(STATUS.wager_pins_set){
     const cached=betPin(BETPLAYER); const linked=(STATUS.wager_links_for||[]).indexOf(BETPLAYER)>=0;
     // ALWAYS-VISIBLE setup guide (not hidden behind a toggle)
     h+='<div style="margin:0 0 12px;border:1px solid var(--gold);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--muted);line-height:1.6">'
-      +'<div style="color:var(--ink);font-weight:700;font-size:14px;margin-bottom:6px">Your betting account</div>'
-      +'<div style="color:var(--ink);font-weight:600;margin-top:4px">Bet on the website</div><ol style="margin:4px 0 8px;padding-left:20px"><li>Pick <b>your name</b> above.</li><li>Type the <b>passcode you set</b> in the box below. It\'s saved on this device so only you can stake '+esc(BETPLAYER)+'\'s points — you only enter it once.</li><li>Tap a team\'s odds → enter a stake → <b>Place bet</b>. (Or <b>🎰 Accumulator</b> for several games in one bet.)</li><li><b style="color:#ffd97a">All bets are final</b> — once you confirm, a bet can\'t be changed or cancelled, and the odds are locked in.</li></ol>'
-      +'<div style="color:var(--ink);font-weight:600">Bet on Discord (optional)</div><ol style="margin:4px 0 6px;padding-left:20px"><li>Join the group Discord (ask the organiser for the invite link).</li><li>Run <code>/notifyme '+esc(BETPLAYER)+'</code> to claim your name.</li><li>Type your passcode below, tap <b>Connect Discord</b> for a one-time code, then in a <b>DM to the bot</b> run <code>/linkdiscord code:THATCODE</code>.</li><li>After that just use <code>/bet</code>, <code>/games</code>, <code>/points</code> — your passcode is never typed in a channel.</li></ol>'
-      +'<div style="opacity:.85;font-size:12px"><b style="color:#ffd97a">Forgot or leaked your passcode?</b> If your Discord is linked, DM the bot <code>/mypin</code> to see it or <code>/resetpin</code> to roll a new one — no organiser needed, and only <i>your</i> linked account can do it. Otherwise the organiser can reset it.</div></div>';
+      +'<div style="color:var(--ink);font-weight:700;font-size:14px;margin-bottom:6px">Set up your betting account (one minute, once)</div>'
+      +'<div style="color:var(--ink);font-weight:600;margin-top:4px">Bet on the website</div><ol style="margin:4px 0 8px;padding-left:20px"><li>Pick <b>your name</b> above.</li><li>Get <b>your bet passcode</b> from the organiser and type it in the box below. It\'s saved on this device so only you can stake '+esc(BETPLAYER)+'\'s points — you only enter it once.</li><li>Tap a team\'s odds → enter a stake → <b>Place bet</b>. (Or <b>🎰 Accumulator</b> for several games in one bet.)</li><li><b style="color:#ffd97a">All bets are final</b> — once you confirm, a bet can\'t be changed or cancelled, and the odds are locked in.</li></ol>'
+      +'<div style="color:var(--ink);font-weight:600">Bet on Discord (optional)</div><ol style="margin:4px 0 6px;padding-left:20px"><li>Join the group Discord (ask the organiser for the invite link).</li><li>Type your passcode below and tap <b>Connect Discord</b> for a one-time code, then in a <b>DM to the bot</b> run <code>/linkdiscord code:THATCODE</code>. That links your Discord for betting.</li><li>After that just use <code>/bet</code>, <code>/games</code>, <code>/points</code> — your passcode is never typed in a channel.</li><li><i>Optional:</i> run <code>/notifyme '+esc(BETPLAYER)+'</code> for match alerts.</li></ol>'
+      +'<div style="opacity:.85;font-size:12px">The organiser can also link you instantly with “DM via bot”. Linked the wrong name? Use <b>Unlink</b> below or run <code>/unlink</code> in Discord.</div>'
+      +'<div style="opacity:.85;font-size:12px;margin-top:4px"><b style="color:#ffd97a">Forgot or leaked your passcode?</b> If your Discord is linked, DM the bot <code>/mypin</code> to see it again, or <code>/resetpin</code> to roll a fresh one — no organiser needed, and only <i>your</i> linked account can do it. If you\'re not linked, ask the organiser; they can re-send or reset it for you.</div></div>';
     h+='<div style="margin:0 0 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">🔒 <input id="betPinInput" type="text" autocomplete="off" placeholder="your bet passcode" value="'+esc(cached)+'" style="width:160px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:14px;letter-spacing:1px;text-transform:uppercase"><button id="linkDiscordBtn" class="mini">Connect Discord</button><button id="selfUnlinkBtn" class="mini" title="Disconnect your Discord from this player">Unlink my Discord</button></div>';
     h+='<div id="linkCodeBox" style="display:none;margin:0 0 12px;padding:8px 12px;border:1px solid var(--gold);border-radius:8px;font-size:13px"></div>';
   } else {
-    // SELF-SERVICE: this player hasn't claimed a passcode yet — they set their own, no organiser needed
-    h+='<div style="margin:0 0 12px;border:1px solid var(--gold);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--muted);line-height:1.6">'
-      +'<div style="color:var(--ink);font-weight:700;font-size:14px;margin-bottom:6px">Set up your betting account (one minute, once — no organiser needed)</div>'
-      +'<ol style="margin:4px 0 8px;padding-left:20px"><li>Make sure <b>your name</b> is selected above.</li><li><b>Choose your own passcode</b> below and tap <b>Set my passcode</b>. It\'s saved on this device, and from then on only this code can stake '+esc(BETPLAYER)+'\'s points.</li><li>Tap a team\'s odds → enter a stake → <b>Place bet</b>. (Or <b>🎰 Accumulator</b> for several games in one bet.)</li><li><b style="color:#ffd97a">All bets are final</b> once confirmed.</li></ol>'
-      +'<div style="opacity:.9;font-size:12px;color:#ffd97a"><b>Pick your own name and set yours now</b> — whoever sets a name\'s passcode first claims it. To change it later you\'ll need your current one (or DM <code>/resetpin</code> on Discord). If someone grabs the wrong name, the organiser can reset it.</div></div>';
-    h+='<div style="margin:0 0 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">🔒 <input id="betSetPin" type="text" autocomplete="off" maxlength="10" placeholder="choose a passcode (4–10)" style="width:200px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:14px;letter-spacing:1px;text-transform:uppercase"><button id="setMyPinBtn" class="mini cta">Set my passcode</button></div>';
-    h+='<div id="setPinBox" style="display:none;margin:0 0 12px;padding:8px 12px;border:1px solid var(--gold);border-radius:8px;font-size:13px"></div>';
+    h+='<div style="margin:0 0 12px;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--muted);line-height:1.6"><div style="color:var(--ink);font-weight:700;font-size:14px;margin-bottom:4px">How to bet</div><ol style="margin:4px 0 4px;padding-left:20px"><li>Pick <b>your name</b> above.</li><li>Tap a team\'s odds → enter a stake → <b>Place bet</b>, or use <b>🎰 Accumulator</b> for several games in one bet.</li><li>Winnings land in your total <b>when that game ends</b>. All bets are <b>final</b>.</li></ol></div>';
   }
   if(held>=caps.max_stake-1e-9){ h+='<div style="margin:0 0 12px;padding:9px 12px;border-radius:8px;background:#2a2210;border:1px solid #ffc83d;color:#ffd97a;font-size:13px">⚠ You\'re maxed out — '+held+' points riding on open bets (limit '+caps.max_stake+'). Wait for one to settle before betting again.</div>'; }
   if(BETMSG) h+='<div style="margin:0 0 10px;padding:8px 12px;border-radius:8px;background:'+(BETMSG[0]==='✓'?'#10240f':'#2a1414')+';color:'+(BETMSG[0]==='✓'?'#7ee787':'#ff9a9a')+';font-size:13px">'+esc(BETMSG)+'</div>';
@@ -594,19 +584,6 @@ function renderBets(){
   h+='<div class="ovsec"><div class="ovh">Everyone\'s open bets</div><div id="allBets"><div class="empty">Loading…</div></div></div>';
   el.innerHTML=h;
   const ws=document.getElementById('betWho'); if(ws) ws.onchange=()=>{ BETPLAYER=ws.value; BETPICK=null; BETMSG=''; renderBets(); loadMyBets(); };
-  const smp=document.getElementById('setMyPinBtn'); if(smp) smp.onclick=async()=>{
-    const pi=document.getElementById('betSetPin'); const pin=((pi&&pi.value)||'').trim().toUpperCase();
-    const box=document.getElementById('setPinBox'); box.style.display='block';
-    if(!/^[A-Z0-9]{4,10}$/.test(pin)){ box.textContent='Pick a passcode of 4–10 letters or numbers (no spaces).'; return; }
-    if(!confirm('Set up betting as “'+BETPLAYER+'”?\n\nOnly do this if you ARE '+BETPLAYER+'. Once set, this passcode is the only way to bet '+BETPLAYER+'\u2019s points. If this isn\u2019t you, change the name at the top first.')) return;
-    box.textContent='Setting your passcode…';
-    try{ const j=await fetch('/api/wager_set_pin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:BETPLAYER,pin:pin})}).then(r=>r.json());
-      if(j.ok){ setBetPin(BETPLAYER,pin);
-        STATUS.wager_pins_for=(STATUS.wager_pins_for||[]).concat(STATUS.wager_pins_for&&STATUS.wager_pins_for.indexOf(BETPLAYER)>=0?[]:[BETPLAYER]);
-        STATUS.wager_pins_set=true; BETMSG='✓ Passcode set — only you can stake '+BETPLAYER+'\'s points now. You can bet below.'; renderBets(); if(typeof refreshStatus==='function') refreshStatus(); }
-      else box.textContent=j.error||'Could not set your passcode.';
-    }catch(e){ box.textContent='Could not reach the server.'; }
-  };
   const ld=document.getElementById('linkDiscordBtn'); if(ld) ld.onclick=async()=>{
     const pi=document.getElementById('betPinInput'); const pin=((pi&&pi.value)||'').trim().toUpperCase();
     const box=document.getElementById('linkCodeBox');
@@ -1665,25 +1642,15 @@ function renderPinList(pins,linked){
   const el=document.getElementById('pinList'); if(!el) return;
   if(!pins||!Object.keys(pins).length){ el.innerHTML=''; return; }
   linked=linked||{};
-  el.innerHTML='<div style="color:var(--muted);font-size:12px;margin-bottom:4px">Players set their own codes on the Bets tab — this list is your fallback. <b>Reset</b> rolls a new code for one person (others keep theirs). <b>Clear</b> wipes a name\u2019s code + Discord link so the <i>right</i> person can claim it (use if someone set up the wrong name). 🔗 = their Discord is linked.</div>'
+  el.innerHTML='<div style="color:var(--muted);font-size:12px;margin-bottom:4px">Send each person their code privately — or tap <b>DM via bot</b> (works once they\u2019ve linked their Discord via <b>Connect Discord</b> or <code>/notifyme</code>, and you\u2019ve set the bot token; the bot can only DM people whose DMs are open). <b>Forgot a code?</b> Tap <b>Reset</b> for just that person (others keep theirs), or they can DM themselves <code>/mypin</code> in Discord. 🔗 = their Discord is linked for betting.</div>'
     +Object.entries(pins).map(([p,c])=>{const lk=!!linked[p];
-      return '<div style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:4px;gap:8px;flex-wrap:wrap"><span>'+(lk?'🔗 ':'')+esc(p)+'</span><code style="letter-spacing:2px;color:var(--gold)">'+esc(c)+'</code><span style="display:flex;gap:6px;flex-wrap:wrap"><button class="mini dmpin" data-p="'+esc(p)+'">DM via bot</button><button class="mini resetpin" data-p="'+esc(p)+'">Reset</button><button class="mini clearpin" data-p="'+esc(p)+'" style="border-color:#b3343a;color:#ff9a9a">Clear</button>'+(lk?'<button class="mini unlinkbet" data-p="'+esc(p)+'" style="border-color:#b3343a;color:#ff9a9a">Unlink</button>':'')+'</span></div>';}).join('');
+      return '<div style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:4px;gap:8px;flex-wrap:wrap"><span>'+(lk?'🔗 ':'')+esc(p)+'</span><code style="letter-spacing:2px;color:var(--gold)">'+esc(c)+'</code><span style="display:flex;gap:6px"><button class="mini dmpin" data-p="'+esc(p)+'">DM via bot</button><button class="mini resetpin" data-p="'+esc(p)+'">Reset</button>'+(lk?'<button class="mini unlinkbet" data-p="'+esc(p)+'" style="border-color:#b3343a;color:#ff9a9a">Unlink</button>':'')+'</span></div>';}).join('');
   el.querySelectorAll('.dmpin').forEach(b=>b.onclick=async()=>{
     const m=document.getElementById('setWagerMsg'); m.textContent='DMing '+b.dataset.p+'…';
     try{ const j=await fetch('/api/send_pin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:ADMINKEY,player:b.dataset.p})}).then(r=>r.json());
       m.textContent=j.ok?('Sent '+b.dataset.p+' their code by DM (and linked them for betting).'):(j.error||'Could not DM.');
       if(j.need_key){ ADMINKEY=''; m.textContent='Session expired — reopen Settings and unlock again.'; }
       else _pins(false);   // refresh linked state
-    }catch(e){ m.textContent='Could not reach the server.'; }
-  });
-  el.querySelectorAll('.clearpin').forEach(b=>b.onclick=async()=>{
-    const p=b.dataset.p;
-    if(!confirm('Clear '+p+'\u2019s betting account? This wipes their passcode AND any Discord link, so '+p+'\u2019s name becomes unclaimed and the right person can set it up fresh on the Bets tab. Their open bets are unaffected.')) return;
-    const m=document.getElementById('setWagerMsg'); m.textContent='Clearing '+p+'\u2019s account…';
-    try{ const j=await fetch('/api/wager_pins',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:ADMINKEY,clear_player:p})}).then(r=>r.json());
-      if(j.need_key){ ADMINKEY=''; m.textContent='Session expired — reopen Settings and unlock again.'; }
-      else if(j.ok){ renderPinList(j.pins,j.linked); m.textContent=p+'\u2019s account cleared — they can now claim it themselves on the Bets tab.'; refreshStatus(); }
-      else m.textContent=j.error||'Could not clear.';
     }catch(e){ m.textContent='Could not reach the server.'; }
   });
   el.querySelectorAll('.resetpin').forEach(b=>b.onclick=async()=>{
@@ -1886,7 +1853,7 @@ function prefOn(t){ return getPrefs()[t]!==false; }   // default on
 function prefRows(){
   const p=getPrefs();
   return '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)"><div style="font-size:12px;color:var(--muted);margin-bottom:8px">Ping me about</div>'+
-    EVENT_LABELS.map(([k,l])=>`<label style="display:block;font-size:13px;color:var(--ink);padding:5px 0;cursor:pointer;line-height:1.5"><input type="checkbox" class="alPref" data-k="${k}"${p[k]!==false?' checked':''} style="vertical-align:middle;margin-right:9px"><span style="vertical-align:middle">${l}</span></label>`).join('')+'</div>';
+    EVENT_LABELS.map(([k,l])=>`<label style="display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink);padding:5px 0;cursor:pointer"><input type="checkbox" class="alPref" data-k="${k}"${p[k]!==false?' checked':''}> ${l}</label>`).join('')+'</div>';
 }
 async function pushUpdatePrefs(){
   try{ const reg=await navigator.serviceWorker.ready; const sub=await reg.pushManager.getSubscription();

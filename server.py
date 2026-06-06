@@ -62,7 +62,7 @@ HOST = os.environ.get("HOST", "0.0.0.0")   # set HOST=127.0.0.1 when behind a re
 STATIC = {"tracker.html", "wheel.html", "setup.html", "me.html", "watch.html",
           "teams.json", "tracker_data.json", "draw_result.json", "sw.js",
           "manifest.webmanifest", "icon.svg"}
-_lock = threading.Lock()
+_lock = threading.RLock()   # reentrant: callers may hold it while update_now re-acquires for the wager settle
 
 # ---- lightweight access log (admin-only): who's opening the site, in-memory, capped ----
 import collections
@@ -1532,20 +1532,22 @@ def update_now(cfg):
             _write_pretournament(cfg.get("competition", "WC"))
         wlist = None
         if cfg.get("wagering_enabled") and wager_mod is not None:
-            wlist = load_wagers()
-            try:
-                _res = json.load(open("results.json"))
-                _before = {w.get("id"): w.get("status") for w in wlist}
-                if wager_mod.settle_all(wlist, _res.get("matches", [])):
-                    save_wagers(wlist)
-                    newly_won = [w for w in wlist if w.get("status") == "won" and _before.get(w.get("id")) != "won"]
-                    if newly_won:                       # one grouped post per finishing batch; accas only once fully won
-                        try:
-                            _announce_wins(newly_won)
-                        except Exception as e:
-                            log("win announce failed:", e)
-            except Exception as e:
-                log("wager settle failed:", e)
+            newly_won = []
+            with _lock:                              # guard against a concurrent place_wager losing a bet
+                wlist = load_wagers()
+                try:
+                    _res = json.load(open("results.json"))
+                    _before = {w.get("id"): w.get("status") for w in wlist}
+                    if wager_mod.settle_all(wlist, _res.get("matches", [])):
+                        save_wagers(wlist)
+                        newly_won = [w for w in wlist if w.get("status") == "won" and _before.get(w.get("id")) != "won"]
+                except Exception as e:
+                    log("wager settle failed:", e)
+            if newly_won:                            # network post happens outside the lock
+                try:
+                    _announce_wins(newly_won)        # one grouped post per finishing batch; accas only once fully won
+                except Exception as e:
+                    log("win announce failed:", e)
         scoring_mod.compute(out="tracker_data.json", default_mode=cfg.get("scoring_mode", "hybrid"), wagers=wlist)
         cfg["last_update"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         save_config(cfg)
@@ -2308,12 +2310,14 @@ class Handler(BaseHTTPRequestHandler):
             pin = _wager_pins().get(player)
             if not pin:
                 return self._send(400, json.dumps({"ok": False, "error": "No passcode for %s yet — generate them first." % (player or "?")}))
-            uid = next((u for u, pl in _discord_subs().items() if pl == player), None)
+            cfg = load_config()
+            links = cfg.get("wager_links") if isinstance(cfg.get("wager_links"), dict) else {}
+            uid = (next((u for u, pl in links.items() if pl == player), None)       # linked for betting (Connect Discord)…
+                   or next((u for u, pl in _discord_subs().items() if pl == player), None))  # …or linked for alerts (/notifyme)
             if not uid:
                 return self._send(400, json.dumps({"ok": False,
-                    "error": "%s hasn't linked Discord yet (they need /notifyme first) — share their code another way." % player}))
-            cfg = load_config()                            # admin vouches: link this account for betting too
-            lk = cfg.get("wager_links"); lk = lk if isinstance(lk, dict) else {}
+                    "error": "%s hasn't connected Discord yet — they need to tap Connect Discord on the Bets tab (or run /notifyme). You can also just read them their passcode." % player}))
+            lk = links                                     # make sure the betting link is recorded
             lk[str(uid)] = player; cfg["wager_links"] = lk; save_config(cfg)
             ok, err = _bot_dm(uid, "🔒 Your **WC26 bet passcode** is **%s**.\nKeep it private — it's needed on the website. "
                                    "Your Discord is now linked, so on Discord just use `/games` then `/bet` (no passcode needed here)." % pin)
