@@ -14,6 +14,7 @@ import json
 import os
 import random
 import secrets
+import hmac
 import shutil
 import threading
 import time
@@ -154,7 +155,7 @@ def backup_draw():
 def backup_data():
     try:
         os.makedirs("backups/last_good", exist_ok=True)
-        for f in ("draw_result.json", "results.json", "tracker_data.json"):
+        for f in ("draw_result.json", "results.json", "tracker_data.json", "wagers.json"):
             if os.path.exists(f):
                 shutil.copy2(f, os.path.join("backups/last_good", f))
     except OSError:
@@ -432,6 +433,146 @@ def load_wagers():
 
 def save_wagers(w):
     _atomic_write_json(WAGERS_FILE, w)
+
+
+_PIN_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"     # no ambiguous 0/O/1/I/L
+
+
+def _gen_pin(n=5):
+    return "".join(secrets.choice(_PIN_ALPHABET) for _ in range(n))
+
+
+def _apply_wager_caps(cfg=None):
+    """Apply admin-configurable betting limits to the engine and return the caps dict.
+    max_return: None = unlimited winnings (default); a number caps each bet's return.
+    max_acca_legs: how many legs an accumulator may have (default 3)."""
+    if wager_mod is None:
+        return None
+    cfg = cfg if cfg is not None else load_config()
+    mr = cfg.get("max_return", None)
+    try:
+        wager_mod.MAX_RETURN = float(mr) if mr not in (None, "", 0) else None
+    except (TypeError, ValueError):
+        wager_mod.MAX_RETURN = None
+    try:
+        legs = int(cfg.get("max_acca_legs", 3))
+        wager_mod.MAX_ACCA_LEGS = max(2, min(10, legs))
+    except (TypeError, ValueError):
+        wager_mod.MAX_ACCA_LEGS = 3
+    return {"min_stake": wager_mod.MIN_STAKE, "max_stake": _current_round_max_stake(),
+            "base_max_stake": wager_mod.MAX_STAKE, "max_return": wager_mod.MAX_RETURN,
+            "max_pending": wager_mod.MAX_PENDING, "max_acca_legs": wager_mod.MAX_ACCA_LEGS}
+
+
+def _current_round_max_stake():
+    """Highest single-bet cap among games you can currently bet on (i.e. the cap for the current round)."""
+    if wager_mod is None:
+        return 30
+    try:
+        results = json.load(open("results.json"))
+    except Exception:
+        return wager_mod.MAX_STAKE
+    caps = [wager_mod.stage_max_stake(m.get("stage")) for m in results.get("matches", []) if wager_mod.can_bet_on(m)]
+    return max(caps) if caps else wager_mod.MAX_STAKE
+
+
+def _bot_dm(user_id, text):
+    """Send a private DM from the bot to one Discord user (used to hand out bet passcodes)."""
+    tok = (load_config().get("discord_bot_token") or "").strip()
+    if not tok:
+        return False, "Set the Discord bot token first."
+    hdr = {"Authorization": "Bot %s" % tok, "Content-Type": "application/json",
+           "User-Agent": "WC26-Sweepstake/1.0"}
+    try:
+        r = urllib.request.Request("https://discord.com/api/v10/users/@me/channels",
+                                   data=json.dumps({"recipient_id": str(user_id)}).encode(), headers=hdr)
+        cid = json.loads(urllib.request.urlopen(r, timeout=8).read()).get("id")
+        if not cid:
+            return False, "couldn't open a DM channel"
+        r2 = urllib.request.Request("https://discord.com/api/v10/channels/%s/messages" % cid,
+                                    data=json.dumps({"content": text[:1900]}).encode(), headers=hdr)
+        urllib.request.urlopen(r2, timeout=8)
+        return True, None
+    except Exception as e:
+        log("bot dm failed:", e)
+        return False, str(e)
+
+
+def _announce_bet(player, w):
+    """Post a placed bet to the group (Discord webhook + Telegram). Never reveals passcodes."""
+    if w.get("legs"):
+        picks = " + ".join("%s (%s)" % ((lg["home"] if lg["selection"] == "HOME" else
+                                          (lg["away"] if lg["selection"] == "AWAY" else "draw")), lg["frac"])
+                           for lg in w["legs"])
+        line = "🎲 %s put %g on a %d-fold acca: %s — returns %g if it all lands." % (
+            player, w["stake"], len(w["legs"]), picks, w["return"])
+    else:
+        pick = w["home"] if w["selection"] == "HOME" else (w["away"] if w["selection"] == "AWAY" else "a draw")
+        line = "🎲 %s staked %g on %s (%s v %s) at %s — returns %g if it wins." % (
+            player, w["stake"], pick, w["home"], w["away"], w["frac"], w["return"])
+    try:
+        discord_send(line)
+    except Exception as e:
+        log("bet announce (discord) failed:", e)
+    try:
+        tg_broadcast(line)
+    except Exception as e:
+        log("bet announce (tg) failed:", e)
+
+
+def _wager_desc(w):
+    if w.get("legs"):
+        return "%d-fold acca" % len(w["legs"])
+    return w["home"] if w["selection"] == "HOME" else (w["away"] if w["selection"] == "AWAY" else "the draw")
+
+
+def _announce_wins(won):
+    """One grouped channel post + a personal DM per winner when bets land.
+    Called only with bets that just flipped to WON, so an acca appears here only once every leg has won.
+    Grouped per settlement batch so a finishing game produces one message, not a flood."""
+    if not won:
+        return
+    lines = ["%s won +%g (%s)" % (w["player"], round(w["return"] - w["stake"], 1), _wager_desc(w)) for w in won]
+    blast = "🎉 Bets landed — " + "; ".join(lines) + "."
+    try:
+        discord_send(blast)
+    except Exception as e:
+        log("win announce (discord) failed:", e)
+    try:
+        tg_broadcast(blast)
+    except Exception as e:
+        log("win announce (tg) failed:", e)
+    cfg = load_config()
+    links = cfg.get("wager_links") if isinstance(cfg.get("wager_links"), dict) else {}
+    subs = _discord_subs()
+    byp = {}
+    for w in won:
+        byp.setdefault(w["player"], []).append(w)
+    for player, ws in byp.items():
+        uid = next((u for u, pl in links.items() if pl == player), None) or next((u for u, pl in subs.items() if pl == player), None)
+        if not uid:
+            continue
+        tot = round(sum(x["return"] - x["stake"] for x in ws), 1)
+        msg = ("🎉 Your bet won! +%g points (%s) — it's in your total now." % (tot, _wager_desc(ws[0]))
+               if len(ws) == 1 else
+               "🎉 %d of your bets won! +%g points total — they're in your total now." % (len(ws), tot))
+        try:
+            _bot_dm(uid, msg)
+        except Exception as e:
+            log("win dm failed:", e)
+
+
+def _wager_pins():
+    p = load_config().get("wager_pins")
+    return p if isinstance(p, dict) else {}
+
+
+def _pin_ok(player, pin):
+    """Constant-time check that `pin` is the bet passcode issued to `player`."""
+    want = _wager_pins().get(player)
+    if not want or not pin:
+        return False
+    return hmac.compare_digest(str(want), str(pin).strip().upper())
 
 
 def _entry_sub(e):
@@ -898,12 +1039,209 @@ def discord_command(name, opts, uid=None):
         had = subs.pop(str(uid), None) if uid else None
         cfg["discord_subs"] = subs; save_config(cfg)
         return "🔕 Personal pings turned off." if had else "You weren't subscribed to personal pings."
+    if name == "linkdiscord":
+        if not uid:
+            return "Couldn't read your Discord account — run this from inside the server."
+        cfg = load_config()
+        code = str(opts.get("code", "")).strip().upper()
+        codes = cfg.get("wager_link_codes") if isinstance(cfg.get("wager_link_codes"), dict) else {}
+        rec = codes.get(code)
+        if not rec or rec.get("exp", 0) < time.time():
+            return "That link code is wrong or has expired. Get a fresh one: tracker → 💷 Bets → **Connect Discord**."
+        player = rec["player"]
+        lk = cfg.get("wager_links"); lk = lk if isinstance(lk, dict) else {}
+        subs = cfg.get("discord_subs"); subs = subs if isinstance(subs, dict) else {}
+        lk[str(uid)] = player; subs[str(uid)] = player
+        codes.pop(code, None)                         # single use
+        cfg["wager_links"] = lk; cfg["discord_subs"] = subs; cfg["wager_link_codes"] = codes
+        save_config(cfg)
+        return ("✅ Linked — this Discord is now **%s** for betting. Use `/games` then `/bet` (no passcode needed here). "
+                "You'll also get %s's match pings." % (player, player))
+    if name == "mypin":
+        if not uid:
+            return "Couldn't read your Discord account — run this from inside the server."
+        player = (load_config().get("wager_links") or {}).get(str(uid))
+        if not player:
+            return "Link your account first: tracker → 💷 Bets → **Connect Discord** → `/linkdiscord code:…`."
+        pin = _wager_pins().get(player)
+        if not pin:
+            return "No passcode is set yet — ask the organiser."
+        ok, _ = _bot_dm(uid, "🔒 Your WC26 bet passcode for **%s** is **%s**. Keep it private — it's only needed on the website." % (player, pin))
+        return "📩 I've sent your passcode to your DMs." if ok else ("Your passcode for **%s** (only you can see this): ||%s||" % (player, pin))
+    if name == "resetpin":
+        if not uid:
+            return "Couldn't read your Discord account — run this from inside the server."
+        cfg = load_config()
+        player = (cfg.get("wager_links") or {}).get(str(uid))     # the link proves who you are — you can only reset YOUR OWN
+        if not player:
+            return "Link your account first: tracker → 💷 Bets → **Connect Discord** → `/linkdiscord code:…`. (Or ask the organiser to reset it.)"
+        pins = cfg.get("wager_pins") if isinstance(cfg.get("wager_pins"), dict) else {}
+        pins[player] = _gen_pin()
+        cfg["wager_pins"] = pins
+        save_config(cfg)
+        log("self-reset bet passcode for", player, "via Discord")
+        ok, _ = _bot_dm(uid, "🔒 New WC26 bet passcode for **%s**: **%s**. Your old one no longer works. Enter this on the website's 💷 Bets tab." % (player, pins[player]))
+        return "📩 Done — your old passcode is now dead and I've DM'd you the new one." if ok else ("Your new passcode for **%s** (only you can see this): ||%s|| — the old one no longer works." % (player, pins[player]))
+    if name == "unlink":
+        if not uid:
+            return "Couldn't read your Discord account — run this from inside the server."
+        cfg = load_config()
+        lk = cfg.get("wager_links") if isinstance(cfg.get("wager_links"), dict) else {}
+        was = lk.pop(str(uid), None)
+        cfg["wager_links"] = lk
+        save_config(cfg)
+        return ("✅ Unlinked — this Discord can no longer place bets. Re-link any time on the tracker's 💷 Bets tab."
+                if was else "This Discord wasn't linked for betting.")
+    if name == "points":
+        if not uid:
+            return "Couldn't read your Discord account — run this from inside the server."
+        player = (load_config().get("wager_links") or {}).get(str(uid)) or _discord_subs().get(str(uid))
+        if not player:
+            return "Link your account first: tracker → 💷 Bets → **Connect Discord** → `/linkdiscord code:…`."
+        pr = next((p for p in (d.get("players") or []) if p.get("name") == player), {})
+        if wager_mod is None or not load_config().get("wagering_enabled"):
+            return "**%s** — %s points." % (player, pr.get("points", 0))
+        wl = load_wagers()
+        settled = pr.get("points_settled")
+        if settled is None:
+            settled = round((pr.get("points", 0) or 0) - (pr.get("live", 0) or 0), 1)
+        avail = wager_mod.available_points(player, settled, wl)
+        dlt = wager_mod.player_deltas(wl).get(player, {})
+        cap = _current_round_max_stake()
+        return ("**%s** — **%g** points available to bet (max %d per bet right now).\n%g on open bets · %s total."
+                % (player, avail, cap, dlt.get("pending_stake", 0), pr.get("points", 0)))
+    if name == "allbets":
+        if wager_mod is None or not load_config().get("wagering_enabled"):
+            return "Betting isn't switched on."
+        wl = load_wagers()
+        ob = sorted([w for w in wl if w.get("status") == "pending"], key=lambda w: w.get("placed_at", 0))
+        if not ob:
+            return "No open bets right now."
+        livemids = {wager_mod.match_id(m) for m in (d.get("fixtures") or [])
+                    if m.get("status") in ("IN_PLAY", "PAUSED", "LIVE", "SUSPENDED")}
+        out = ["**Everyone's open bets**"]
+        for w in ob[:20]:
+            if w.get("legs"):
+                pick = "%d-fold acca" % len(w["legs"])
+                isl = any(lg.get("matchId") in livemids for lg in w["legs"])
+            else:
+                pick = w["home"] if w["selection"] == "HOME" else (w["away"] if w["selection"] == "AWAY" else "Draw")
+                isl = w.get("matchId") in livemids
+            out.append("%s%s — %s @ %s · %g → %g" % ("🔴 " if isl else "", w["player"], pick, w["frac"],
+                                                       w["stake"], w["return"]))
+        return "\n".join(out)
+    if name in ("games", "bet", "mybets"):
+        cfg = load_config()
+        if not cfg.get("wagering_enabled") or wager_mod is None:
+            return "Betting isn't switched on for this sweepstake."
+        fx = sorted([m for m in (d.get("fixtures") or []) if m.get("odds") and m.get("matchId")],
+                    key=lambda m: m.get("utcDate") or "")
+        if name == "games":
+            if wager_mod.betting_locked(d):
+                return "Betting is closed — the tournament is over."
+            if not fx:
+                return "No upcoming games to bet on right now — check back before kick-off."
+            rows = ["**Upcoming games & odds**", "_Bet with_ `/bet team:<name> pick:<home/draw/away> stake:<n>`"]
+            for m in fx[:12]:
+                ko = m.get("stage") and m["stage"] != "GROUP_STAGE"
+                o = m["odds"]
+                rows.append("**%s v %s** — H `%s` · %sA `%s`"
+                            % (m["home"], m["away"], o["HOME"]["frac"],
+                               ("" if ko else "D `%s` · " % o["DRAW"]["frac"]), o["AWAY"]["frac"]))
+            return "\n".join(rows)
+        if not uid:
+            return "Couldn't read your Discord account — run this from inside the server."
+        player = _discord_subs().get(str(uid))
+        if not player:
+            return "Link your account first with `/notifyme <your player name>`, then you can bet."
+        if name == "mybets":
+            wl = [w for w in load_wagers() if w["player"] == player][-15:]
+            if not wl:
+                return "You haven't placed any bets yet. Try `/games`, then `/bet`."
+            tag = {"pending": "🟡 OPEN", "won": "🟢 WON", "lost": "🔴 LOST", "void": "⚪ VOID"}
+            rows = ["**%s's bets**" % player]
+            for w in reversed(wl):
+                pick = w["home"] if w["selection"] == "HOME" else (w["away"] if w["selection"] == "AWAY" else "Draw")
+                out = ("+%g" % round(w["return"] - w["stake"], 1)) if w["status"] == "won" else \
+                      ("−%g" % w["stake"] if w["status"] == "lost" else
+                       ("refunded" if w["status"] == "void" else "stake %g" % w["stake"]))
+                rows.append("%s %s v %s — %s @ %s · %s"
+                            % (tag.get(w["status"], ""), w["home"], w["away"], pick, w["frac"], out))
+            return "\n".join(rows)
+        # ---- /bet ----
+        if wager_mod.betting_locked(d):
+            return "Betting is closed — the tournament is over."
+        # you can only bet as the player your Discord is LINKED to — and the link never exposes your passcode
+        links = load_config().get("wager_links")
+        links = links if isinstance(links, dict) else {}
+        if links.get(str(uid)) != player:
+            return ("🔒 Your Discord isn't linked for betting yet (so your passcode never has to be typed here).\n"
+                    "Open the tracker → **💷 Bets**, enter your passcode, tap **Connect Discord**, then run "
+                    "`/linkdiscord code:<the code it shows>` (DM me to keep it private). Then `/bet` works with no passcode.")
+        team = str(opts.get("team", "")).strip()
+        pick = str(opts.get("pick", "")).strip().upper()
+        confirm = bool(opts.get("confirm"))
+        try:
+            stake = float(opts.get("stake"))
+        except (TypeError, ValueError):
+            return "Stake must be a number of points."
+        if pick not in ("HOME", "DRAW", "AWAY"):
+            return "Pick must be **home**, **draw** or **away**."
+        tl = team.lower()
+        m = next((x for x in fx if tl in (x["home"].lower(), x["away"].lower())), None) \
+            or next((x for x in fx if tl and (tl in x["home"].lower() or tl in x["away"].lower())), None)
+        if not m:
+            return "No upcoming game found for **%s**. Use `/games` to see what's on." % (team or "?")
+        if pick == "DRAW" and m.get("stage") and m["stage"] != "GROUP_STAGE":
+            return "Knockout games can't be a draw — pick **home** or **away** (the side to go through)."
+        o = m["odds"][pick]
+        ret = wager_mod.potential_return(stake, o["num"], o["den"])
+        who = m["home"] if pick == "HOME" else (m["away"] if pick == "AWAY" else "a draw")
+        if not confirm:
+            return ("🎲 **Bet preview**\nBacking **%s** in %s v %s at **%s**.\n"
+                    "Stake **%g** → returns **%g** if it wins (profit **%g**).\n"
+                    "_Bets are final once placed — odds are locked in at the moment you confirm._\n"
+                    "Run the same command again with **confirm: True** to place it."
+                    % (who, m["home"], m["away"], o["frac"], stake, ret, round(ret - stake, 1)))
+        prow = next((p for p in (d.get("players") or []) if p.get("name") == player), {})
+        settled = prow.get("points_settled")
+        if settled is None:
+            settled = round((prow.get("points", 0) or 0) - (prow.get("live", 0) or 0), 1)
+        try:
+            results = json.load(open("results.json"))
+            teams = {t["name"]: t for t in json.load(open("teams.json"))["teams"]}
+        except Exception:
+            return "Couldn't load the data to place that bet."
+        raw = next((x for x in results.get("matches", []) if wager_mod.match_id(x) == m["matchId"]), None)
+        ch = (teams.get(m["home"], {}) or {}).get("composite", 0)
+        ca = (teams.get(m["away"], {}) or {}).get("composite", 0)
+        with _lock:
+            wl = load_wagers()
+            ok, res = wager_mod.place(wl, player, raw, pick, stake, settled, ch, ca)
+            if ok:
+                save_wagers(wl)
+        if ok:
+            update_now(load_config())
+            _announce_bet(player, res)
+            return ("✅ **Bet placed!** %g on **%s** @ %s — returns **%g** if it wins. "
+                    "Good luck. _(Bets are final.)_" % (res["stake"], who, res["frac"], res["return"]))
+        return "❌ %s" % res
     if name == "help":
         return ("**WC26 bot commands**\n"
                 "/leaderboard - top of the table\n"
                 "/summary - current standings digest\n"
                 "/groups - all 12 group tables with owners\n"
                 "/odds - who's most likely to win\n"
+                "/games - upcoming games + betting odds\n"
+                "/linkdiscord <code> - link your account to bet (code from the tracker's Bets tab)\n"
+                "/bet <team> <pick> <stake> - bet your points (shows payout; add confirm to place). Bets are final\n"
+                "/mybets - your open and settled bets\n"
+                "/allbets - everyone's open bets right now\n"
+                "/points - how many points you have to bet (and your max bet)\n"
+                "/mypin - DM yourself your own bet passcode\n"
+                "/resetpin - reset your own passcode if forgotten/leaked\n"
+                "/unlink - disconnect your Discord from betting\n"
+                "/scores - live scores and recent results\n"
                 "/stats - fun stats (top team, favourite, dark horse…)\n"
                 "/fixtures - live and upcoming games\n"
                 "/myteams <player> - that player's teams\n"
@@ -947,7 +1285,26 @@ def discord_command(name, opts, uid=None):
                 t = (m.get("utcDate") or "")[5:16].replace("T", " ")
                 out.append("- %s vs %s  %s UTC" % (m.get("home"), m.get("away"), t))
         return "\n".join(out) if out else "No fixtures available yet."
-    if name == "myteams":
+    if name == "scores":
+        fxa = d.get("fixtures") or []
+        live = [m for m in fxa if m.get("status") in ("IN_PLAY", "PAUSED", "LIVE", "SUSPENDED")]
+        done = sorted([m for m in fxa if m.get("status") in ("FINISHED", "AWARDED")],
+                      key=lambda m: m.get("utcDate") or "", reverse=True)
+        out = []
+        if live:
+            out.append("**🔴 Live now**")
+            for m in live:
+                out.append("%s%s %s–%s %s" % (("%s' " % m["minute"]) if m.get("minute") else "",
+                           m.get("home"), m.get("homeScore", 0), m.get("awayScore", 0), m.get("away")))
+        if done:
+            out.append("**Recent results**")
+            for m in done[:10]:
+                pk = ""
+                if m.get("penHome") is not None and m.get("penAway") is not None:
+                    pk = " _(pens %s–%s)_" % (m.get("penHome"), m.get("penAway"))
+                out.append("%s %s–%s %s%s" % (m.get("home"), m.get("homeScore", 0),
+                                              m.get("awayScore", 0), m.get("away"), pk))
+        return "\n".join(out) if out else "No scores yet — the tournament hasn't kicked off."
         who = str(opts.get("player", "")).strip().lower()
         pl = next((p for p in (d.get("players") or []) if (p.get("name", "").lower() == who)), None)
         if not pl:
@@ -1032,6 +1389,7 @@ def register_discord_commands():
         {"name": "odds", "description": "Who's most likely to win", "type": 1},
         {"name": "stats", "description": "Fun stats: top team, favourite, dark horse", "type": 1},
         {"name": "fixtures", "description": "Live and upcoming games", "type": 1},
+        {"name": "scores", "description": "Live scores and recent results", "type": 1},
         {"name": "myteams", "description": "A player's teams", "type": 1,
          "options": [{"name": "player", "description": "Player name", "type": 3, "required": True}]},
         {"name": "players", "description": "Every player and how many teams are still in", "type": 1},
@@ -1040,6 +1398,23 @@ def register_discord_commands():
         {"name": "notifyme", "description": "Get pinged here when a player's teams play, score or go out", "type": 1,
          "options": [{"name": "player", "description": "Your player name in the sweepstake", "type": 3, "required": True}]},
         {"name": "stopnotify", "description": "Turn off your personal pings", "type": 1},
+        {"name": "games", "description": "Upcoming games and their betting odds", "type": 1},
+        {"name": "bet", "description": "Bet your points on a game (shows the payout; add confirm to place)", "type": 1,
+         "options": [
+             {"name": "team", "description": "A team in the game you want to bet on", "type": 3, "required": True},
+             {"name": "pick", "description": "Who you're backing", "type": 3, "required": True,
+              "choices": [{"name": "home", "value": "home"}, {"name": "draw", "value": "draw"},
+                          {"name": "away", "value": "away"}]},
+             {"name": "stake", "description": "Points to stake", "type": 10, "required": True},
+             {"name": "confirm", "description": "Set true to actually place the bet", "type": 5, "required": False}]},
+        {"name": "mybets", "description": "Your open and settled bets", "type": 1},
+        {"name": "linkdiscord", "description": "Link this Discord to your player for betting (code from the website)", "type": 1,
+         "options": [{"name": "code", "description": "The code shown on the tracker's Bets tab", "type": 3, "required": True}]},
+        {"name": "mypin", "description": "DM yourself your own bet passcode (once linked)", "type": 1},
+        {"name": "resetpin", "description": "Reset your own bet passcode if it's forgotten or leaked (once linked)", "type": 1},
+        {"name": "points", "description": "How many points you have to bet (and your max bet)", "type": 1},
+        {"name": "allbets", "description": "Everyone's open bets right now", "type": 1},
+        {"name": "unlink", "description": "Unlink this Discord from betting (if you linked the wrong player)", "type": 1},
     ]
     base = "https://discord.com/api/v10/applications/%s" % app_id
     url = (base + "/guilds/%s/commands" % guild) if guild else (base + "/commands")
@@ -1080,8 +1455,15 @@ def update_now(cfg):
             wlist = load_wagers()
             try:
                 _res = json.load(open("results.json"))
+                _before = {w.get("id"): w.get("status") for w in wlist}
                 if wager_mod.settle_all(wlist, _res.get("matches", [])):
                     save_wagers(wlist)
+                    newly_won = [w for w in wlist if w.get("status") == "won" and _before.get(w.get("id")) != "won"]
+                    if newly_won:                       # one grouped post per finishing batch; accas only once fully won
+                        try:
+                            _announce_wins(newly_won)
+                        except Exception as e:
+                            log("win announce failed:", e)
             except Exception as e:
                 log("wager settle failed:", e)
         scoring_mod.compute(out="tracker_data.json", default_mode=cfg.get("scoring_mode", "hybrid"), wagers=wlist)
@@ -1405,8 +1787,10 @@ class Handler(BaseHTTPRequestHandler):
                 "digest_hour": cfg.get("digest_hour", 9),
                 "wagering_enabled": bool(cfg.get("wagering_enabled")) and wager_mod is not None,
                 "wager_locked": bool(cfg.get("wager_locked")),
-                "wager_caps": ({"min_stake": wager_mod.MIN_STAKE, "max_stake": wager_mod.MAX_STAKE,
-                                "max_return": wager_mod.MAX_RETURN, "max_pending": wager_mod.MAX_PENDING}
+                "wager_pins_set": bool(_wager_pins()),
+                "wager_caps": (_apply_wager_caps(cfg) or {"min_stake": wager_mod.MIN_STAKE, "max_stake": _current_round_max_stake(),
+                                "base_max_stake": wager_mod.MAX_STAKE, "max_return": wager_mod.MAX_RETURN,
+                                "max_pending": wager_mod.MAX_PENDING, "max_acca_legs": wager_mod.MAX_ACCA_LEGS}
                                if wager_mod is not None else None),
                 "site_url": cfg.get("site_url", "")}))
         return self._file(path.lstrip("/"))
@@ -1449,7 +1833,10 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 log("discord command error:", e)
                 content = "Something went wrong building that."
-            return self._send(200, json.dumps({"type": 4, "data": {"content": (content or "—")[:1900]}}))
+            resp = {"content": (content or "—")[:1900]}
+            if data.get("name") in ("bet", "mybets", "linkdiscord", "mypin", "unlink", "points"):    # private: passcodes, codes, personal bets/points
+                resp["flags"] = 64
+            return self._send(200, json.dumps({"type": 4, "data": resp}))
         return self._send(200, json.dumps({"type": 4, "data": {"content": "Unsupported interaction."}}))
 
     def _do_POST(self):
@@ -1591,6 +1978,20 @@ class Handler(BaseHTTPRequestHandler):
                 cfg["wagering_enabled"] = bool(body["wagering_enabled"])
             if "wager_locked" in body:
                 cfg["wager_locked"] = bool(body["wager_locked"])
+            if "max_return" in body:                 # admin: cap on winnings per bet; blank/0 = no limit
+                v = str(body["max_return"]).strip()
+                if v in ("", "0", "none", "None"):
+                    cfg["max_return"] = None
+                else:
+                    try:
+                        cfg["max_return"] = max(1.0, float(v))
+                    except (TypeError, ValueError):
+                        pass
+            if "max_acca_legs" in body:              # admin: how many legs an accumulator may have (default 3)
+                try:
+                    cfg["max_acca_legs"] = max(2, min(10, int(body["max_acca_legs"])))
+                except (TypeError, ValueError):
+                    pass
             if "digest_hour" in body:
                 try:
                     cfg["digest_hour"] = max(0, min(23, int(body["digest_hour"])))
@@ -1603,6 +2004,7 @@ class Handler(BaseHTTPRequestHandler):
                 cfg["vapid_sub"] = str(body["vapid_sub"]).strip()[:120]
             with _lock:
                 save_config(cfg)
+                _apply_wager_caps(cfg)             # admin return/acca limits take effect immediately
                 ok, err = update_now(cfg)
             log("settings updated: comp", cfg.get("competition"), "poll", cfg.get("poll_minutes"),
                 "token" if cfg.get("token") else "no-token")
@@ -1616,7 +2018,8 @@ class Handler(BaseHTTPRequestHandler):
                       "exported_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                       "config": {k: val for k, val in cfg.items() if k not in ("token", "admin_key")},
                       "draw_result": (json.load(open("draw_result.json")) if os.path.exists("draw_result.json") else None),
-                      "results": (json.load(open("results.json")) if os.path.exists("results.json") else None)}
+                      "results": (json.load(open("results.json")) if os.path.exists("results.json") else None),
+                      "wagers": load_wagers()}
             return self._send(200, json.dumps(bundle))
         if path == "/api/import":
             if draw_locked() and not key_ok(body):
@@ -1639,10 +2042,13 @@ class Handler(BaseHTTPRequestHandler):
                     json.dump(b["results"], open("results.json", "w"), indent=2)
                 elif not os.path.exists("results.json"):
                     _write_pretournament(cfg.get("competition", "WC"))
+                if isinstance(b.get("wagers"), list):
+                    save_wagers(b["wagers"])
                 save_config(cfg)
+                wl = load_wagers() if cfg.get("wagering_enabled") else None
                 try:                                 # rebuild the tracker from the restored data (no network needed)
                     scoring_mod.compute(out="tracker_data.json",
-                                        default_mode=cfg.get("scoring_mode", "hybrid"))
+                                        default_mode=cfg.get("scoring_mode", "hybrid"), wagers=wl)
                     ok, err = True, None
                 except Exception as e:
                     ok, err = False, str(e)
@@ -1718,10 +2124,120 @@ class Handler(BaseHTTPRequestHandler):
                 _save_push(subs)
             log("push subscribe:", player)
             return self._send(200, json.dumps({"ok": True}))
+        if path == "/api/wager_pins":              # admin-only: generate / view / reset per-player bet passcodes
+            if not key_ok(body):
+                return self._send(403, json.dumps({"ok": False, "need_key": True}))
+            cfg = load_config()
+            players = [(p if isinstance(p, str) else p.get("name", "")) for p in cfg.get("players", [])]
+            pins = cfg.get("wager_pins") if isinstance(cfg.get("wager_pins"), dict) else {}
+            reset_one = str(body.get("reset_player", "")).strip()
+            if reset_one:                          # forgot/leaked: reset JUST this player's passcode, leave everyone else alone
+                if reset_one not in players:
+                    return self._send(404, json.dumps({"ok": False, "error": "Unknown player."}))
+                if not pins:
+                    pins = {nm: _gen_pin() for nm in players if nm}
+                pins[reset_one] = _gen_pin()
+                log("wager pin reset for", reset_one)
+            elif body.get("regenerate") or not pins:
+                pins = {nm: _gen_pin() for nm in players if nm}
+                log("wager pins", "regenerated" if body.get("regenerate") else "created", "for", len(pins), "players")
+            else:
+                for nm in players:                 # fill in any new players without clobbering existing pins
+                    if nm and nm not in pins:
+                        pins[nm] = _gen_pin()
+                pins = {nm: pins[nm] for nm in players if nm in pins}   # drop pins for removed players
+            cfg["wager_pins"] = pins
+            save_config(cfg)
+            links = cfg.get("wager_links") if isinstance(cfg.get("wager_links"), dict) else {}
+            linked = {}                                # player -> True if some Discord account is linked
+            for u, pl in links.items():
+                linked[pl] = True
+            return self._send(200, json.dumps({"ok": True, "pins": pins, "linked": linked, "reset": reset_one or None}))
+        if path == "/api/wager_self_unlink":       # OPEN to the player (passcode-gated): disconnect MY Discord
+            player = str(body.get("player", "")).strip()
+            if not _pin_ok(player, body.get("pin")):
+                return self._send(403, json.dumps({"ok": False, "bad_pin": True, "error": "Wrong bet passcode for %s." % (player or "?")}))
+            cfg = load_config()
+            lk = cfg.get("wager_links") if isinstance(cfg.get("wager_links"), dict) else {}
+            removed = [u for u, pl in list(lk.items()) if pl == player]
+            for u in removed:
+                lk.pop(u, None)
+            cfg["wager_links"] = lk
+            save_config(cfg)
+            log("self-unlinked betting for", player, "(%d account[s])" % len(removed))
+            return self._send(200, json.dumps({"ok": True, "removed": len(removed)}))
+        if path == "/api/wager_unlink":            # admin-only: remove a player's Discord betting link (wrong account etc.)
+            if not key_ok(body):
+                return self._send(403, json.dumps({"ok": False, "need_key": True}))
+            player = str(body.get("player", "")).strip()
+            cfg = load_config()
+            lk = cfg.get("wager_links") if isinstance(cfg.get("wager_links"), dict) else {}
+            removed = [u for u, pl in list(lk.items()) if pl == player]
+            for u in removed:
+                lk.pop(u, None)
+            cfg["wager_links"] = lk
+            save_config(cfg)
+            log("admin unlinked betting for", player, "(%d account[s])" % len(removed))
+            return self._send(200, json.dumps({"ok": True, "removed": len(removed)}))
+        if path == "/api/send_pin":                # admin-only: DM a player their passcode privately via the bot
+            if not key_ok(body):
+                return self._send(403, json.dumps({"ok": False, "need_key": True}))
+            player = str(body.get("player", "")).strip()
+            pin = _wager_pins().get(player)
+            if not pin:
+                return self._send(400, json.dumps({"ok": False, "error": "No passcode for %s yet — generate them first." % (player or "?")}))
+            uid = next((u for u, pl in _discord_subs().items() if pl == player), None)
+            if not uid:
+                return self._send(400, json.dumps({"ok": False,
+                    "error": "%s hasn't linked Discord yet (they need /notifyme first) — share their code another way." % player}))
+            cfg = load_config()                            # admin vouches: link this account for betting too
+            lk = cfg.get("wager_links"); lk = lk if isinstance(lk, dict) else {}
+            lk[str(uid)] = player; cfg["wager_links"] = lk; save_config(cfg)
+            ok, err = _bot_dm(uid, "🔒 Your **WC26 bet passcode** is **%s**.\nKeep it private — it's needed on the website. "
+                                   "Your Discord is now linked, so on Discord just use `/games` then `/bet` (no passcode needed here)." % pin)
+            return self._send(200 if ok else 400, json.dumps({"ok": ok, "error": err}))
+        if path == "/api/test_notification":       # admin-only: verify Discord delivery — no bets/points are touched
+            if not key_ok(body):
+                return self._send(403, json.dumps({"ok": False, "need_key": True}))
+            cfg = load_config()
+            msg = "🔔 Test alert from the WC26 sweepstake — if you can see this, notifications are working. (A test only — no bets or points were changed.)"
+            results = {}
+            uid = str(body.get("discord_user_id", "")).strip()
+            if uid:                                  # private: DM just this account (the bot-DM path used for win/passcode messages)
+                ok, err = _bot_dm(uid, msg)
+                results["bot_dm"] = "sent ✓" if ok else ("failed: %s" % (err or "no bot token / not reachable"))
+            url = (cfg.get("discord_webhook") or "").strip()    # the channel that gets bet + win announcements
+            if not url.startswith("https://"):
+                results["discord_channel"] = "not set up"
+            else:
+                try:
+                    req = urllib.request.Request(url, data=json.dumps({"content": msg}).encode(),
+                                                 headers={"Content-Type": "application/json", "User-Agent": "WC26-Sweepstake/1.0"})
+                    urllib.request.urlopen(req, timeout=8)
+                    results["discord_channel"] = "sent ✓ (check your Discord channel)"
+                except Exception as e:
+                    results["discord_channel"] = "failed: %s" % e
+            log("test notification:", results)
+            return self._send(200, json.dumps({"ok": True, "results": results}))
+            cfg = load_config()
+            if not cfg.get("wagering_enabled") or wager_mod is None:
+                return self._send(400, json.dumps({"ok": False, "error": "Betting isn't switched on."}))
+            player = str(body.get("player", "")).strip()
+            if not _pin_ok(player, body.get("pin")):
+                return self._send(403, json.dumps({"ok": False, "bad_pin": True, "error": "Wrong bet passcode for %s." % (player or "?")}))
+            now = time.time()
+            codes = cfg.get("wager_link_codes") if isinstance(cfg.get("wager_link_codes"), dict) else {}
+            codes = {k: v for k, v in codes.items() if v.get("exp", 0) > now}      # prune expired
+            code = _gen_pin(6)
+            codes[code] = {"player": player, "exp": now + 900}                     # 15-minute single-use code
+            cfg["wager_link_codes"] = codes
+            save_config(cfg)
+            return self._send(200, json.dumps({"ok": True, "code": code, "expires_min": 15}))
         if path == "/api/place_wager":             # OPEN: a player stakes their points on a fixture (before kickoff)
             cfg = load_config()
             if not cfg.get("wagering_enabled") or wager_mod is None:
                 return self._send(400, json.dumps({"ok": False, "error": "Betting isn't switched on."}))
+            _apply_wager_caps(cfg)                  # honour admin return/acca limits
             if cfg.get("wager_locked") and not key_ok(body):     # optional: lock betting behind the admin key
                 return self._send(403, json.dumps({"ok": False, "need_key": True, "error": "Betting is locked to the organiser."}))
             players = [(p if isinstance(p, str) else p.get("name", "")) for p in cfg.get("players", [])]
@@ -1731,11 +2247,19 @@ class Handler(BaseHTTPRequestHandler):
             stake = body.get("stake")
             if player not in players:
                 return self._send(400, json.dumps({"ok": False, "error": "Pick a valid player."}))
+            if not cfg.get("wager_locked"):          # normal mode: prove it's your account with your passcode
+                if not _wager_pins():
+                    return self._send(400, json.dumps({"ok": False, "error": "Betting passcodes aren't set up yet — ask the organiser."}))
+                if not _pin_ok(player, body.get("pin")):
+                    return self._send(403, json.dumps({"ok": False, "bad_pin": True,
+                        "error": "Wrong bet passcode for %s." % player}))
             try:
                 td = _load_tracker() or {}
                 results = json.load(open("results.json"))
             except Exception:
                 return self._send(400, json.dumps({"ok": False, "error": "No data yet."}))
+            if wager_mod.betting_locked(td):
+                return self._send(400, json.dumps({"ok": False, "error": "Betting is closed — the tournament is over."}))
             match = next((m for m in results.get("matches", []) if wager_mod.match_id(m) == match_id), None)
             if not match:
                 return self._send(400, json.dumps({"ok": False, "error": "That game could not be found."}))
@@ -1744,6 +2268,8 @@ class Handler(BaseHTTPRequestHandler):
                 teams = {t["name"]: t for t in json.load(open("teams.json"))["teams"]}
             except Exception:
                 pass
+            if match.get("home") not in teams or match.get("away") not in teams:
+                return self._send(400, json.dumps({"ok": False, "error": "You can only bet once both teams are confirmed — this game isn't set yet."}))
             ch = (teams.get(match.get("home"), {}) or {}).get("composite", 0)
             ca = (teams.get(match.get("away"), {}) or {}).get("composite", 0)
             prow = next((p for p in (td.get("players") or []) if p.get("name") == player), {})
@@ -1758,6 +2284,60 @@ class Handler(BaseHTTPRequestHandler):
             if ok:
                 update_now(load_config())          # recompute so the held stake shows immediately
                 log("wager placed:", player, selection, "on", match_id)
+                _announce_bet(player, res)
+                return self._send(200, json.dumps({"ok": True, "wager": res}))
+            return self._send(400, json.dumps({"ok": False, "error": res}))
+        if path == "/api/place_acca":              # OPEN: an accumulator (one stake, combined odds)
+            cfg = load_config()
+            if not cfg.get("wagering_enabled") or wager_mod is None:
+                return self._send(400, json.dumps({"ok": False, "error": "Betting isn't switched on."}))
+            _apply_wager_caps(cfg)                  # honour admin return/acca limits
+            players = [(p if isinstance(p, str) else p.get("name", "")) for p in cfg.get("players", [])]
+            player = str(body.get("player", "")).strip()
+            stake = body.get("stake")
+            legs_in = body.get("legs") if isinstance(body.get("legs"), list) else []
+            if player not in players:
+                return self._send(400, json.dumps({"ok": False, "error": "Pick a valid player."}))
+            if not cfg.get("wager_locked"):
+                if not _wager_pins():
+                    return self._send(400, json.dumps({"ok": False, "error": "Betting passcodes aren't set up yet — ask the organiser."}))
+                if not _pin_ok(player, body.get("pin")):
+                    return self._send(403, json.dumps({"ok": False, "bad_pin": True, "error": "Wrong bet passcode for %s." % player}))
+            elif not key_ok(body):
+                return self._send(403, json.dumps({"ok": False, "need_key": True}))
+            if not (1 <= len(legs_in) <= 3):
+                return self._send(400, json.dumps({"ok": False, "error": "An accumulator is 1 to 3 picks."}))
+            try:
+                td = _load_tracker() or {}
+                results = json.load(open("results.json"))
+                teams = {t["name"]: t for t in json.load(open("teams.json"))["teams"]}
+            except Exception:
+                return self._send(400, json.dumps({"ok": False, "error": "No data yet."}))
+            if wager_mod.betting_locked(td):
+                return self._send(400, json.dumps({"ok": False, "error": "Betting is closed — the tournament is over."}))
+            selections = []
+            for lg in legs_in:
+                m = next((x for x in results.get("matches", []) if wager_mod.match_id(x) == str(lg.get("matchId", ""))), None)
+                if not m:
+                    return self._send(400, json.dumps({"ok": False, "error": "One of those games could not be found."}))
+                if m.get("home") not in teams or m.get("away") not in teams:
+                    return self._send(400, json.dumps({"ok": False, "error": "You can only bet once both teams are confirmed — one of those games isn't set yet."}))
+                selections.append({"match": m, "selection": str(lg.get("selection", "")).upper(),
+                                   "comp_home": (teams.get(m.get("home"), {}) or {}).get("composite", 0),
+                                   "comp_away": (teams.get(m.get("away"), {}) or {}).get("composite", 0)})
+            prow = next((p for p in (td.get("players") or []) if p.get("name") == player), {})
+            settled = prow.get("points_settled")
+            if settled is None:
+                settled = round((prow.get("points", 0) or 0) - (prow.get("live", 0) or 0), 1)
+            with _lock:
+                wl = load_wagers()
+                ok, res = wager_mod.place_acca(wl, player, selections, stake, settled)
+                if ok:
+                    save_wagers(wl)
+            if ok:
+                update_now(load_config())
+                log("acca placed:", player, len(selections), "legs")
+                _announce_bet(player, res)
                 return self._send(200, json.dumps({"ok": True, "wager": res}))
             return self._send(400, json.dumps({"ok": False, "error": res}))
         if path == "/api/push_prefs":               # OPEN: update which events this device wants
@@ -1883,6 +2463,7 @@ if __name__ == "__main__":
     if hasattr(os, "geteuid") and os.geteuid() == 0:
         print("[warn] running as root is risky — create a normal user to run this server.")
     _key = ensure_admin_key()
+    _apply_wager_caps()                   # load admin return/acca limits at boot
     if HAVE_WEBPUSH:
         ensure_vapid()                    # one-time keypair so native Web Push (Path A) can work
     threading.Thread(target=poller, daemon=True).start()

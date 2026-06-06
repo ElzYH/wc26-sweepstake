@@ -27,6 +27,7 @@ from collections import defaultdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import scoring
+import wager
 from draw import Draw
 
 PLAYERS = ["Erol", "James", "Louis", "Ismail", "Reuben"]
@@ -36,6 +37,17 @@ _OWNER = {}
 _PREV = {"data": None}
 _LIVE = ("IN_PLAY", "PAUSED", "LIVE")
 DIR = os.path.join(REPO, "wc26-demo")
+WAGER = False                 # --wager turns on the betting trial
+WAGERS = []                   # in-memory bet log for the demo
+COMP = {}                     # team composites, for live pricing
+CUR_MATCHES = []              # latest match list, for placing/settling from the web handler
+PINS = {}                     # demo bet passcodes {player: code} so the demo enforces "only you bet your points"
+LINKS = {}                    # demo discord-style links {token: player} (not used by web, here for parity)
+
+
+def _gen_demo_pin():
+    import random as _r
+    return "".join(_r.choice("ABCDEFGHJKMNPQRSTUVWXYZ23456789") for _ in range(5))
 
 CTYPES = {".html": "text/html", ".js": "text/javascript", ".json": "application/json",
           ".webmanifest": "application/manifest+json", ".svg": "image/svg+xml"}
@@ -55,18 +67,45 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
+        path = self.path.split("?")[0]
+        if WAGER and path in ("/api/place_wager", "/api/place_acca"):
+            try:
+                n = int(self.headers.get("Content-Length", 0))
+                body = json.loads(self.rfile.read(n) or "{}")
+            except Exception:
+                return self._send(400, json.dumps({"ok": False, "error": "bad request"}))
+            res = _demo_place_acca(body) if path == "/api/place_acca" else _demo_place(body)
+            return self._send(200, json.dumps(res))
         self._send(200, json.dumps({"ok": True}))           # demo: accept poll/etc. no-ops
+
+    def _get_extra(self, path):
+        if WAGER and path == "/api/wagers":
+            who = ""
+            if "player=" in self.path:
+                import urllib.parse
+                who = urllib.parse.unquote_plus(self.path.split("player=", 1)[1].split("&")[0])
+            wl = [w for w in WAGERS if (not who or w["player"] == who)]
+            self._send(200, json.dumps({"ok": True, "wagers": wl}))
+            return True
+        return False
 
     def do_GET(self):
         path = self.path.split("?")[0]
         if path == "/":
             self.send_response(302); self.send_header("Location", "/tracker.html"); self.end_headers(); return
+        if self._get_extra(path):
+            return
         if path == "/api/status":
             return self._send(200, json.dumps({
                 "configured": True, "players": PLAYERS, "scoring_mode": "hybrid", "draw_mode": "fair",
                 "competition": "WC", "drawn": True, "needs_key": True, "has_token": True,
                 "push_enabled": False, "discord": False, "has_invite": False, "bot_ready": False,
-                "digest_enabled": False, "leftover": "pool", "poll_minutes": 1, "site_url": ""}))
+                "digest_enabled": False, "leftover": "pool", "poll_minutes": 1, "site_url": "",
+                "wagering_enabled": WAGER,
+                "wager_pins_set": bool(PINS),
+                "wager_caps": ({"min_stake": wager.MIN_STAKE, "max_stake": _demo_round_max(),
+                                "base_max_stake": wager.MAX_STAKE, "max_return": wager.MAX_RETURN,
+                                "max_pending": wager.MAX_PENDING, "max_acca_legs": wager.MAX_ACCA_LEGS} if WAGER else None)}))
         if path == "/api/live_state":
             return self._send(200, json.dumps({}))
         if path == "/api/summary":
@@ -158,13 +197,124 @@ def setup_dir(d):
 
 
 def write_and_compute(d, matches, standings):
+    global CUR_MATCHES
+    CUR_MATCHES = matches
     json.dump({"competition": "WC", "matches": matches, "standings": standings},
               open(os.path.join(d, "results.json"), "w"))
+    wl = None
+    if WAGER:
+        wager.settle_all(WAGERS, matches)
+        wl = WAGERS
     return scoring.compute(
         teams_path=os.path.join(d, "teams.json"),
         draw_path=os.path.join(d, "draw_result.json"),
         results_path=os.path.join(d, "results.json"),
-        out=os.path.join(d, "tracker_data.json"))
+        out=os.path.join(d, "tracker_data.json"), wagers=wl)
+
+
+def _demo_round_max():
+    """Highest single-bet cap among games you can currently bet on in the demo (current round)."""
+    caps = [wager.stage_max_stake(m.get("stage")) for m in CUR_MATCHES if wager.can_bet_on(m)]
+    return max(caps) if caps else wager.MAX_STAKE
+
+
+def _demo_place(body):
+    """Place a bet from the web UI during the demo (mirrors the server's validation, incl. the passcode)."""
+    player = str(body.get("player", "")).strip()
+    selection = str(body.get("selection", "")).strip().upper()
+    mid = str(body.get("matchId", "")).strip()
+    stake = body.get("stake")
+    if player not in PLAYERS:
+        return {"ok": False, "error": "Pick a valid player."}
+    if PINS and str(body.get("pin", "")).strip().upper() != PINS.get(player):
+        return {"ok": False, "bad_pin": True, "error": "Wrong bet passcode for %s." % player}
+    data = json.load(open(os.path.join(DIR, "tracker_data.json")))
+    if wager.betting_locked(data):
+        return {"ok": False, "error": "Betting is closed — the tournament is over."}
+    match = next((m for m in CUR_MATCHES if wager.match_id(m) == mid), None)
+    if not match:
+        return {"ok": False, "error": "That game could not be found."}
+    prow = next((p for p in data.get("players", []) if p.get("name") == player), {})
+    settled = prow.get("points_settled")
+    if settled is None:
+        settled = round((prow.get("points", 0) or 0) - (prow.get("live", 0) or 0), 1)
+    ch = COMP.get(match.get("home"), 0)
+    ca = COMP.get(match.get("away"), 0)
+    ok, res = wager.place(WAGERS, player, match, selection, stake, settled, ch, ca)
+    if ok:
+        write_and_compute(DIR, CUR_MATCHES, json.load(open(os.path.join(DIR, "results.json")))["standings"])
+        return {"ok": True, "wager": res}
+    return {"ok": False, "error": res}
+
+
+def _demo_place_acca(body):
+    """Place a 1-5 leg accumulator from the web UI during the demo (mirrors the server, incl. the passcode)."""
+    player = str(body.get("player", "")).strip()
+    legs_in = body.get("legs") if isinstance(body.get("legs"), list) else []
+    stake = body.get("stake")
+    if player not in PLAYERS:
+        return {"ok": False, "error": "Pick a valid player."}
+    if PINS and str(body.get("pin", "")).strip().upper() != PINS.get(player):
+        return {"ok": False, "bad_pin": True, "error": "Wrong bet passcode for %s." % player}
+    data = json.load(open(os.path.join(DIR, "tracker_data.json")))
+    if wager.betting_locked(data):
+        return {"ok": False, "error": "Betting is closed — the tournament is over."}
+    if not (1 <= len(legs_in) <= wager.MAX_ACCA_LEGS):
+        return {"ok": False, "error": "An accumulator is 1 to %d picks." % wager.MAX_ACCA_LEGS}
+    selections = []
+    for lg in legs_in:
+        m = next((x for x in CUR_MATCHES if wager.match_id(x) == str(lg.get("matchId", ""))), None)
+        if not m:
+            return {"ok": False, "error": "One of those games could not be found."}
+        selections.append({"match": m, "selection": str(lg.get("selection", "")).upper(),
+                           "comp_home": COMP.get(m.get("home"), 0), "comp_away": COMP.get(m.get("away"), 0)})
+    prow = next((p for p in data.get("players", []) if p.get("name") == player), {})
+    settled = prow.get("points_settled")
+    if settled is None:
+        settled = round((prow.get("points", 0) or 0) - (prow.get("live", 0) or 0), 1)
+    ok, res = wager.place_acca(WAGERS, player, selections, stake, settled)
+    if ok:
+        write_and_compute(DIR, CUR_MATCHES, json.load(open(os.path.join(DIR, "results.json")))["standings"])
+        return {"ok": True, "wager": res}
+    return {"ok": False, "error": res}
+
+
+def _seed_sample_bets(data):
+    """Auto-place a few example bets so the betting UI + analysis have something to show."""
+    if WAGERS:
+        return
+    fx = [f for f in data.get("fixtures", []) if f.get("odds") and f.get("matchId")][:6]
+    picks = [("Erol", "HOME", 8), ("James", "AWAY", 5), ("Louis", "HOME", 12),
+             ("Ismail", "DRAW", 4), ("Reuben", "HOME", 6), ("Erol", "AWAY", 10)]
+    pts = {p["name"]: round(p.get("points", 0) - p.get("live", 0), 1) for p in data.get("players", [])}
+    for (who, sel, stake), f in zip(picks, fx):
+        m = next((x for x in CUR_MATCHES if wager.match_id(x) == f["matchId"]), None)
+        if not m:
+            continue
+        if sel == "DRAW" and f.get("stage") not in (None, "GROUP_STAGE"):
+            sel = "HOME"
+        ch = COMP.get(f["home"], 0); ca = COMP.get(f["away"], 0)
+        ok, res = wager.place(WAGERS, who, m, sel, min(stake, pts.get(who, 0)), pts.get(who, 0), ch, ca)
+        if ok:
+            print("   [bet] %-7s %s on %s v %s @ %s  (returns %s)"
+                  % (res["player"], res["selection"], res["home"], res["away"], res["frac"], res["return"]))
+    # one example 3-fold accumulator so the acca display has something to show
+    acca_fx = [f for f in data.get("fixtures", []) if f.get("odds") and f.get("matchId")][6:9]
+    if len(acca_fx) == 3:
+        sels = []
+        for f in acca_fx:
+            m = next((x for x in CUR_MATCHES if wager.match_id(x) == f["matchId"]), None)
+            if not m:
+                sels = []
+                break
+            s = "HOME" if (f.get("stage") not in (None, "GROUP_STAGE")) else "HOME"
+            sels.append({"match": m, "selection": s, "comp_home": COMP.get(f["home"], 0), "comp_away": COMP.get(f["away"], 0)})
+        if sels:
+            ok, res = wager.place_acca(WAGERS, "Louis", sels, min(5, pts.get("Louis", 0)), pts.get("Louis", 0))
+            if ok:
+                print("   [acca] Louis %d-fold @ ~%sx (returns %s)" % (len(res["legs"]), res.get("decimal"), res["return"]))
+    if WAGERS:
+        write_and_compute(DIR, CUR_MATCHES, json.load(open(os.path.join(DIR, "results.json")))["standings"])
 
 
 def show(label, data, pause):
@@ -346,15 +496,32 @@ def tick_live(d, matches, standings, specs, speed):
 
 
 def main():
-    global DIR, _OWNER
+    global DIR, _OWNER, COMP, WAGER, PINS
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", default=None)
     ap.add_argument("--port", type=int, default=8080)
     ap.add_argument("--speed", type=float, default=3.0, help="match-minutes per real second")
     ap.add_argument("--pause", type=float, default=6.0, help="seconds between phases")
     ap.add_argument("--fast", action="store_true")
+    ap.add_argument("--wager", action="store_true", help="turn on the betting trial + seed example bets")
+    ap.add_argument("--pins", action="store_true", help="with --wager: require a per-player passcode (test that you can't bet as someone else)")
+    ap.add_argument("--bet-test", dest="bet_test", action="store_true",
+                    help="fast betting sandbox: skips to the knockouts and pauses before each round so you can place bets (implies --wager --pins)")
     ap.add_argument("--seed", type=int, default=2026)
+    ap.add_argument("--max-acca", dest="max_acca", type=int, default=None,
+                    help="simulate the admin setting the accumulator leg limit (default 3)")
+    ap.add_argument("--max-return", dest="max_return", type=float, default=None,
+                    help="simulate the admin capping winnings per bet (default: no cap)")
     args = ap.parse_args()
+    if args.bet_test:                  # betting sandbox: fast tournament, paused before each knockout round
+        args.fast = True
+        args.wager = True
+        # passcodes are OFF here by default so you can test betting freely;
+        # add --pins to also test the "only you can bet your points" protection.
+    if args.max_acca is not None:      # admin-configurable acca legs (engine default is 3)
+        wager.MAX_ACCA_LEGS = max(2, min(10, args.max_acca))
+    if args.max_return is not None:    # admin-optional winnings cap (engine default None = unlimited)
+        wager.MAX_RETURN = max(1.0, args.max_return)
     pause = 0 if args.fast else args.pause
     speed = 999 if args.fast else args.speed
     random.seed(args.seed)
@@ -364,6 +531,10 @@ def main():
 
     teams = json.load(open(os.path.join(DIR, "teams.json")))["teams"]
     comp = {t["name"]: t["composite"] for t in teams}
+    COMP = comp
+    WAGER = args.wager
+    if args.wager and args.pins:
+        PINS = {p: _gen_demo_pin() for p in PLAYERS}
     groups = defaultdict(list)
     for t in teams:
         groups[t["group"]].append(t["name"])
@@ -376,17 +547,25 @@ def main():
     _dr = json.load(open(os.path.join(DIR, "draw_result.json")))
     _OWNER = {t["name"]: p["name"] for p in _dr["players"] for t in p["teams"]}
 
-    if not args.fast:
+    serve_site = (not args.fast) or args.bet_test     # bet-test is fast but MUST serve so you can place bets
+    if serve_site:
         serve(args.port)
     print("=" * 58)
     print("WC26 LIVE DEMO - players:", ", ".join(PLAYERS))
-    if not args.fast:
+    if serve_site:
         print(">> OPEN:  http://localhost:%d/   (refreshes every ~2.5s while it runs)" % args.port)
         print("   Leave this terminal running; notifications print here.")
     print("=" * 58)
     print("Squads:")
     for p in _dr["players"]:
         print("   %-8s: %s" % (p["name"], ", ".join(t["name"] for t in p["teams"])))
+    if PINS:
+        print("-" * 58)
+        print("BET PASSCODES (this run only) — each player can ONLY bet their own points:")
+        for p in PLAYERS:
+            print("   %-8s  %s" % (p, PINS[p]))
+        print("   TEST: pick a player on the Bets tab and try someone else's code — it's rejected.")
+        print("-" * 58)
 
     matches, mid = [], 1
     gstats = {nm: {"P": 0, "W": 0, "D": 0, "L": 0, "GF": 0, "GA": 0, "pts": 0} for nm in comp}
@@ -402,6 +581,9 @@ def main():
                 a, b = gt[i], gt[j]
                 ga, gb = goals(a, b, comp)
                 group_matches.append((g, a, b, ga, gb))
+
+    GM_ID = {(a, b): "GP%03d" % i for i, (g, a, b, ga, gb) in enumerate(group_matches)}   # stable ids so group bets settle
+    _fut = time.strftime("%Y-%m-%dT18:00:00Z", time.gmtime(time.time() + 21 * 86400))      # always in the future -> bettable
 
     # two featured group games, ticking live AT ONCE (you see two scoreboards move together) — pick games with no shared team
     i1 = next((j for j in range(1, len(group_matches))
@@ -425,21 +607,38 @@ def main():
     else:
         for (g, a, b, ga, gb) in featured_g:
             w = "HOME" if ga > gb else ("AWAY" if gb > ga else "DRAW")
-            matches.append({"id": mid, "stage": "GROUP_STAGE", "group": g, "utcDate": "2026-06-11T18:00:00Z",
+            matches.append({"id": GM_ID[(a, b)] if args.bet_test else mid, "stage": "GROUP_STAGE", "group": g, "utcDate": "2026-06-11T18:00:00Z",
                             "status": "FINISHED", "home": a, "away": b, "homeScore": ga, "awayScore": gb, "winner": w,
                             "minute": None, "duration": "REGULAR", "aet": False, "shootout": False, "penHome": None, "penAway": None})
-            mid += 1
+            if not args.bet_test:
+                mid += 1
             _tally(gstats, a, b, ga, gb)
 
     # finish the remaining group games in 3 matchday chunks
     chunks = [rest_g[:len(rest_g) // 3], rest_g[len(rest_g) // 3: 2 * len(rest_g) // 3], rest_g[2 * len(rest_g) // 3:]]
     for ci, chunk in enumerate(chunks, 1):
+        if args.bet_test and ci == 2 and chunk:        # matchday-1 points are in -> bet the remaining group games (draws allowed)
+            remaining = [gm for ch in chunks[1:] for gm in ch]
+            _up = [{"id": GM_ID[(a, b)], "stage": "GROUP_STAGE", "group": g, "utcDate": _fut, "status": "TIMED",
+                    "home": a, "away": b, "homeScore": None, "awayScore": None, "winner": None}
+                   for (g, a, b, ga, gb) in remaining]
+            write_and_compute(DIR, matches + _up, _standings(gstats, groups, comp))   # finished so far + upcoming remainder
+            print("\n" + "=" * 60)
+            print(">>> GROUP STAGE — matchday 1 is in, so you now have points to bet.")
+            print(">>> Bet on the remaining group games — DRAWS ARE ALLOWED here (HOME / DRAW / AWAY).")
+            print(">>> Open http://localhost:%d/ -> Bets, try a DRAW + a 2-fold acca, then press Enter." % args.port)
+            print("=" * 60)
+            try:
+                input()
+            except EOFError:
+                pass
         for (g, a, b, ga, gb) in chunk:
             w = "HOME" if ga > gb else ("AWAY" if gb > ga else "DRAW")
-            matches.append({"id": mid, "stage": "GROUP_STAGE", "group": g, "utcDate": "2026-06-%02dT18:00:00Z" % (12 + ci),
+            matches.append({"id": GM_ID[(a, b)] if args.bet_test else mid, "stage": "GROUP_STAGE", "group": g, "utcDate": "2026-06-%02dT18:00:00Z" % (12 + ci),
                             "status": "FINISHED", "home": a, "away": b, "homeScore": ga, "awayScore": gb, "winner": w,
                             "minute": None, "duration": "REGULAR", "aet": False, "shootout": False, "penHome": None, "penAway": None})
-            mid += 1
+            if not args.bet_test:
+                mid += 1
             _tally(gstats, a, b, ga, gb)
         data = write_and_compute(DIR, matches, _standings(gstats, groups, comp))
         show("GROUP STAGE - matchday %d done" % ci, data, pause)
@@ -467,6 +666,29 @@ def main():
             x["utcDate"] = "2026-07-1%dT18:00:00Z" % r
         mid += len(pairs)
         matches.extend(rndm)
+        if WAGER and r == 0:                         # R32 just created (upcoming) + players have group points
+            seed_data = write_and_compute(DIR, matches, table)
+            print("   seeding example bets on the Round of 32...")
+            _seed_sample_bets(seed_data)
+        if args.bet_test:                            # pause so you can place bets on this round before it kicks off
+            write_and_compute(DIR, matches, table)
+            cap = wager.stage_max_stake(rnd)
+            label = rnd.replace("_", " ").title()
+            print("\n" + "=" * 60)
+            print(">>> %s coming up — max single bet is now %d points." % (label, cap))
+            print(">>> Open http://localhost:%d/ -> Bets and place a single, a 2-fold and a 3-fold acca." % args.port)
+            if PINS:
+                print(">>> Passcodes are ON. Each player's code is listed above — paste it in, and try a")
+                print(">>> wrong one to see it rejected. (Run without --pins for friction-free betting.)")
+            else:
+                print(">>> No passcode needed in this test. (Add --pins to test the 'only you can bet")
+                print(">>> your own points' protection.)")
+            print(">>> Press Enter here to play %s and settle those bets..." % label)
+            print("=" * 60)
+            try:
+                input()
+            except EOFError:
+                pass
         winners = [None] * len(pairs)
         n_feat = len(pairs) if len(pairs) <= 2 else 2       # SF/final tick in full; earlier rounds tick 2 live
         feat = set(range(n_feat))
@@ -522,7 +744,7 @@ def main():
     champ = (data.get("champion_decided") or {})
     print("\n\U0001F3C6 CHAMPION: %s (%s)" % (champ.get("team", "?"), champ.get("owner", "?")))
     print("\nDemo complete. The tracker shows the full tournament + champion banner.")
-    if not args.fast:
+    if serve_site:
         print("Page still live at http://localhost:%d/  (Ctrl-C to stop)" % args.port)
         try:
             while True:

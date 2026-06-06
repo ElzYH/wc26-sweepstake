@@ -135,6 +135,63 @@ def run():
         check("register_commands needs admin key (403)", st == 403, str(st))
         st, body = req("POST", "/api/start_draw", {"admin_key": "wrong"})
         check("start_draw needs admin key (403)", st == 403, str(st))
+        st, _ = req("POST", "/api/wager_pins", {"admin_key": "nope"})
+        check("wager_pins needs admin key (403)", st == 403, str(st))
+        st, body = req("POST", "/api/wager_pins", {"admin_key": KEY})
+        pins = json.loads(body).get("pins", {})
+        check("wager_pins generates a code per player", isinstance(pins, dict) and len(pins) >= 1, body[:120])
+        # per-player reset: only that player's code changes; admin-gated; unknown player -> 404
+        _names = list(pins.keys())
+        if _names:
+            _who = _names[0]
+            st, _ = req("POST", "/api/wager_pins", {"reset_player": _who})
+            check("per-player pin reset needs admin key (403)", st == 403, str(st))
+            st, body = req("POST", "/api/wager_pins", {"admin_key": KEY, "reset_player": _who})
+            newpins = json.loads(body).get("pins", {})
+            check("reset changes only that player's code",
+                  st == 200 and newpins.get(_who) != pins.get(_who)
+                  and all(newpins.get(n) == pins.get(n) for n in _names[1:]), body[:160])
+            st, _ = req("POST", "/api/wager_pins", {"admin_key": KEY, "reset_player": "NotARealPlayer"})
+            check("reset of unknown player -> 404", st == 404, str(st))
+            pins = newpins
+        st, body = req("GET", "/api/status")
+        check("status exposes wagering flags, never the pins",
+              "wager_pins_set" in json.loads(body) and not any(p in body for p in pins.values()), body[:160])
+        # betting is enabled but a bet with no/!wrong passcode is refused
+        req("POST", "/api/settings", {"admin_key": KEY, "wagering_enabled": True})
+        st, body = req("POST", "/api/place_wager",
+                       {"player": (json.loads(req("GET", "/api/status")[1]).get("players") or ["x"])[0],
+                        "matchId": "nope", "selection": "HOME", "stake": 1, "pin": "WRONG"})
+        check("place_wager rejects a wrong passcode (403)", st == 403, str(st))
+        st, body = req("POST", "/api/place_acca",
+                       {"player": (json.loads(req("GET", "/api/status")[1]).get("players") or ["x"])[0],
+                        "legs": [{"matchId": "a", "selection": "HOME"}, {"matchId": "b", "selection": "HOME"}],
+                        "stake": 2, "pin": "WRONG"})
+        check("place_acca rejects a wrong passcode (403)", st == 403, str(st))
+        st, _ = req("POST", "/api/wager_unlink", {"admin_key": "nope", "player": "x"})
+        check("wager_unlink needs admin key (403)", st == 403, str(st))
+        st, body = req("POST", "/api/wager_unlink", {"admin_key": KEY, "player": "x"})
+        check("wager_unlink ok with admin key", st == 200 and json.loads(body).get("ok") is True, body[:120])
+        # self-unlink is passcode-gated (a random can't unlink someone)
+        st, _ = req("POST", "/api/wager_self_unlink", {"player": "x", "pin": "WRONG"})
+        check("self-unlink rejects a wrong passcode (403)", st == 403, str(st))
+        # admin test-notification: admin-gated; returns a results map; no webhook set -> 'not set up' (and nothing crashes)
+        st, _ = req("POST", "/api/test_notification", {"admin_key": "nope"})
+        check("test_notification needs admin key (403)", st == 403, str(st))
+        st, body = req("POST", "/api/test_notification", {"admin_key": KEY})
+        jr = json.loads(body)
+        check("test_notification ok + reports channel status", st == 200 and jr.get("ok") and "discord_channel" in jr.get("results", {}), body[:160])
+        # admin can set a winnings cap + acca legs, and status reflects them
+        req("POST", "/api/settings", {"admin_key": KEY, "max_return": 120, "max_acca_legs": 4})
+        st, body = req("GET", "/api/status")
+        caps = (json.loads(body).get("wager_caps") or {})
+        check("admin max_return applies (status shows 120)", caps.get("max_return") == 120, str(caps.get("max_return")))
+        check("admin max_acca_legs applies (status shows 4)", caps.get("max_acca_legs") == 4, str(caps.get("max_acca_legs")))
+        req("POST", "/api/settings", {"admin_key": KEY, "max_return": "", "max_acca_legs": 3})
+        st, body = req("GET", "/api/status")
+        caps = (json.loads(body).get("wager_caps") or {})
+        check("blank max_return -> no cap (status null)", caps.get("max_return") is None, str(caps.get("max_return")))
+        req("POST", "/api/settings", {"admin_key": KEY, "wagering_enabled": False})
         req("POST", "/api/settings", {"admin_key": KEY, "digest_enabled": True, "digest_hour": 7})
         st, body = req("GET", "/api/status")
         j = json.loads(body)

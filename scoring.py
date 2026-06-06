@@ -410,11 +410,15 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
             for f in data["fixtures"]:
                 m = next((x for x in matches if x.get("home") == f["home"] and x.get("away") == f["away"]
                           and (x.get("utcDate") or "")[:16] == (f.get("utcDate") or "")[:16]), None)
-                if m and wager.can_bet_on(f):
+                if m and wager.can_bet_on(f) and f.get("home") in teams and f.get("away") in teams:
                     ch = teams.get(f["home"], {}).get("composite", 0)
                     ca = teams.get(f["away"], {}).get("composite", 0)
                     f["odds"] = wager.match_odds(ch, ca)
                     f["matchId"] = wager.match_id(m)
+                    f["maxStake"] = wager.stage_max_stake(f.get("stage"))
+            data["wager_stats"] = wager.stats(wagers)
+            data["wager_leaders"] = wager.leaders(wagers)
+            data["betting_locked"] = wager.betting_locked(data)
         except Exception:
             pass
     data["history"] = _build_history(finished, teams, owner, [p["name"] for p in draw["players"]])

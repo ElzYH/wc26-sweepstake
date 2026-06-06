@@ -19,18 +19,38 @@ import uuid
 
 # ---- safety caps — all tuning lives here ----
 MIN_STAKE = 1
-MAX_STAKE = 25            # most you can put on a single bet
-MAX_RETURN = 120          # most a single bet can return (stake + profit); keeps one bet from skewing the table
+MAX_STAKE = 30           # base single-bet cap (group stage); rises each knockout round (see STAGE_MAX_STAKE)
+MAX_RETURN = None         # most a single bet can return; None = no limit (admin can set a number)
 MAX_PENDING = 8           # most simultaneous open bets per player
+MAX_ACCA_LEGS = 3         # default legs in one accumulator; admin can raise
 OVERROUND = 1.08          # ~8% bookmaker margin
-MAX_PROB = 0.92           # never price a selection shorter than ~1/12
+MAX_PROB = 0.95           # favourites can be priced shorter (down to ~1/20) so the margin holds on them too
+
+# Max stake rises as the tournament gets deeper: +5 per knockout round, and an extra +15 for the final.
+STAGE_MAX_STAKE = {
+    "GROUP_STAGE":     30,
+    "LAST_32":         35,
+    "LAST_16":         40,
+    "QUARTER_FINALS":  45,
+    "SEMI_FINALS":     50,
+    "THIRD_PLACE":     50,
+    "FINAL":           65,     # 50 + extra 15
+    "WINNER":          65,
+}
+
+
+def stage_max_stake(stage):
+    """Single-bet cap for a match in the given stage (defaults to the group-stage base)."""
+    return STAGE_MAX_STAKE.get(stage, MAX_STAKE)
+
 
 SELECTIONS = ("HOME", "DRAW", "AWAY")
 OPEN_STATUSES = ("SCHEDULED", "TIMED")
 VOID_STATUSES = ("CANCELLED", "POSTPONED", "ABANDONED")
 
 # common British betting fractions (num, den) — placement snaps to the nearest of these
-_FRACTIONS = [(1, 5), (2, 9), (1, 4), (2, 7), (3, 10), (1, 3), (4, 11), (2, 5), (4, 9), (1, 2),
+_FRACTIONS = [(1, 20), (1, 16), (1, 14), (1, 12), (1, 10), (1, 9), (1, 8), (1, 7), (1, 6),
+              (1, 5), (2, 9), (1, 4), (2, 7), (3, 10), (1, 3), (4, 11), (2, 5), (4, 9), (1, 2),
               (8, 15), (4, 7), (8, 13), (4, 6), (8, 11), (4, 5), (5, 6), (10, 11), (1, 1), (11, 10),
               (6, 5), (5, 4), (11, 8), (6, 4), (13, 8), (7, 4), (15, 8), (2, 1), (9, 4), (5, 2),
               (11, 4), (3, 1), (7, 2), (4, 1), (9, 2), (5, 1), (11, 2), (6, 1), (13, 2), (7, 1),
@@ -95,6 +115,10 @@ def _winner_side(m):
     hs, as_ = m.get("homeScore"), m.get("awayScore")
     if hs is None or as_ is None:
         return None
+    if hs == as_:                                   # level after 90/120 mins
+        ph, pa = m.get("penHome"), m.get("penAway")
+        if ph is not None and pa is not None and ph != pa:
+            return "HOME" if ph > pa else "AWAY"     # a shootout decides who advances (counts as a win)
     return "HOME" if hs > as_ else ("AWAY" if as_ > hs else "DRAW")
 
 
@@ -148,6 +172,8 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
         return False, "Pick home, draw or away."
     if match is None:
         return False, "That game could not be found."
+    if selection == "DRAW" and match.get("stage") not in (None, "GROUP_STAGE"):
+        return False, "No draw bets on knockout games — pick the side to go through."
     if not can_bet_on(match, now):
         return False, "Betting on that game is closed — it has kicked off or finished."
     try:
@@ -156,20 +182,27 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
         return False, "Enter a number of points to stake."
     if stake != stake or stake in (float("inf"), float("-inf")):   # NaN / inf guard
         return False, "Enter a valid stake."
+    if stake <= 0:
+        return False, "You have to stake at least %d point(s) — you can't bet nothing." % MIN_STAKE
     if stake < MIN_STAKE:
         return False, "Minimum stake is %d point(s)." % MIN_STAKE
-    if stake > MAX_STAKE:
-        return False, "Max stake is %d points on a single bet." % MAX_STAKE
+    cap = stage_max_stake(match.get("stage"))
+    if stake > cap:
+        return False, "Max stake here is %d points (it rises each knockout round)." % cap
     d = player_deltas(wagers).get(player, {})
     if d.get("pending_count", 0) >= MAX_PENDING:
         return False, "You already have %d open bets — settle some first." % MAX_PENDING
+    pending = d.get("pending_stake", 0.0)
+    if pending + stake > cap + 1e-9:
+        return False, ("You can have at most %d points riding on open bets at once — you've already got %g out there, "
+                       "so you can add %g more until one settles." % (cap, pending, round(max(0.0, cap - pending), 1)))
     avail = available_points(player, settled_points, wagers)
     if stake > avail + 1e-9:
         return False, "You only have %g points available to stake." % avail
     odds = match_odds(comp_home, comp_away).get(selection)
     ret = potential_return(stake, odds["num"], odds["den"])
-    if ret > MAX_RETURN + 1e-9:
-        return False, "That would return %g — the cap is %d per bet. Lower your stake." % (ret, MAX_RETURN)
+    if MAX_RETURN is not None and ret > MAX_RETURN + 1e-9:
+        return False, "That would return %g — the cap is %g per bet. Lower your stake." % (ret, MAX_RETURN)
     w = {"id": uuid.uuid4().hex[:12], "player": player, "matchId": match_id(match),
          "home": match.get("home"), "away": match.get("away"), "stage": match.get("stage"),
          "utcDate": match.get("utcDate"), "selection": selection, "stake": stake,
@@ -179,41 +212,176 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
     return True, w
 
 
+def _leg_result(leg, match):
+    status = match.get("status")
+    if status in VOID_STATUSES:
+        return "void"
+    side = _winner_side(match)
+    if status not in ("FINISHED", "AWARDED") or side is None:
+        return None
+    return "won" if leg["selection"] == side else "lost"
+
+
 def settle(wagers, match, now=None):
-    """Settle every pending wager on a finished/void match. Mutates `wagers`. Returns the number settled."""
+    """Settle every pending wager affected by this match. Singles settle outright; accumulators settle
+    leg-by-leg and only resolve once every leg has a result. Mutates `wagers`. Returns the number fully settled."""
     mid = match_id(match)
     status = match.get("status")
     side = _winner_side(match)
     ts = int(now if now is not None else time.time())
     n = 0
     for w in wagers or []:
-        if w.get("status") != "pending" or w.get("matchId") != mid:
+        if w.get("status") != "pending":
+            continue
+        legs = w.get("legs")
+        if legs:                                   # ---- accumulator ----
+            touched = False
+            for leg in legs:
+                if leg.get("matchId") == mid and not leg.get("result"):
+                    r = _leg_result(leg, match)
+                    if r:
+                        leg["result"] = r
+                        touched = True
+            if not touched:
+                continue
+            results = [leg.get("result") for leg in legs]
+            if "lost" in results:                  # any leg down -> the whole acca is down
+                w["status"] = "lost"; w["return"] = 0; w["settled_at"] = ts; n += 1
+            elif None not in results:              # every leg decided, none lost
+                won_legs = [leg for leg in legs if leg.get("result") == "won"]
+                if not won_legs:                   # all void -> refund the stake
+                    w["status"] = "void"; w["settled_at"] = ts; n += 1
+                else:
+                    dec = 1.0
+                    for leg in won_legs:           # void legs drop out (odds treated as 1.0)
+                        dec *= (1.0 + leg["num"] / leg["den"])
+                    rv = round(w["stake"] * dec, 1)
+                    w["return"] = min(MAX_RETURN, rv) if MAX_RETURN is not None else rv
+                    w["status"] = "won"; w["settled_at"] = ts; n += 1
+            continue
+        # ---- single ----
+        if w.get("matchId") != mid:
             continue
         if status in VOID_STATUSES:
-            w["status"] = "void"
-            w["settled_at"] = ts
-            n += 1
-            continue
+            w["status"] = "void"; w["settled_at"] = ts; n += 1; continue
         if status not in ("FINISHED", "AWARDED") or side is None:
             continue
         if w["selection"] == side:
             w["status"] = "won"
         else:
-            w["status"] = "lost"
-            w["return"] = 0
+            w["status"] = "lost"; w["return"] = 0
         w["result"] = side
         w["settled_at"] = ts
         n += 1
     return n
 
 
+def place_acca(wagers, player, selections, stake, settled_points, now=None):
+    """
+    Place a 1-3 leg accumulator. `selections` is a list of dicts:
+        {"match": <fixture>, "selection": "HOME|DRAW|AWAY", "comp_home": int, "comp_away": int}
+    All legs must win for it to pay; combined odds = product of each leg's decimal price.
+    """
+    if not selections:
+        return False, "Add at least one pick."
+    if len(selections) > MAX_ACCA_LEGS:
+        return False, "An accumulator can have at most %d legs." % MAX_ACCA_LEGS
+    if len(selections) == 1:                       # a 1-leg acca is just a normal single
+        s = selections[0]
+        return place(wagers, player, s["match"], s["selection"], stake, settled_points,
+                     s["comp_home"], s["comp_away"], now)
+    ids = [match_id(s["match"]) for s in selections]
+    if len(set(ids)) != len(ids):
+        return False, "You can't pick the same game twice in one accumulator."
+    try:
+        stake = round(float(stake), 1)
+    except (TypeError, ValueError):
+        return False, "Enter a number of points to stake."
+    if stake != stake or stake in (float("inf"), float("-inf")):
+        return False, "Enter a valid stake."
+    if stake <= 0:
+        return False, "You have to stake at least %d point(s) — you can't bet nothing." % MIN_STAKE
+    if stake < MIN_STAKE:
+        return False, "Minimum stake is %d point(s)." % MIN_STAKE
+    cap = min((stage_max_stake(s["match"].get("stage")) for s in selections), default=MAX_STAKE)
+    if stake > cap:
+        return False, "Max stake on this accumulator is %d points." % cap
+    d = player_deltas(wagers).get(player, {})
+    if d.get("pending_count", 0) >= MAX_PENDING:
+        return False, "You already have %d open bets — settle some first." % MAX_PENDING
+    pending = d.get("pending_stake", 0.0)
+    if pending + stake > cap + 1e-9:
+        return False, ("You can have at most %d points riding on open bets at once — you've already got %g out there, "
+                       "so you can add %g more until one settles." % (cap, pending, round(max(0.0, cap - pending), 1)))
+    avail = available_points(player, settled_points, wagers)
+    if stake > avail + 1e-9:
+        return False, "You only have %g points available to stake." % avail
+    legs = []
+    dec = 1.0
+    for s in selections:
+        if s.get("selection") not in SELECTIONS:
+            return False, "Pick home, draw or away for every leg."
+        if not can_bet_on(s.get("match"), now):
+            return False, "One of those games has kicked off or finished — accas must be all upcoming."
+        if (s["match"].get("stage") not in (None, "GROUP_STAGE")) and s["selection"] == "DRAW":
+            return False, "Knockout legs can't be a draw — pick the side to go through."
+        o = match_odds(s["comp_home"], s["comp_away"])[s["selection"]]
+        legs.append({"matchId": match_id(s["match"]), "selection": s["selection"],
+                     "home": s["match"].get("home"), "away": s["match"].get("away"),
+                     "stage": s["match"].get("stage"), "num": o["num"], "den": o["den"], "frac": o["frac"]})
+        dec *= o["decimal"]
+    ret = round(stake * dec, 1)
+    if MAX_RETURN is not None and ret > MAX_RETURN + 1e-9:
+        return False, "That acca would return %g — the cap is %g per bet. Lower your stake." % (ret, MAX_RETURN)
+    w = {"id": uuid.uuid4().hex[:12], "player": player, "type": "acca", "legs": legs,
+         "home": legs[0]["home"], "away": legs[0]["away"], "selection": "ACCA",
+         "stake": stake, "decimal": round(dec, 3), "frac": "%d-fold" % len(legs),
+         "return": ret, "status": "pending", "placed_at": int(now if now is not None else time.time())}
+    wagers.append(w)
+    return True, w
+
+
 def settle_all(wagers, matches, now=None):
     """Run settlement across all matches (idempotent — only touches still-pending bets)."""
-    by = {match_id(m): m for m in (matches or [])}
     total = 0
-    for w in wagers or []:
-        if w.get("status") == "pending" and w.get("matchId") in by:
-            pass  # settled below in one pass per match
     for m in (matches or []):
         total += settle(wagers, m, now)
     return total
+
+
+def betting_locked(tracker):
+    """Once the tournament is decided (final played, one team left) no new bets can be placed."""
+    st = (tracker or {}).get("stats") or {}
+    return (st.get("teams_remaining") is not None and st.get("teams_remaining") <= 1
+            and (st.get("matches_played") or 0) > 0)
+
+
+def stats(wagers):
+    """Per-player wager stats for the analysis board: staked, profit won, points lost, biggest win, counts."""
+    out = {}
+    for w in wagers or []:
+        d = out.setdefault(w["player"], {"player": w["player"], "staked": 0.0, "won": 0.0, "lost": 0.0,
+                                         "net": 0.0, "bets": 0, "open": 0, "biggest_win": 0.0})
+        d["bets"] += 1
+        d["staked"] = round(d["staked"] + w["stake"], 1)
+        st = w.get("status")
+        if st == "pending":
+            d["open"] += 1
+        elif st == "won":
+            prof = round(w.get("return", 0) - w["stake"], 1)
+            d["won"] = round(d["won"] + prof, 1)
+            d["net"] = round(d["net"] + prof, 1)
+            d["biggest_win"] = max(d["biggest_win"], prof)
+        elif st == "lost":
+            d["lost"] = round(d["lost"] + w["stake"], 1)
+            d["net"] = round(d["net"] - w["stake"], 1)
+    return out
+
+
+def leaders(wagers):
+    """Headline leaders for the analysis section: most staked, most won, most lost (None if no bets)."""
+    s = list(stats(wagers).values())
+    if not s:
+        return {"most_wagered": None, "most_won": None, "most_lost": None}
+    top = lambda key: max(s, key=lambda d: d[key]) if any(d[key] > 0 for d in s) else None
+    return {"most_wagered": top("staked"), "most_won": top("won"), "most_lost": top("lost")}

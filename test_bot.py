@@ -318,6 +318,95 @@ if "123" in server.load_config().get("discord_subs", {}):
     fails.append(("stopnotify", "did not clear sub: %r" % r2))
 else:
     print("[notify] /stopnotify clears the subscription OK")
+
+# ---- Discord betting (/games, /bet preview + confirm, /mybets) ----
+_t0, _t1, _t2 = _names3[0], _names3[1], _names3[2]   # Erol owns _t0,_t1 ; James owns _t2
+json.dump({"matches": [
+    {"id": 1, "stage": "GROUP_STAGE", "group": "A", "utcDate": "2026-06-11T18:00:00Z", "status": "FINISHED",
+     "home": _t0, "away": _t2, "homeScore": 3, "awayScore": 0, "winner": "HOME", "minute": None,
+     "duration": "REGULAR", "aet": False, "shootout": False, "penHome": None, "penAway": None},
+    {"id": 2, "stage": "GROUP_STAGE", "group": "A", "utcDate": "2099-06-15T18:00:00Z", "status": "TIMED",
+     "home": _t1, "away": _t2, "homeScore": None, "awayScore": None, "winner": None, "minute": None,
+     "duration": "REGULAR", "aet": False, "shootout": False, "penHome": None, "penAway": None}]},
+    open("results.json", "w"))
+_c = server.load_config(); _c["wagering_enabled"] = True; _c["discord_subs"] = {"123": "Erol"}
+_c["wager_pins"] = {"Erol": "ABCDE", "James": "ZZZZZ"}; _c.pop("wager_links", None); _c.pop("wager_link_codes", None)
+server.save_config(_c)
+scoring.compute(out="tracker_data.json", wagers=[])
+_g = server.discord_command("games", {}, uid="123")
+if _t1 not in _g or "/bet" not in _g:
+    fails.append(("/games", "didn't list the upcoming game + odds: %r" % _g))
+# unlinked Discord user can't bet, and is told to link (passcode is NEVER asked for in-channel)
+_unl = server.discord_command("bet", {"team": _t1, "pick": "home", "stake": 5}, uid="123")
+if "linked" not in _unl.lower() or "linkdiscord" not in _unl.lower():
+    fails.append(("/bet", "unlinked bet didn't point to the link flow: %r" % _unl))
+# a wrong link code is rejected
+if "expired" not in server.discord_command("linkdiscord", {"code": "NOPE12"}, uid="123").lower():
+    fails.append(("/linkdiscord", "accepted a bad code"))
+# the website issues a code only for the correct passcode (simulate the endpoint's effect)
+_cc = server.load_config(); _cc["wager_link_codes"] = {"GOOD12": {"player": "Erol", "exp": time.time() + 900}}
+server.save_config(_cc)
+_lk = server.discord_command("linkdiscord", {"code": "GOOD12"}, uid="123")
+if "linked" not in _lk.lower() or server.load_config().get("wager_links", {}).get("123") != "Erol":
+    fails.append(("/linkdiscord", "did not link with a valid code: %r" % _lk))
+if server.load_config().get("wager_link_codes", {}).get("GOOD12"):
+    fails.append(("/linkdiscord", "code was not single-use"))
+# linked -> preview shows payout, no passcode ever typed in Discord
+_prev = server.discord_command("bet", {"team": _t1, "pick": "home", "stake": 5}, uid="123")
+if "preview" not in _prev.lower() or "returns" not in _prev.lower():
+    fails.append(("/bet preview", "no payout preview once linked: %r" % _prev))
+_place = server.discord_command("bet", {"team": _t1, "pick": "home", "stake": 5, "confirm": True}, uid="123")
+_wl = server.load_wagers()
+if "placed" not in _place.lower() or len(_wl) != 1 or _wl[0]["player"] != "Erol":
+    fails.append(("/bet confirm", "did not place once linked: %r / %r" % (_place, _wl)))
+# a DIFFERENT, unlinked Discord account cannot bet as anyone
+_other = server.discord_command("bet", {"team": _t1, "pick": "home", "stake": 5}, uid="999")
+if "link" not in _other.lower() or len(server.load_wagers()) != 1:
+    fails.append(("/bet", "an unlinked account could act: %r" % _other))
+_mb = server.discord_command("mybets", {}, uid="123")
+if _t1 not in _mb:
+    fails.append(("/mybets", "didn't show the placed bet: %r" % _mb))
+# /points shows the linked player's available points + their max bet
+_pts = server.discord_command("points", {}, uid="123")
+if "Erol" not in _pts or "available" not in _pts.lower():
+    fails.append(("/points", "didn't report available points: %r" % _pts))
+if "link" not in server.discord_command("points", {}, uid="999").lower():
+    fails.append(("/points", "unlinked user got points"))
+# /allbets lists everyone's open bets (the one Erol placed)
+_ab = server.discord_command("allbets", {}, uid="123")
+if "Erol" not in _ab or _t1 not in _ab:
+    fails.append(("/allbets", "didn't list the open bet: %r" % _ab))
+# /scores works even with no results (recent finished game from the fixtures)
+_sc = server.discord_command("scores", {}, uid="123")
+if not isinstance(_sc, str) or not _sc:
+    fails.append(("/scores", "no output: %r" % _sc))
+# /mypin: a linked account can recover its own passcode
+_mp = server.discord_command("mypin", {}, uid="123")
+if "passcode" not in _mp.lower():
+    fails.append(("/mypin", "linked account didn't get its passcode: %r" % _mp))
+if "link" not in server.discord_command("mypin", {}, uid="999").lower():
+    fails.append(("/mypin", "unlinked account was given a passcode"))
+# /resetpin: a linked account can reset ITS OWN passcode (others untouched); an unlinked account cannot
+_erol_before = server.load_config().get("wager_pins", {}).get("Erol")
+_james_before = server.load_config().get("wager_pins", {}).get("James")
+_rp = server.discord_command("resetpin", {}, uid="123")
+_pins_after = server.load_config().get("wager_pins", {})
+if _pins_after.get("Erol") == _erol_before or _pins_after.get("Erol") is None:
+    fails.append(("/resetpin", "linked self-reset didn't change the passcode: %r" % _rp))
+if _pins_after.get("James") != _james_before:
+    fails.append(("/resetpin", "self-reset wrongly changed another player's passcode"))
+if "link" not in server.discord_command("resetpin", {}, uid="999").lower():
+    fails.append(("/resetpin", "an unlinked account could reset a passcode"))
+# /unlink removes the betting link; afterwards /bet is blocked again
+_un = server.discord_command("unlink", {}, uid="123")
+if "unlink" not in _un.lower() or server.load_config().get("wager_links", {}).get("123"):
+    fails.append(("/unlink", "did not remove the link: %r" % _un))
+if "link" not in server.discord_command("bet", {"team": _t1, "pick": "home", "stake": 5}, uid="123").lower():
+    fails.append(("/unlink", "could still bet after unlinking"))
+if not [f for f in fails if "/bet" in f[0] or "/games" in f[0] or "/mybets" in f[0] or "/linkdiscord" in f[0]
+        or "/points" in f[0] or "/allbets" in f[0] or "/scores" in f[0] or "/unlink" in f[0]]:
+    print("[wager] Discord betting + /scores /points /allbets /unlink OK")
+
 shutil.rmtree(D2, ignore_errors=True)
 
 if fails:

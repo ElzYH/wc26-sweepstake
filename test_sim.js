@@ -5,7 +5,12 @@ const fs = require('fs');
 const src = fs.readFileSync(__dirname + '/tracker.html', 'utf8');
 const fn = src.match(/function simWinOdds\(d,N\)\{[\s\S]*?\n\}/);
 if (!fn) { console.error('FAIL: simWinOdds not found'); process.exit(1); }
-eval(fn[0]);
+const mb = src.match(/function mulberry32\([\s\S]*?\n\}/);
+if (!mb) { console.error('FAIL: mulberry32 not found'); process.exit(1); }
+// Wrap both in ONE scope and return simWinOdds so it closes over mulberry32 lexically.
+// (Node 24+ no longer leaks eval'd function declarations into the surrounding scope, so the
+//  old `eval(mb); eval(fn);` left mulberry32 undefined when simWinOdds ran — this is version-proof.)
+const simWinOdds = eval('(function(){' + mb[0] + '\n' + fn[0] + '\nreturn simWinOdds;})()');
 
 const players = ['Erol', 'James', 'Louis', 'Ismail', 'Reuben'];
 const groups = [], meta = []; let ti = 0;
@@ -47,6 +52,13 @@ ck('mid-KO both% sums to ~100', Math.abs(sum(r, 'both') - 100) < 0.6, sum(r, 'bo
 ck('mid-KO surv% sums to ~100', Math.abs(sum(r, 'surv') - 100) < 0.6, sum(r, 'surv').toFixed(1));
 ck('a player with no alive team cannot win Survival (0%)', reuben.surv === 0, 'Reuben surv=' + reuben.surv);
 ck('that player can still place on Points (>0%) from locked points', reuben.pts >= 0, 'Reuben pts=' + reuben.pts);
+
+// CASE 3: DETERMINISM — identical data must give identical odds (no run-to-run wobble)
+const mkData = () => ({ groups, players: mkPlayers(() => ({})), fixtures: [], stats: { matches_played: 0, teams_remaining: 48 }, scoring });
+const a = simWinOdds(mkData(), 1500), b = simWinOdds(mkData(), 1500);
+const same = JSON.stringify(a) === JSON.stringify(b);
+ck('identical data gives identical odds (deterministic, no wobble)', same,
+   same ? '' : 'differs: ' + JSON.stringify(a.find(x=>x.name==='Louis')) + ' vs ' + JSON.stringify(b.find(x=>x.name==='Louis')));
 
 if (fails) { console.error('\n' + fails + ' sim check(s) FAILED'); process.exit(1); }
 console.log('\nAll sim checks passed.');

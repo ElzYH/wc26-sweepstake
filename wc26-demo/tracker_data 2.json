@@ -1,0 +1,6134 @@
+{
+  "updated_at": "2026-06-06T00:14:55+00:00",
+  "competition": "WC",
+  "default_mode": "hybrid",
+  "scoring": {
+    "points": {
+      "per_goal": 1,
+      "win": 3,
+      "draw": 1,
+      "clean_sheet": 1,
+      "stage_bonus": {
+        "LAST_32": 4,
+        "LAST_16": 6,
+        "QUARTER_FINALS": 9,
+        "SEMI_FINALS": 12,
+        "THIRD_PLACE": 14,
+        "FINAL": 30,
+        "WINNER": 85
+      }
+    },
+    "survival": {
+      "LAST_32": 18,
+      "LAST_16": 26,
+      "QUARTER_FINALS": 34,
+      "SEMI_FINALS": 44,
+      "FINAL": 85,
+      "WINNER": 135
+    }
+  },
+  "champion_decided": null,
+  "leaderboards": {
+    "points": [
+      {
+        "name": "Louis",
+        "score": 111.0,
+        "alive_teams": 9,
+        "live": 0,
+        "total_teams": 9,
+        "wager_held": 17.0,
+        "wager_net": 0.0,
+        "bets_open": 2,
+        "points_settled": 128
+      },
+      {
+        "name": "James",
+        "score": 105.0,
+        "alive_teams": 9,
+        "live": 0,
+        "total_teams": 9,
+        "wager_held": 5.0,
+        "wager_net": 0.0,
+        "bets_open": 1,
+        "points_settled": 110
+      },
+      {
+        "name": "Reuben",
+        "score": 103.0,
+        "alive_teams": 9,
+        "live": 0,
+        "total_teams": 9,
+        "wager_held": 6.0,
+        "wager_net": 0.0,
+        "bets_open": 1,
+        "points_settled": 109
+      },
+      {
+        "name": "Erol",
+        "score": 75.0,
+        "alive_teams": 9,
+        "live": 0,
+        "total_teams": 9,
+        "wager_held": 35.0,
+        "wager_net": 0.0,
+        "bets_open": 3,
+        "points_settled": 110
+      },
+      {
+        "name": "Ismail",
+        "score": 55.0,
+        "alive_teams": 9,
+        "live": 0,
+        "total_teams": 9,
+        "wager_held": 4.0,
+        "wager_net": 0.0,
+        "bets_open": 1,
+        "points_settled": 59
+      }
+    ],
+    "survival": [
+      {
+        "name": "Erol",
+        "score": 9,
+        "alive_teams": 9,
+        "live": 0,
+        "total_teams": 9,
+        "wager_held": 35.0,
+        "wager_net": 0.0,
+        "bets_open": 3,
+        "points_settled": 110
+      },
+      {
+        "name": "James",
+        "score": 9,
+        "alive_teams": 9,
+        "live": 0,
+        "total_teams": 9,
+        "wager_held": 5.0,
+        "wager_net": 0.0,
+        "bets_open": 1,
+        "points_settled": 110
+      },
+      {
+        "name": "Louis",
+        "score": 9,
+        "alive_teams": 9,
+        "live": 0,
+        "total_teams": 9,
+        "wager_held": 17.0,
+        "wager_net": 0.0,
+        "bets_open": 2,
+        "points_settled": 128
+      },
+      {
+        "name": "Reuben",
+        "score": 9,
+        "alive_teams": 9,
+        "live": 0,
+        "total_teams": 9,
+        "wager_held": 6.0,
+        "wager_net": 0.0,
+        "bets_open": 1,
+        "points_settled": 109
+      },
+      {
+        "name": "Ismail",
+        "score": 9,
+        "alive_teams": 9,
+        "live": 0,
+        "total_teams": 9,
+        "wager_held": 4.0,
+        "wager_net": 0.0,
+        "bets_open": 1,
+        "points_settled": 59
+      }
+    ],
+    "hybrid": [
+      {
+        "name": "Louis",
+        "score": 237.0,
+        "alive_teams": 9,
+        "live": 0,
+        "total_teams": 9,
+        "wager_held": 17.0,
+        "wager_net": 0.0,
+        "bets_open": 2,
+        "points_settled": 128
+      },
+      {
+        "name": "James",
+        "score": 231.0,
+        "alive_teams": 9,
+        "live": 0,
+        "total_teams": 9,
+        "wager_held": 5.0,
+        "wager_net": 0.0,
+        "bets_open": 1,
+        "points_settled": 110
+      },
+      {
+        "name": "Erol",
+        "score": 219.0,
+        "alive_teams": 9,
+        "live": 0,
+        "total_teams": 9,
+        "wager_held": 35.0,
+        "wager_net": 0.0,
+        "bets_open": 3,
+        "points_settled": 110
+      },
+      {
+        "name": "Reuben",
+        "score": 211.0,
+        "alive_teams": 9,
+        "live": 0,
+        "total_teams": 9,
+        "wager_held": 6.0,
+        "wager_net": 0.0,
+        "bets_open": 1,
+        "points_settled": 109
+      },
+      {
+        "name": "Ismail",
+        "score": 109.0,
+        "alive_teams": 9,
+        "live": 0,
+        "total_teams": 9,
+        "wager_held": 4.0,
+        "wager_net": 0.0,
+        "bets_open": 1,
+        "points_settled": 59
+      }
+    ],
+    "fair": [
+      {
+        "name": "Louis",
+        "score": 20,
+        "alive_teams": 9,
+        "live": 0,
+        "total_teams": 9,
+        "wager_held": 17.0,
+        "wager_net": 0.0,
+        "bets_open": 2,
+        "points_settled": 128
+      },
+      {
+        "name": "Reuben",
+        "score": 12,
+        "alive_teams": 9,
+        "live": 0,
+        "total_teams": 9,
+        "wager_held": 6.0,
+        "wager_net": 0.0,
+        "bets_open": 1,
+        "points_settled": 109
+      },
+      {
+        "name": "James",
+        "score": 10,
+        "alive_teams": 9,
+        "live": 0,
+        "total_teams": 9,
+        "wager_held": 5.0,
+        "wager_net": 0.0,
+        "bets_open": 1,
+        "points_settled": 110
+      },
+      {
+        "name": "Erol",
+        "score": -10,
+        "alive_teams": 9,
+        "live": 0,
+        "total_teams": 9,
+        "wager_held": 35.0,
+        "wager_net": 0.0,
+        "bets_open": 3,
+        "points_settled": 110
+      },
+      {
+        "name": "Ismail",
+        "score": -31,
+        "alive_teams": 9,
+        "live": 0,
+        "total_teams": 9,
+        "wager_held": 4.0,
+        "wager_net": 0.0,
+        "bets_open": 1,
+        "points_settled": 59
+      }
+    ]
+  },
+  "champion": [
+    {
+      "name": "Ismail",
+      "odds": 23.4,
+      "alive_teams": 9,
+      "total_teams": 9
+    },
+    {
+      "name": "Erol",
+      "odds": 20.3,
+      "alive_teams": 9,
+      "total_teams": 9
+    },
+    {
+      "name": "James",
+      "odds": 20.0,
+      "alive_teams": 9,
+      "total_teams": 9
+    },
+    {
+      "name": "Reuben",
+      "odds": 18.8,
+      "alive_teams": 9,
+      "total_teams": 9
+    },
+    {
+      "name": "Louis",
+      "odds": 15.9,
+      "alive_teams": 9,
+      "total_teams": 9
+    }
+  ],
+  "strength": [
+    {
+      "name": "James",
+      "strength": 363,
+      "favourites": 1
+    },
+    {
+      "name": "Erol",
+      "strength": 351,
+      "favourites": 1
+    },
+    {
+      "name": "Louis",
+      "strength": 345,
+      "favourites": 1
+    },
+    {
+      "name": "Ismail",
+      "strength": 345,
+      "favourites": 2
+    },
+    {
+      "name": "Reuben",
+      "strength": 345,
+      "favourites": 1
+    }
+  ],
+  "stats": {
+    "goals": 169,
+    "matches_played": 72,
+    "favourite_team": "France",
+    "favourite_owner": "Erol",
+    "favourite_odds": 14.3,
+    "teams_remaining": 48,
+    "goals_per_match": 2.35,
+    "dark_horse": "Norway",
+    "dark_horse_owner": "Ismail",
+    "dark_horse_odds": 3.0,
+    "group_of_death": "I",
+    "biggest_win": "Switzerland 0-5 Canada",
+    "top_team": "Netherlands",
+    "top_team_goals": 8,
+    "strongest_player": "James",
+    "strongest_player_strength": 363,
+    "underdog_player": "Reuben",
+    "underdog_player_strength": 345,
+    "rivalry": "Erol vs Ismail",
+    "rivalry_count": 9,
+    "most_favourites_player": "Ismail",
+    "most_favourites": 2,
+    "top_scorer_player": "Erol",
+    "top_scorer_player_goals": 36,
+    "most_conceded_player": "Ismail",
+    "most_conceded_player_goals": 41,
+    "clean_sheets_player": "Louis",
+    "clean_sheets_value": 12,
+    "over_player": "Louis",
+    "under_player": "Erol",
+    "over_team": "Iraq",
+    "under_team": "France",
+    "best_defence_team": "Iraq",
+    "best_defence_conceded": 0,
+    "best_defence_cs": 3,
+    "group_leaders_player": "Louis",
+    "proj_points_player": "James",
+    "proj_points_value": 65.4
+  },
+  "players": [
+    {
+      "name": "Erol",
+      "points": 75.0,
+      "survival": 144,
+      "hybrid": 219.0,
+      "live": 0,
+      "alive_teams": 9,
+      "total_teams": 9,
+      "teams": [
+        {
+          "name": "Paraguay",
+          "tier": 4,
+          "group": "D",
+          "points": 15,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "2-0-1",
+          "gf": 4,
+          "ga": 3,
+          "live": 0,
+          "composite": 25.4,
+          "odds": 0.0066
+        },
+        {
+          "name": "Morocco",
+          "tier": 2,
+          "group": "C",
+          "points": 14,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "1-2-0",
+          "gf": 5,
+          "ga": 4,
+          "live": 0,
+          "composite": 56.4,
+          "odds": 0.0244
+        },
+        {
+          "name": "Senegal",
+          "tier": 2,
+          "group": "I",
+          "points": 14,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "1-1-1",
+          "gf": 5,
+          "ga": 5,
+          "live": 0,
+          "composite": 47.0,
+          "odds": 0.0149
+        },
+        {
+          "name": "Egypt",
+          "tier": 3,
+          "group": "G",
+          "points": 14,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "2-0-1",
+          "gf": 4,
+          "ga": 3,
+          "live": 0,
+          "composite": 31.7,
+          "odds": 0.004
+        },
+        {
+          "name": "Ecuador",
+          "tier": 3,
+          "group": "E",
+          "points": 13,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "1-1-1",
+          "gf": 5,
+          "ga": 6,
+          "live": 0,
+          "composite": 37.2,
+          "odds": 0.0149
+        },
+        {
+          "name": "Austria",
+          "tier": 3,
+          "group": "J",
+          "points": 13,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "1-1-1",
+          "gf": 3,
+          "ga": 3,
+          "live": 0,
+          "composite": 35.9,
+          "odds": 0.0099
+        },
+        {
+          "name": "Haiti",
+          "tier": 4,
+          "group": "C",
+          "points": 13,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "1-2-0",
+          "gf": 3,
+          "ga": 2,
+          "live": 0,
+          "composite": 1.1,
+          "odds": 0.0004
+        },
+        {
+          "name": "France",
+          "tier": 1,
+          "group": "I",
+          "points": 11,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "0-2-1",
+          "gf": 5,
+          "ga": 6,
+          "live": 0,
+          "composite": 100.0,
+          "odds": 0.1818
+        },
+        {
+          "name": "South Africa",
+          "tier": 4,
+          "group": "A",
+          "points": 3,
+          "survival": 0,
+          "status": "alive",
+          "stage": "GROUP_STAGE",
+          "record": "0-1-2",
+          "gf": 2,
+          "ga": 5,
+          "live": 0,
+          "composite": 16.1,
+          "odds": 0.001
+        }
+      ],
+      "points_settled": 110,
+      "wager_net": 0.0,
+      "wager_held": 35.0,
+      "bets_open": 3,
+      "champion_odds": 20.3,
+      "squad_strength": 351,
+      "favourites": 1,
+      "projected_points": 58.7,
+      "fair": -10
+    },
+    {
+      "name": "James",
+      "points": 105.0,
+      "survival": 126,
+      "hybrid": 231.0,
+      "live": 0,
+      "alive_teams": 9,
+      "total_teams": 9,
+      "teams": [
+        {
+          "name": "Spain",
+          "tier": 1,
+          "group": "H",
+          "points": 19,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "2-1-0",
+          "gf": 6,
+          "ga": 2,
+          "live": 0,
+          "composite": 96.9,
+          "odds": 0.1667
+        },
+        {
+          "name": "Belgium",
+          "tier": 2,
+          "group": "G",
+          "points": 18,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "2-1-0",
+          "gf": 5,
+          "ga": 1,
+          "live": 0,
+          "composite": 55.1,
+          "odds": 0.0294
+        },
+        {
+          "name": "Ivory Coast",
+          "tier": 3,
+          "group": "E",
+          "points": 17,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "2-0-1",
+          "gf": 5,
+          "ga": 1,
+          "live": 0,
+          "composite": 28.3,
+          "odds": 0.005
+        },
+        {
+          "name": "Uruguay",
+          "tier": 2,
+          "group": "H",
+          "points": 14,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "1-2-0",
+          "gf": 4,
+          "ga": 3,
+          "live": 0,
+          "composite": 46.4,
+          "odds": 0.0196
+        },
+        {
+          "name": "USA",
+          "tier": 2,
+          "group": "D",
+          "points": 13,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "1-1-1",
+          "gf": 4,
+          "ga": 3,
+          "live": 0,
+          "composite": 47.6,
+          "odds": 0.0244
+        },
+        {
+          "name": "Czech Republic",
+          "tier": 4,
+          "group": "A",
+          "points": 10,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "1-0-2",
+          "gf": 2,
+          "ga": 3,
+          "live": 0,
+          "composite": 25.1,
+          "odds": 0.005
+        },
+        {
+          "name": "Iran",
+          "tier": 3,
+          "group": "G",
+          "points": 9,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "0-2-1",
+          "gf": 3,
+          "ga": 4,
+          "live": 0,
+          "composite": 36.8,
+          "odds": 0.002
+        },
+        {
+          "name": "Jordan",
+          "tier": 4,
+          "group": "J",
+          "points": 7,
+          "survival": 0,
+          "status": "alive",
+          "stage": "GROUP_STAGE",
+          "record": "1-1-1",
+          "gf": 1,
+          "ga": 1,
+          "live": 0,
+          "composite": 11.9,
+          "odds": 0.001
+        },
+        {
+          "name": "Saudi Arabia",
+          "tier": 4,
+          "group": "H",
+          "points": 3,
+          "survival": 0,
+          "status": "alive",
+          "stage": "GROUP_STAGE",
+          "record": "0-1-2",
+          "gf": 2,
+          "ga": 7,
+          "live": 0,
+          "composite": 15.2,
+          "odds": 0.001
+        }
+      ],
+      "points_settled": 110,
+      "wager_net": 0.0,
+      "wager_held": 5.0,
+      "bets_open": 1,
+      "champion_odds": 20.0,
+      "squad_strength": 363,
+      "favourites": 1,
+      "projected_points": 65.4,
+      "fair": 10
+    },
+    {
+      "name": "Louis",
+      "points": 111.0,
+      "survival": 126,
+      "hybrid": 237.0,
+      "live": 0,
+      "alive_teams": 9,
+      "total_teams": 9,
+      "teams": [
+        {
+          "name": "Argentina",
+          "tier": 1,
+          "group": "J",
+          "points": 21,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "3-0-0",
+          "gf": 6,
+          "ga": 1,
+          "live": 0,
+          "composite": 86.1,
+          "odds": 0.1111
+        },
+        {
+          "name": "Canada",
+          "tier": 3,
+          "group": "B",
+          "points": 20,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "2-1-0",
+          "gf": 7,
+          "ga": 1,
+          "live": 0,
+          "composite": 31.2,
+          "odds": 0.0066
+        },
+        {
+          "name": "Netherlands",
+          "tier": 2,
+          "group": "F",
+          "points": 19,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "2-0-1",
+          "gf": 8,
+          "ga": 4,
+          "live": 0,
+          "composite": 61.0,
+          "odds": 0.0476
+        },
+        {
+          "name": "Iraq",
+          "tier": 4,
+          "group": "I",
+          "points": 19,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "3-0-0",
+          "gf": 3,
+          "ga": 0,
+          "live": 0,
+          "composite": 18.2,
+          "odds": 0.001
+        },
+        {
+          "name": "Switzerland",
+          "tier": 3,
+          "group": "B",
+          "points": 14,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "2-0-1",
+          "gf": 3,
+          "ga": 6,
+          "live": 0,
+          "composite": 43.1,
+          "odds": 0.0149
+        },
+        {
+          "name": "Australia",
+          "tier": 3,
+          "group": "D",
+          "points": 14,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "2-0-1",
+          "gf": 4,
+          "ga": 4,
+          "live": 0,
+          "composite": 32.8,
+          "odds": 0.002
+        },
+        {
+          "name": "Croatia",
+          "tier": 2,
+          "group": "L",
+          "points": 11,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "1-1-1",
+          "gf": 2,
+          "ga": 2,
+          "live": 0,
+          "composite": 50.3,
+          "odds": 0.0149
+        },
+        {
+          "name": "Tunisia",
+          "tier": 4,
+          "group": "F",
+          "points": 7,
+          "survival": 0,
+          "status": "alive",
+          "stage": "GROUP_STAGE",
+          "record": "1-1-1",
+          "gf": 1,
+          "ga": 4,
+          "live": 0,
+          "composite": 22.3,
+          "odds": 0.002
+        },
+        {
+          "name": "New Zealand",
+          "tier": 4,
+          "group": "G",
+          "points": 3,
+          "survival": 0,
+          "status": "alive",
+          "stage": "GROUP_STAGE",
+          "record": "0-1-2",
+          "gf": 2,
+          "ga": 6,
+          "live": 0,
+          "composite": 0.1,
+          "odds": 0.001
+        }
+      ],
+      "points_settled": 128,
+      "wager_net": 0.0,
+      "wager_held": 17.0,
+      "bets_open": 2,
+      "champion_odds": 15.9,
+      "squad_strength": 345,
+      "favourites": 1,
+      "projected_points": 62.3,
+      "fair": 20
+    },
+    {
+      "name": "Ismail",
+      "points": 55.0,
+      "survival": 54,
+      "hybrid": 109.0,
+      "live": 0,
+      "alive_teams": 9,
+      "total_teams": 9,
+      "teams": [
+        {
+          "name": "Portugal",
+          "tier": 1,
+          "group": "K",
+          "points": 15,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "1-1-1",
+          "gf": 7,
+          "ga": 8,
+          "live": 0,
+          "composite": 70.1,
+          "odds": 0.0909
+        },
+        {
+          "name": "Colombia",
+          "tier": 2,
+          "group": "K",
+          "points": 13,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "1-1-1",
+          "gf": 5,
+          "ga": 5,
+          "live": 0,
+          "composite": 49.5,
+          "odds": 0.0244
+        },
+        {
+          "name": "Brazil",
+          "tier": 1,
+          "group": "C",
+          "points": 11,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "0-3-0",
+          "gf": 2,
+          "ga": 2,
+          "live": 0,
+          "composite": 73.9,
+          "odds": 0.1111
+        },
+        {
+          "name": "Japan",
+          "tier": 2,
+          "group": "F",
+          "points": 7,
+          "survival": 0,
+          "status": "alive",
+          "stage": "GROUP_STAGE",
+          "record": "1-0-2",
+          "gf": 3,
+          "ga": 4,
+          "live": 0,
+          "composite": 45.2,
+          "odds": 0.0196
+        },
+        {
+          "name": "Bosnia & Herzegovina",
+          "tier": 4,
+          "group": "B",
+          "points": 5,
+          "survival": 0,
+          "status": "alive",
+          "stage": "GROUP_STAGE",
+          "record": "0-2-1",
+          "gf": 3,
+          "ga": 4,
+          "live": 0,
+          "composite": 12.1,
+          "odds": 0.004
+        },
+        {
+          "name": "Scotland",
+          "tier": 4,
+          "group": "C",
+          "points": 4,
+          "survival": 0,
+          "status": "alive",
+          "stage": "GROUP_STAGE",
+          "record": "0-1-2",
+          "gf": 2,
+          "ga": 4,
+          "live": 0,
+          "composite": 24.6,
+          "odds": 0.004
+        },
+        {
+          "name": "Norway",
+          "tier": 3,
+          "group": "I",
+          "points": 2,
+          "survival": 0,
+          "status": "alive",
+          "stage": "GROUP_STAGE",
+          "record": "0-1-2",
+          "gf": 1,
+          "ga": 3,
+          "live": 0,
+          "composite": 36.7,
+          "odds": 0.0385
+        },
+        {
+          "name": "Curacao",
+          "tier": 4,
+          "group": "E",
+          "points": 2,
+          "survival": 0,
+          "status": "alive",
+          "stage": "GROUP_STAGE",
+          "record": "0-1-2",
+          "gf": 1,
+          "ga": 6,
+          "live": 0,
+          "composite": 1.2,
+          "odds": 0.0004
+        },
+        {
+          "name": "Algeria",
+          "tier": 3,
+          "group": "J",
+          "points": 0,
+          "survival": 0,
+          "status": "alive",
+          "stage": "GROUP_STAGE",
+          "record": "0-0-3",
+          "gf": 0,
+          "ga": 5,
+          "live": 0,
+          "composite": 31.6,
+          "odds": 0.004
+        }
+      ],
+      "points_settled": 59,
+      "wager_net": 0.0,
+      "wager_held": 4.0,
+      "bets_open": 1,
+      "champion_odds": 23.4,
+      "squad_strength": 345,
+      "favourites": 2,
+      "projected_points": 59.2,
+      "fair": -31
+    },
+    {
+      "name": "Reuben",
+      "points": 103.0,
+      "survival": 108,
+      "hybrid": 211.0,
+      "live": 0,
+      "alive_teams": 9,
+      "total_teams": 9,
+      "teams": [
+        {
+          "name": "DR Congo",
+          "tier": 4,
+          "group": "K",
+          "points": 21,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "3-0-0",
+          "gf": 7,
+          "ga": 2,
+          "live": 0,
+          "composite": 21.6,
+          "odds": 0.0013
+        },
+        {
+          "name": "Germany",
+          "tier": 2,
+          "group": "E",
+          "points": 18,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "2-0-1",
+          "gf": 6,
+          "ga": 4,
+          "live": 0,
+          "composite": 61.9,
+          "odds": 0.0667
+        },
+        {
+          "name": "Korea Republic",
+          "tier": 3,
+          "group": "A",
+          "points": 17,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "2-1-0",
+          "gf": 4,
+          "ga": 1,
+          "live": 0,
+          "composite": 34.3,
+          "odds": 0.004
+        },
+        {
+          "name": "Mexico",
+          "tier": 2,
+          "group": "A",
+          "points": 14,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "2-0-1",
+          "gf": 3,
+          "ga": 2,
+          "live": 0,
+          "composite": 46.7,
+          "odds": 0.0149
+        },
+        {
+          "name": "Panama",
+          "tier": 3,
+          "group": "L",
+          "points": 14,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "1-2-0",
+          "gf": 3,
+          "ga": 1,
+          "live": 0,
+          "composite": 28.2,
+          "odds": 0.001
+        },
+        {
+          "name": "England",
+          "tier": 1,
+          "group": "L",
+          "points": 11,
+          "survival": 18,
+          "status": "alive",
+          "stage": "LAST_32",
+          "record": "1-1-1",
+          "gf": 2,
+          "ga": 2,
+          "live": 0,
+          "composite": 85.1,
+          "odds": 0.1333
+        },
+        {
+          "name": "Cape Verde",
+          "tier": 4,
+          "group": "H",
+          "points": 6,
+          "survival": 0,
+          "status": "alive",
+          "stage": "GROUP_STAGE",
+          "record": "1-0-2",
+          "gf": 3,
+          "ga": 3,
+          "live": 0,
+          "composite": 9.7,
+          "odds": 0.001
+        },
+        {
+          "name": "Turkey",
+          "tier": 3,
+          "group": "D",
+          "points": 5,
+          "survival": 0,
+          "status": "alive",
+          "stage": "GROUP_STAGE",
+          "record": "0-1-2",
+          "gf": 4,
+          "ga": 6,
+          "live": 0,
+          "composite": 37.4,
+          "odds": 0.0149
+        },
+        {
+          "name": "Uzbekistan",
+          "tier": 4,
+          "group": "K",
+          "points": 3,
+          "survival": 0,
+          "status": "alive",
+          "stage": "GROUP_STAGE",
+          "record": "0-0-3",
+          "gf": 3,
+          "ga": 7,
+          "live": 0,
+          "composite": 20.1,
+          "odds": 0.001
+        }
+      ],
+      "points_settled": 109,
+      "wager_net": 0.0,
+      "wager_held": 6.0,
+      "bets_open": 1,
+      "champion_odds": 18.8,
+      "squad_strength": 345,
+      "favourites": 1,
+      "projected_points": 62.8,
+      "fair": 12
+    }
+  ],
+  "groups": [
+    {
+      "group": "A",
+      "table": [
+        {
+          "position": 1,
+          "team": "Korea Republic",
+          "playedGames": 3,
+          "won": 2,
+          "draw": 1,
+          "lost": 0,
+          "goalsFor": 4,
+          "goalsAgainst": 1,
+          "goalDifference": 3,
+          "points": 7,
+          "owner": "Reuben",
+          "tier": 3,
+          "composite": 34.3,
+          "implied": 0.004
+        },
+        {
+          "position": 2,
+          "team": "Mexico",
+          "playedGames": 3,
+          "won": 2,
+          "draw": 0,
+          "lost": 1,
+          "goalsFor": 3,
+          "goalsAgainst": 2,
+          "goalDifference": 1,
+          "points": 6,
+          "owner": "Reuben",
+          "tier": 2,
+          "composite": 46.7,
+          "implied": 0.0149
+        },
+        {
+          "position": 3,
+          "team": "Czech Republic",
+          "playedGames": 3,
+          "won": 1,
+          "draw": 0,
+          "lost": 2,
+          "goalsFor": 2,
+          "goalsAgainst": 3,
+          "goalDifference": -1,
+          "points": 3,
+          "owner": "James",
+          "tier": 4,
+          "composite": 25.1,
+          "implied": 0.005
+        },
+        {
+          "position": 4,
+          "team": "South Africa",
+          "playedGames": 3,
+          "won": 0,
+          "draw": 1,
+          "lost": 2,
+          "goalsFor": 2,
+          "goalsAgainst": 5,
+          "goalDifference": -3,
+          "points": 1,
+          "owner": "Erol",
+          "tier": 4,
+          "composite": 16.1,
+          "implied": 0.001
+        }
+      ]
+    },
+    {
+      "group": "B",
+      "table": [
+        {
+          "position": 1,
+          "team": "Canada",
+          "playedGames": 3,
+          "won": 2,
+          "draw": 1,
+          "lost": 0,
+          "goalsFor": 7,
+          "goalsAgainst": 1,
+          "goalDifference": 6,
+          "points": 7,
+          "owner": "Louis",
+          "tier": 3,
+          "composite": 31.2,
+          "implied": 0.0066
+        },
+        {
+          "position": 2,
+          "team": "Switzerland",
+          "playedGames": 3,
+          "won": 2,
+          "draw": 0,
+          "lost": 1,
+          "goalsFor": 3,
+          "goalsAgainst": 6,
+          "goalDifference": -3,
+          "points": 6,
+          "owner": "Louis",
+          "tier": 3,
+          "composite": 43.1,
+          "implied": 0.0149
+        },
+        {
+          "position": 3,
+          "team": "Bosnia & Herzegovina",
+          "playedGames": 3,
+          "won": 0,
+          "draw": 2,
+          "lost": 1,
+          "goalsFor": 3,
+          "goalsAgainst": 4,
+          "goalDifference": -1,
+          "points": 2,
+          "owner": "Ismail",
+          "tier": 4,
+          "composite": 12.1,
+          "implied": 0.004
+        },
+        {
+          "position": 4,
+          "team": "Qatar",
+          "playedGames": 3,
+          "won": 0,
+          "draw": 1,
+          "lost": 2,
+          "goalsFor": 1,
+          "goalsAgainst": 3,
+          "goalDifference": -2,
+          "points": 1,
+          "owner": "\u2014",
+          "tier": 4,
+          "composite": 18.8,
+          "implied": 0.001
+        }
+      ]
+    },
+    {
+      "group": "C",
+      "table": [
+        {
+          "position": 1,
+          "team": "Morocco",
+          "playedGames": 3,
+          "won": 1,
+          "draw": 2,
+          "lost": 0,
+          "goalsFor": 5,
+          "goalsAgainst": 4,
+          "goalDifference": 1,
+          "points": 5,
+          "owner": "Erol",
+          "tier": 2,
+          "composite": 56.4,
+          "implied": 0.0244
+        },
+        {
+          "position": 2,
+          "team": "Haiti",
+          "playedGames": 3,
+          "won": 1,
+          "draw": 2,
+          "lost": 0,
+          "goalsFor": 3,
+          "goalsAgainst": 2,
+          "goalDifference": 1,
+          "points": 5,
+          "owner": "Erol",
+          "tier": 4,
+          "composite": 1.1,
+          "implied": 0.0004
+        },
+        {
+          "position": 3,
+          "team": "Brazil",
+          "playedGames": 3,
+          "won": 0,
+          "draw": 3,
+          "lost": 0,
+          "goalsFor": 2,
+          "goalsAgainst": 2,
+          "goalDifference": 0,
+          "points": 3,
+          "owner": "Ismail",
+          "tier": 1,
+          "composite": 73.9,
+          "implied": 0.1111
+        },
+        {
+          "position": 4,
+          "team": "Scotland",
+          "playedGames": 3,
+          "won": 0,
+          "draw": 1,
+          "lost": 2,
+          "goalsFor": 2,
+          "goalsAgainst": 4,
+          "goalDifference": -2,
+          "points": 1,
+          "owner": "Ismail",
+          "tier": 4,
+          "composite": 24.6,
+          "implied": 0.004
+        }
+      ]
+    },
+    {
+      "group": "D",
+      "table": [
+        {
+          "position": 1,
+          "team": "Paraguay",
+          "playedGames": 3,
+          "won": 2,
+          "draw": 0,
+          "lost": 1,
+          "goalsFor": 4,
+          "goalsAgainst": 3,
+          "goalDifference": 1,
+          "points": 6,
+          "owner": "Erol",
+          "tier": 4,
+          "composite": 25.4,
+          "implied": 0.0066
+        },
+        {
+          "position": 2,
+          "team": "Australia",
+          "playedGames": 3,
+          "won": 2,
+          "draw": 0,
+          "lost": 1,
+          "goalsFor": 4,
+          "goalsAgainst": 4,
+          "goalDifference": 0,
+          "points": 6,
+          "owner": "Louis",
+          "tier": 3,
+          "composite": 32.8,
+          "implied": 0.002
+        },
+        {
+          "position": 3,
+          "team": "USA",
+          "playedGames": 3,
+          "won": 1,
+          "draw": 1,
+          "lost": 1,
+          "goalsFor": 4,
+          "goalsAgainst": 3,
+          "goalDifference": 1,
+          "points": 4,
+          "owner": "James",
+          "tier": 2,
+          "composite": 47.6,
+          "implied": 0.0244
+        },
+        {
+          "position": 4,
+          "team": "Turkey",
+          "playedGames": 3,
+          "won": 0,
+          "draw": 1,
+          "lost": 2,
+          "goalsFor": 4,
+          "goalsAgainst": 6,
+          "goalDifference": -2,
+          "points": 1,
+          "owner": "Reuben",
+          "tier": 3,
+          "composite": 37.4,
+          "implied": 0.0149
+        }
+      ]
+    },
+    {
+      "group": "E",
+      "table": [
+        {
+          "position": 1,
+          "team": "Ivory Coast",
+          "playedGames": 3,
+          "won": 2,
+          "draw": 0,
+          "lost": 1,
+          "goalsFor": 5,
+          "goalsAgainst": 1,
+          "goalDifference": 4,
+          "points": 6,
+          "owner": "James",
+          "tier": 3,
+          "composite": 28.3,
+          "implied": 0.005
+        },
+        {
+          "position": 2,
+          "team": "Germany",
+          "playedGames": 3,
+          "won": 2,
+          "draw": 0,
+          "lost": 1,
+          "goalsFor": 6,
+          "goalsAgainst": 4,
+          "goalDifference": 2,
+          "points": 6,
+          "owner": "Reuben",
+          "tier": 2,
+          "composite": 61.9,
+          "implied": 0.0667
+        },
+        {
+          "position": 3,
+          "team": "Ecuador",
+          "playedGames": 3,
+          "won": 1,
+          "draw": 1,
+          "lost": 1,
+          "goalsFor": 5,
+          "goalsAgainst": 6,
+          "goalDifference": -1,
+          "points": 4,
+          "owner": "Erol",
+          "tier": 3,
+          "composite": 37.2,
+          "implied": 0.0149
+        },
+        {
+          "position": 4,
+          "team": "Curacao",
+          "playedGames": 3,
+          "won": 0,
+          "draw": 1,
+          "lost": 2,
+          "goalsFor": 1,
+          "goalsAgainst": 6,
+          "goalDifference": -5,
+          "points": 1,
+          "owner": "Ismail",
+          "tier": 4,
+          "composite": 1.2,
+          "implied": 0.0004
+        }
+      ]
+    },
+    {
+      "group": "F",
+      "table": [
+        {
+          "position": 1,
+          "team": "Netherlands",
+          "playedGames": 3,
+          "won": 2,
+          "draw": 0,
+          "lost": 1,
+          "goalsFor": 8,
+          "goalsAgainst": 4,
+          "goalDifference": 4,
+          "points": 6,
+          "owner": "Louis",
+          "tier": 2,
+          "composite": 61.0,
+          "implied": 0.0476
+        },
+        {
+          "position": 2,
+          "team": "Sweden",
+          "playedGames": 3,
+          "won": 1,
+          "draw": 1,
+          "lost": 1,
+          "goalsFor": 3,
+          "goalsAgainst": 3,
+          "goalDifference": 0,
+          "points": 4,
+          "owner": "\u2014",
+          "tier": 3,
+          "composite": 28.2,
+          "implied": 0.0149
+        },
+        {
+          "position": 3,
+          "team": "Tunisia",
+          "playedGames": 3,
+          "won": 1,
+          "draw": 1,
+          "lost": 1,
+          "goalsFor": 1,
+          "goalsAgainst": 4,
+          "goalDifference": -3,
+          "points": 4,
+          "owner": "Louis",
+          "tier": 4,
+          "composite": 22.3,
+          "implied": 0.002
+        },
+        {
+          "position": 4,
+          "team": "Japan",
+          "playedGames": 3,
+          "won": 1,
+          "draw": 0,
+          "lost": 2,
+          "goalsFor": 3,
+          "goalsAgainst": 4,
+          "goalDifference": -1,
+          "points": 3,
+          "owner": "Ismail",
+          "tier": 2,
+          "composite": 45.2,
+          "implied": 0.0196
+        }
+      ]
+    },
+    {
+      "group": "G",
+      "table": [
+        {
+          "position": 1,
+          "team": "Belgium",
+          "playedGames": 3,
+          "won": 2,
+          "draw": 1,
+          "lost": 0,
+          "goalsFor": 5,
+          "goalsAgainst": 1,
+          "goalDifference": 4,
+          "points": 7,
+          "owner": "James",
+          "tier": 2,
+          "composite": 55.1,
+          "implied": 0.0294
+        },
+        {
+          "position": 2,
+          "team": "Egypt",
+          "playedGames": 3,
+          "won": 2,
+          "draw": 0,
+          "lost": 1,
+          "goalsFor": 4,
+          "goalsAgainst": 3,
+          "goalDifference": 1,
+          "points": 6,
+          "owner": "Erol",
+          "tier": 3,
+          "composite": 31.7,
+          "implied": 0.004
+        },
+        {
+          "position": 3,
+          "team": "Iran",
+          "playedGames": 3,
+          "won": 0,
+          "draw": 2,
+          "lost": 1,
+          "goalsFor": 3,
+          "goalsAgainst": 4,
+          "goalDifference": -1,
+          "points": 2,
+          "owner": "James",
+          "tier": 3,
+          "composite": 36.8,
+          "implied": 0.002
+        },
+        {
+          "position": 4,
+          "team": "New Zealand",
+          "playedGames": 3,
+          "won": 0,
+          "draw": 1,
+          "lost": 2,
+          "goalsFor": 2,
+          "goalsAgainst": 6,
+          "goalDifference": -4,
+          "points": 1,
+          "owner": "Louis",
+          "tier": 4,
+          "composite": 0.1,
+          "implied": 0.001
+        }
+      ]
+    },
+    {
+      "group": "H",
+      "table": [
+        {
+          "position": 1,
+          "team": "Spain",
+          "playedGames": 3,
+          "won": 2,
+          "draw": 1,
+          "lost": 0,
+          "goalsFor": 6,
+          "goalsAgainst": 2,
+          "goalDifference": 4,
+          "points": 7,
+          "owner": "James",
+          "tier": 1,
+          "composite": 96.9,
+          "implied": 0.1667
+        },
+        {
+          "position": 2,
+          "team": "Uruguay",
+          "playedGames": 3,
+          "won": 1,
+          "draw": 2,
+          "lost": 0,
+          "goalsFor": 4,
+          "goalsAgainst": 3,
+          "goalDifference": 1,
+          "points": 5,
+          "owner": "James",
+          "tier": 2,
+          "composite": 46.4,
+          "implied": 0.0196
+        },
+        {
+          "position": 3,
+          "team": "Cape Verde",
+          "playedGames": 3,
+          "won": 1,
+          "draw": 0,
+          "lost": 2,
+          "goalsFor": 3,
+          "goalsAgainst": 3,
+          "goalDifference": 0,
+          "points": 3,
+          "owner": "Reuben",
+          "tier": 4,
+          "composite": 9.7,
+          "implied": 0.001
+        },
+        {
+          "position": 4,
+          "team": "Saudi Arabia",
+          "playedGames": 3,
+          "won": 0,
+          "draw": 1,
+          "lost": 2,
+          "goalsFor": 2,
+          "goalsAgainst": 7,
+          "goalDifference": -5,
+          "points": 1,
+          "owner": "James",
+          "tier": 4,
+          "composite": 15.2,
+          "implied": 0.001
+        }
+      ]
+    },
+    {
+      "group": "I",
+      "table": [
+        {
+          "position": 1,
+          "team": "Iraq",
+          "playedGames": 3,
+          "won": 3,
+          "draw": 0,
+          "lost": 0,
+          "goalsFor": 3,
+          "goalsAgainst": 0,
+          "goalDifference": 3,
+          "points": 9,
+          "owner": "Louis",
+          "tier": 4,
+          "composite": 18.2,
+          "implied": 0.001
+        },
+        {
+          "position": 2,
+          "team": "Senegal",
+          "playedGames": 3,
+          "won": 1,
+          "draw": 1,
+          "lost": 1,
+          "goalsFor": 5,
+          "goalsAgainst": 5,
+          "goalDifference": 0,
+          "points": 4,
+          "owner": "Erol",
+          "tier": 2,
+          "composite": 47.0,
+          "implied": 0.0149
+        },
+        {
+          "position": 3,
+          "team": "France",
+          "playedGames": 3,
+          "won": 0,
+          "draw": 2,
+          "lost": 1,
+          "goalsFor": 5,
+          "goalsAgainst": 6,
+          "goalDifference": -1,
+          "points": 2,
+          "owner": "Erol",
+          "tier": 1,
+          "composite": 100.0,
+          "implied": 0.1818
+        },
+        {
+          "position": 4,
+          "team": "Norway",
+          "playedGames": 3,
+          "won": 0,
+          "draw": 1,
+          "lost": 2,
+          "goalsFor": 1,
+          "goalsAgainst": 3,
+          "goalDifference": -2,
+          "points": 1,
+          "owner": "Ismail",
+          "tier": 3,
+          "composite": 36.7,
+          "implied": 0.0385
+        }
+      ]
+    },
+    {
+      "group": "J",
+      "table": [
+        {
+          "position": 1,
+          "team": "Argentina",
+          "playedGames": 3,
+          "won": 3,
+          "draw": 0,
+          "lost": 0,
+          "goalsFor": 6,
+          "goalsAgainst": 1,
+          "goalDifference": 5,
+          "points": 9,
+          "owner": "Louis",
+          "tier": 1,
+          "composite": 86.1,
+          "implied": 0.1111
+        },
+        {
+          "position": 2,
+          "team": "Austria",
+          "playedGames": 3,
+          "won": 1,
+          "draw": 1,
+          "lost": 1,
+          "goalsFor": 3,
+          "goalsAgainst": 3,
+          "goalDifference": 0,
+          "points": 4,
+          "owner": "Erol",
+          "tier": 3,
+          "composite": 35.9,
+          "implied": 0.0099
+        },
+        {
+          "position": 3,
+          "team": "Jordan",
+          "playedGames": 3,
+          "won": 1,
+          "draw": 1,
+          "lost": 1,
+          "goalsFor": 1,
+          "goalsAgainst": 1,
+          "goalDifference": 0,
+          "points": 4,
+          "owner": "James",
+          "tier": 4,
+          "composite": 11.9,
+          "implied": 0.001
+        },
+        {
+          "position": 4,
+          "team": "Algeria",
+          "playedGames": 3,
+          "won": 0,
+          "draw": 0,
+          "lost": 3,
+          "goalsFor": 0,
+          "goalsAgainst": 5,
+          "goalDifference": -5,
+          "points": 0,
+          "owner": "Ismail",
+          "tier": 3,
+          "composite": 31.6,
+          "implied": 0.004
+        }
+      ]
+    },
+    {
+      "group": "K",
+      "table": [
+        {
+          "position": 1,
+          "team": "DR Congo",
+          "playedGames": 3,
+          "won": 3,
+          "draw": 0,
+          "lost": 0,
+          "goalsFor": 7,
+          "goalsAgainst": 2,
+          "goalDifference": 5,
+          "points": 9,
+          "owner": "Reuben",
+          "tier": 4,
+          "composite": 21.6,
+          "implied": 0.0013
+        },
+        {
+          "position": 2,
+          "team": "Colombia",
+          "playedGames": 3,
+          "won": 1,
+          "draw": 1,
+          "lost": 1,
+          "goalsFor": 5,
+          "goalsAgainst": 5,
+          "goalDifference": 0,
+          "points": 4,
+          "owner": "Ismail",
+          "tier": 2,
+          "composite": 49.5,
+          "implied": 0.0244
+        },
+        {
+          "position": 3,
+          "team": "Portugal",
+          "playedGames": 3,
+          "won": 1,
+          "draw": 1,
+          "lost": 1,
+          "goalsFor": 7,
+          "goalsAgainst": 8,
+          "goalDifference": -1,
+          "points": 4,
+          "owner": "Ismail",
+          "tier": 1,
+          "composite": 70.1,
+          "implied": 0.0909
+        },
+        {
+          "position": 4,
+          "team": "Uzbekistan",
+          "playedGames": 3,
+          "won": 0,
+          "draw": 0,
+          "lost": 3,
+          "goalsFor": 3,
+          "goalsAgainst": 7,
+          "goalDifference": -4,
+          "points": 0,
+          "owner": "Reuben",
+          "tier": 4,
+          "composite": 20.1,
+          "implied": 0.001
+        }
+      ]
+    },
+    {
+      "group": "L",
+      "table": [
+        {
+          "position": 1,
+          "team": "Panama",
+          "playedGames": 3,
+          "won": 1,
+          "draw": 2,
+          "lost": 0,
+          "goalsFor": 3,
+          "goalsAgainst": 1,
+          "goalDifference": 2,
+          "points": 5,
+          "owner": "Reuben",
+          "tier": 3,
+          "composite": 28.2,
+          "implied": 0.001
+        },
+        {
+          "position": 2,
+          "team": "England",
+          "playedGames": 3,
+          "won": 1,
+          "draw": 1,
+          "lost": 1,
+          "goalsFor": 2,
+          "goalsAgainst": 2,
+          "goalDifference": 0,
+          "points": 4,
+          "owner": "Reuben",
+          "tier": 1,
+          "composite": 85.1,
+          "implied": 0.1333
+        },
+        {
+          "position": 3,
+          "team": "Croatia",
+          "playedGames": 3,
+          "won": 1,
+          "draw": 1,
+          "lost": 1,
+          "goalsFor": 2,
+          "goalsAgainst": 2,
+          "goalDifference": 0,
+          "points": 4,
+          "owner": "Louis",
+          "tier": 2,
+          "composite": 50.3,
+          "implied": 0.0149
+        },
+        {
+          "position": 4,
+          "team": "Ghana",
+          "playedGames": 3,
+          "won": 1,
+          "draw": 0,
+          "lost": 2,
+          "goalsFor": 2,
+          "goalsAgainst": 4,
+          "goalDifference": -2,
+          "points": 3,
+          "owner": "\u2014",
+          "tier": 4,
+          "composite": 7.7,
+          "implied": 0.004
+        }
+      ]
+    }
+  ],
+  "fixtures": [
+    {
+      "utcDate": "2026-06-11T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "A",
+      "status": "FINISHED",
+      "home": "Mexico",
+      "away": "Korea Republic",
+      "homeOwner": "Reuben",
+      "awayOwner": "Reuben",
+      "homeScore": 0,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "AWAY"
+    },
+    {
+      "utcDate": "2026-06-11T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "A",
+      "status": "FINISHED",
+      "home": "Czech Republic",
+      "away": "South Africa",
+      "homeOwner": "James",
+      "awayOwner": "Erol",
+      "homeScore": 2,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "A",
+      "status": "FINISHED",
+      "home": "Mexico",
+      "away": "Czech Republic",
+      "homeOwner": "Reuben",
+      "awayOwner": "James",
+      "homeScore": 1,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "A",
+      "status": "FINISHED",
+      "home": "Mexico",
+      "away": "South Africa",
+      "homeOwner": "Reuben",
+      "awayOwner": "Erol",
+      "homeScore": 2,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "A",
+      "status": "FINISHED",
+      "home": "Korea Republic",
+      "away": "Czech Republic",
+      "homeOwner": "Reuben",
+      "awayOwner": "James",
+      "homeScore": 2,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "A",
+      "status": "FINISHED",
+      "home": "Korea Republic",
+      "away": "South Africa",
+      "homeOwner": "Reuben",
+      "awayOwner": "Erol",
+      "homeScore": 1,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "B",
+      "status": "FINISHED",
+      "home": "Switzerland",
+      "away": "Canada",
+      "homeOwner": "Louis",
+      "awayOwner": "Louis",
+      "homeScore": 0,
+      "awayScore": 5,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "AWAY"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "B",
+      "status": "FINISHED",
+      "home": "Switzerland",
+      "away": "Qatar",
+      "homeOwner": "Louis",
+      "awayOwner": "\u2014",
+      "homeScore": 1,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "B",
+      "status": "FINISHED",
+      "home": "Switzerland",
+      "away": "Bosnia & Herzegovina",
+      "homeOwner": "Louis",
+      "awayOwner": "Ismail",
+      "homeScore": 2,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "B",
+      "status": "FINISHED",
+      "home": "Canada",
+      "away": "Qatar",
+      "homeOwner": "Louis",
+      "awayOwner": "\u2014",
+      "homeScore": 1,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "B",
+      "status": "FINISHED",
+      "home": "Canada",
+      "away": "Bosnia & Herzegovina",
+      "homeOwner": "Louis",
+      "awayOwner": "Ismail",
+      "homeScore": 1,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "B",
+      "status": "FINISHED",
+      "home": "Qatar",
+      "away": "Bosnia & Herzegovina",
+      "homeOwner": "\u2014",
+      "awayOwner": "Ismail",
+      "homeScore": 1,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "C",
+      "status": "FINISHED",
+      "home": "Brazil",
+      "away": "Morocco",
+      "homeOwner": "Ismail",
+      "awayOwner": "Erol",
+      "homeScore": 2,
+      "awayScore": 2,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "C",
+      "status": "FINISHED",
+      "home": "Brazil",
+      "away": "Scotland",
+      "homeOwner": "Ismail",
+      "awayOwner": "Ismail",
+      "homeScore": 0,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "C",
+      "status": "FINISHED",
+      "home": "Brazil",
+      "away": "Haiti",
+      "homeOwner": "Ismail",
+      "awayOwner": "Erol",
+      "homeScore": 0,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "C",
+      "status": "FINISHED",
+      "home": "Morocco",
+      "away": "Scotland",
+      "homeOwner": "Erol",
+      "awayOwner": "Ismail",
+      "homeScore": 2,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "C",
+      "status": "FINISHED",
+      "home": "Morocco",
+      "away": "Haiti",
+      "homeOwner": "Erol",
+      "awayOwner": "Erol",
+      "homeScore": 1,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "C",
+      "status": "FINISHED",
+      "home": "Scotland",
+      "away": "Haiti",
+      "homeOwner": "Ismail",
+      "awayOwner": "Erol",
+      "homeScore": 1,
+      "awayScore": 2,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "AWAY"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "D",
+      "status": "FINISHED",
+      "home": "USA",
+      "away": "Turkey",
+      "homeOwner": "James",
+      "awayOwner": "Reuben",
+      "homeScore": 2,
+      "awayScore": 2,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "D",
+      "status": "FINISHED",
+      "home": "USA",
+      "away": "Australia",
+      "homeOwner": "James",
+      "awayOwner": "Louis",
+      "homeScore": 2,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "D",
+      "status": "FINISHED",
+      "home": "USA",
+      "away": "Paraguay",
+      "homeOwner": "James",
+      "awayOwner": "Erol",
+      "homeScore": 0,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "AWAY"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "D",
+      "status": "FINISHED",
+      "home": "Turkey",
+      "away": "Australia",
+      "homeOwner": "Reuben",
+      "awayOwner": "Louis",
+      "homeScore": 1,
+      "awayScore": 2,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "AWAY"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "D",
+      "status": "FINISHED",
+      "home": "Turkey",
+      "away": "Paraguay",
+      "homeOwner": "Reuben",
+      "awayOwner": "Erol",
+      "homeScore": 1,
+      "awayScore": 2,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "AWAY"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "D",
+      "status": "FINISHED",
+      "home": "Australia",
+      "away": "Paraguay",
+      "homeOwner": "Louis",
+      "awayOwner": "Erol",
+      "homeScore": 2,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-13T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "E",
+      "status": "FINISHED",
+      "home": "Germany",
+      "away": "Ecuador",
+      "homeOwner": "Reuben",
+      "awayOwner": "Erol",
+      "homeScore": 3,
+      "awayScore": 4,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "AWAY"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "E",
+      "status": "FINISHED",
+      "home": "Germany",
+      "away": "Ivory Coast",
+      "homeOwner": "Reuben",
+      "awayOwner": "James",
+      "homeScore": 1,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "E",
+      "status": "FINISHED",
+      "home": "Germany",
+      "away": "Curacao",
+      "homeOwner": "Reuben",
+      "awayOwner": "Ismail",
+      "homeScore": 2,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "E",
+      "status": "FINISHED",
+      "home": "Ecuador",
+      "away": "Ivory Coast",
+      "homeOwner": "Erol",
+      "awayOwner": "James",
+      "homeScore": 0,
+      "awayScore": 2,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "AWAY"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "E",
+      "status": "FINISHED",
+      "home": "Ecuador",
+      "away": "Curacao",
+      "homeOwner": "Erol",
+      "awayOwner": "Ismail",
+      "homeScore": 1,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "E",
+      "status": "FINISHED",
+      "home": "Ivory Coast",
+      "away": "Curacao",
+      "homeOwner": "James",
+      "awayOwner": "Ismail",
+      "homeScore": 3,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "F",
+      "status": "FINISHED",
+      "home": "Netherlands",
+      "away": "Japan",
+      "homeOwner": "Louis",
+      "awayOwner": "Ismail",
+      "homeScore": 3,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "F",
+      "status": "FINISHED",
+      "home": "Netherlands",
+      "away": "Sweden",
+      "homeOwner": "Louis",
+      "awayOwner": "\u2014",
+      "homeScore": 1,
+      "awayScore": 3,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "AWAY"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "F",
+      "status": "FINISHED",
+      "home": "Netherlands",
+      "away": "Tunisia",
+      "homeOwner": "Louis",
+      "awayOwner": "Louis",
+      "homeScore": 4,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "F",
+      "status": "FINISHED",
+      "home": "Japan",
+      "away": "Sweden",
+      "homeOwner": "Ismail",
+      "awayOwner": "\u2014",
+      "homeScore": 2,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "F",
+      "status": "FINISHED",
+      "home": "Japan",
+      "away": "Tunisia",
+      "homeOwner": "Ismail",
+      "awayOwner": "Louis",
+      "homeScore": 0,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "AWAY"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "F",
+      "status": "FINISHED",
+      "home": "Sweden",
+      "away": "Tunisia",
+      "homeOwner": "\u2014",
+      "awayOwner": "Louis",
+      "homeScore": 0,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "G",
+      "status": "FINISHED",
+      "home": "Belgium",
+      "away": "Iran",
+      "homeOwner": "James",
+      "awayOwner": "James",
+      "homeScore": 1,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "G",
+      "status": "FINISHED",
+      "home": "Belgium",
+      "away": "Egypt",
+      "homeOwner": "James",
+      "awayOwner": "Erol",
+      "homeScore": 1,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "G",
+      "status": "FINISHED",
+      "home": "Belgium",
+      "away": "New Zealand",
+      "homeOwner": "James",
+      "awayOwner": "Louis",
+      "homeScore": 3,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "G",
+      "status": "FINISHED",
+      "home": "Iran",
+      "away": "Egypt",
+      "homeOwner": "James",
+      "awayOwner": "Erol",
+      "homeScore": 1,
+      "awayScore": 2,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "AWAY"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "G",
+      "status": "FINISHED",
+      "home": "Iran",
+      "away": "New Zealand",
+      "homeOwner": "James",
+      "awayOwner": "Louis",
+      "homeScore": 1,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "G",
+      "status": "FINISHED",
+      "home": "Egypt",
+      "away": "New Zealand",
+      "homeOwner": "Erol",
+      "awayOwner": "Louis",
+      "homeScore": 2,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "H",
+      "status": "FINISHED",
+      "home": "Spain",
+      "away": "Uruguay",
+      "homeOwner": "James",
+      "awayOwner": "James",
+      "homeScore": 2,
+      "awayScore": 2,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "H",
+      "status": "FINISHED",
+      "home": "Spain",
+      "away": "Saudi Arabia",
+      "homeOwner": "James",
+      "awayOwner": "James",
+      "homeScore": 3,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "H",
+      "status": "FINISHED",
+      "home": "Spain",
+      "away": "Cape Verde",
+      "homeOwner": "James",
+      "awayOwner": "Reuben",
+      "homeScore": 1,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "H",
+      "status": "FINISHED",
+      "home": "Uruguay",
+      "away": "Saudi Arabia",
+      "homeOwner": "James",
+      "awayOwner": "James",
+      "homeScore": 1,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "H",
+      "status": "FINISHED",
+      "home": "Uruguay",
+      "away": "Cape Verde",
+      "homeOwner": "James",
+      "awayOwner": "Reuben",
+      "homeScore": 1,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-14T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "H",
+      "status": "FINISHED",
+      "home": "Saudi Arabia",
+      "away": "Cape Verde",
+      "homeOwner": "James",
+      "awayOwner": "Reuben",
+      "homeScore": 1,
+      "awayScore": 3,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "AWAY"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "I",
+      "status": "FINISHED",
+      "home": "France",
+      "away": "Senegal",
+      "homeOwner": "Erol",
+      "awayOwner": "Erol",
+      "homeScore": 4,
+      "awayScore": 4,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "I",
+      "status": "FINISHED",
+      "home": "France",
+      "away": "Norway",
+      "homeOwner": "Erol",
+      "awayOwner": "Ismail",
+      "homeScore": 1,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "I",
+      "status": "FINISHED",
+      "home": "France",
+      "away": "Iraq",
+      "homeOwner": "Erol",
+      "awayOwner": "Louis",
+      "homeScore": 0,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "AWAY"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "I",
+      "status": "FINISHED",
+      "home": "Senegal",
+      "away": "Norway",
+      "homeOwner": "Erol",
+      "awayOwner": "Ismail",
+      "homeScore": 1,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "I",
+      "status": "FINISHED",
+      "home": "Senegal",
+      "away": "Iraq",
+      "homeOwner": "Erol",
+      "awayOwner": "Louis",
+      "homeScore": 0,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "AWAY"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "I",
+      "status": "FINISHED",
+      "home": "Norway",
+      "away": "Iraq",
+      "homeOwner": "Ismail",
+      "awayOwner": "Louis",
+      "homeScore": 0,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "AWAY"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "J",
+      "status": "FINISHED",
+      "home": "Argentina",
+      "away": "Austria",
+      "homeOwner": "Louis",
+      "awayOwner": "Erol",
+      "homeScore": 3,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "J",
+      "status": "FINISHED",
+      "home": "Argentina",
+      "away": "Algeria",
+      "homeOwner": "Louis",
+      "awayOwner": "Ismail",
+      "homeScore": 2,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "J",
+      "status": "FINISHED",
+      "home": "Argentina",
+      "away": "Jordan",
+      "homeOwner": "Louis",
+      "awayOwner": "James",
+      "homeScore": 1,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "J",
+      "status": "FINISHED",
+      "home": "Austria",
+      "away": "Algeria",
+      "homeOwner": "Erol",
+      "awayOwner": "Ismail",
+      "homeScore": 2,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "J",
+      "status": "FINISHED",
+      "home": "Austria",
+      "away": "Jordan",
+      "homeOwner": "Erol",
+      "awayOwner": "James",
+      "homeScore": 0,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "J",
+      "status": "FINISHED",
+      "home": "Algeria",
+      "away": "Jordan",
+      "homeOwner": "Ismail",
+      "awayOwner": "James",
+      "homeScore": 0,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "AWAY"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "K",
+      "status": "FINISHED",
+      "home": "Portugal",
+      "away": "Colombia",
+      "homeOwner": "Ismail",
+      "awayOwner": "Ismail",
+      "homeScore": 3,
+      "awayScore": 3,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "K",
+      "status": "FINISHED",
+      "home": "Portugal",
+      "away": "DR Congo",
+      "homeOwner": "Ismail",
+      "awayOwner": "Reuben",
+      "homeScore": 1,
+      "awayScore": 4,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "AWAY"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "K",
+      "status": "FINISHED",
+      "home": "Portugal",
+      "away": "Uzbekistan",
+      "homeOwner": "Ismail",
+      "awayOwner": "Reuben",
+      "homeScore": 3,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "K",
+      "status": "FINISHED",
+      "home": "Colombia",
+      "away": "DR Congo",
+      "homeOwner": "Ismail",
+      "awayOwner": "Reuben",
+      "homeScore": 0,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "AWAY"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "K",
+      "status": "FINISHED",
+      "home": "Colombia",
+      "away": "Uzbekistan",
+      "homeOwner": "Ismail",
+      "awayOwner": "Reuben",
+      "homeScore": 2,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "K",
+      "status": "FINISHED",
+      "home": "DR Congo",
+      "away": "Uzbekistan",
+      "homeOwner": "Reuben",
+      "awayOwner": "Reuben",
+      "homeScore": 2,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "L",
+      "status": "FINISHED",
+      "home": "England",
+      "away": "Croatia",
+      "homeOwner": "Reuben",
+      "awayOwner": "Louis",
+      "homeScore": 0,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "AWAY"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "L",
+      "status": "FINISHED",
+      "home": "England",
+      "away": "Panama",
+      "homeOwner": "Reuben",
+      "awayOwner": "Reuben",
+      "homeScore": 0,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "L",
+      "status": "FINISHED",
+      "home": "England",
+      "away": "Ghana",
+      "homeOwner": "Reuben",
+      "awayOwner": "\u2014",
+      "homeScore": 2,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "L",
+      "status": "FINISHED",
+      "home": "Croatia",
+      "away": "Panama",
+      "homeOwner": "Louis",
+      "awayOwner": "Reuben",
+      "homeScore": 1,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "L",
+      "status": "FINISHED",
+      "home": "Croatia",
+      "away": "Ghana",
+      "homeOwner": "Louis",
+      "awayOwner": "\u2014",
+      "homeScore": 0,
+      "awayScore": 1,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "AWAY"
+    },
+    {
+      "utcDate": "2026-06-15T18:00:00Z",
+      "stage": "GROUP_STAGE",
+      "group": "L",
+      "status": "FINISHED",
+      "home": "Panama",
+      "away": "Ghana",
+      "homeOwner": "Reuben",
+      "awayOwner": "\u2014",
+      "homeScore": 2,
+      "awayScore": 0,
+      "minute": null,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "HOME"
+    },
+    {
+      "utcDate": "2026-07-10T18:00:00Z",
+      "stage": "LAST_32",
+      "group": null,
+      "status": "TIMED",
+      "home": "France",
+      "away": "Paraguay",
+      "homeOwner": "Erol",
+      "awayOwner": "Erol",
+      "homeScore": 0,
+      "awayScore": 0,
+      "minute": 0,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW",
+      "odds": {
+        "HOME": {
+          "frac": "4/11",
+          "num": 4,
+          "den": 11,
+          "decimal": 1.364
+        },
+        "DRAW": {
+          "frac": "11/2",
+          "num": 11,
+          "den": 2,
+          "decimal": 6.5
+        },
+        "AWAY": {
+          "frac": "4/1",
+          "num": 4,
+          "den": 1,
+          "decimal": 5.0
+        }
+      },
+      "matchId": "73",
+      "maxStake": 35
+    },
+    {
+      "utcDate": "2026-07-10T18:00:00Z",
+      "stage": "LAST_32",
+      "group": null,
+      "status": "TIMED",
+      "home": "Austria",
+      "away": "Colombia",
+      "homeOwner": "Erol",
+      "awayOwner": "Ismail",
+      "homeScore": 0,
+      "awayScore": 0,
+      "minute": 0,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW",
+      "odds": {
+        "HOME": {
+          "frac": "2/1",
+          "num": 2,
+          "den": 1,
+          "decimal": 3.0
+        },
+        "DRAW": {
+          "frac": "5/2",
+          "num": 5,
+          "den": 2,
+          "decimal": 3.5
+        },
+        "AWAY": {
+          "frac": "6/5",
+          "num": 6,
+          "den": 5,
+          "decimal": 2.2
+        }
+      },
+      "matchId": "74",
+      "maxStake": 35
+    },
+    {
+      "utcDate": "2026-07-10T18:00:00Z",
+      "stage": "LAST_32",
+      "group": null,
+      "status": "TIMED",
+      "home": "Iraq",
+      "away": "Belgium",
+      "homeOwner": "Louis",
+      "awayOwner": "James",
+      "homeScore": 0,
+      "awayScore": 0,
+      "minute": 0,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW",
+      "odds": {
+        "HOME": {
+          "frac": "7/2",
+          "num": 7,
+          "den": 2,
+          "decimal": 4.5
+        },
+        "DRAW": {
+          "frac": "9/2",
+          "num": 9,
+          "den": 2,
+          "decimal": 5.5
+        },
+        "AWAY": {
+          "frac": "1/2",
+          "num": 1,
+          "den": 2,
+          "decimal": 1.5
+        }
+      },
+      "matchId": "75",
+      "maxStake": 35
+    },
+    {
+      "utcDate": "2026-07-10T18:00:00Z",
+      "stage": "LAST_32",
+      "group": null,
+      "status": "TIMED",
+      "home": "Iran",
+      "away": "Switzerland",
+      "homeOwner": "James",
+      "awayOwner": "Louis",
+      "homeScore": 0,
+      "awayScore": 0,
+      "minute": 0,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW",
+      "odds": {
+        "HOME": {
+          "frac": "7/4",
+          "num": 7,
+          "den": 4,
+          "decimal": 2.75
+        },
+        "DRAW": {
+          "frac": "9/4",
+          "num": 9,
+          "den": 4,
+          "decimal": 3.25
+        },
+        "AWAY": {
+          "frac": "11/8",
+          "num": 11,
+          "den": 8,
+          "decimal": 2.375
+        }
+      },
+      "matchId": "76",
+      "maxStake": 35
+    },
+    {
+      "utcDate": "2026-07-10T18:00:00Z",
+      "stage": "LAST_32",
+      "group": null,
+      "status": "TIMED",
+      "home": "Czech Republic",
+      "away": "USA",
+      "homeOwner": "James",
+      "awayOwner": "James",
+      "homeScore": 0,
+      "awayScore": 0,
+      "minute": 0,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW",
+      "odds": {
+        "HOME": {
+          "frac": "5/2",
+          "num": 5,
+          "den": 2,
+          "decimal": 3.5
+        },
+        "DRAW": {
+          "frac": "7/2",
+          "num": 7,
+          "den": 2,
+          "decimal": 4.5
+        },
+        "AWAY": {
+          "frac": "5/6",
+          "num": 5,
+          "den": 6,
+          "decimal": 1.833
+        }
+      },
+      "matchId": "77",
+      "maxStake": 35
+    },
+    {
+      "utcDate": "2026-07-10T18:00:00Z",
+      "stage": "LAST_32",
+      "group": null,
+      "status": "TIMED",
+      "home": "Spain",
+      "away": "Sweden",
+      "homeOwner": "James",
+      "awayOwner": "\u2014",
+      "homeScore": 0,
+      "awayScore": 0,
+      "minute": 0,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW",
+      "odds": {
+        "HOME": {
+          "frac": "2/5",
+          "num": 2,
+          "den": 5,
+          "decimal": 1.4
+        },
+        "DRAW": {
+          "frac": "5/1",
+          "num": 5,
+          "den": 1,
+          "decimal": 6.0
+        },
+        "AWAY": {
+          "frac": "7/2",
+          "num": 7,
+          "den": 2,
+          "decimal": 4.5
+        }
+      },
+      "matchId": "78",
+      "maxStake": 35
+    },
+    {
+      "utcDate": "2026-07-10T18:00:00Z",
+      "stage": "LAST_32",
+      "group": null,
+      "status": "TIMED",
+      "home": "Brazil",
+      "away": "Panama",
+      "homeOwner": "Ismail",
+      "awayOwner": "Reuben",
+      "homeScore": 0,
+      "awayScore": 0,
+      "minute": 0,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW",
+      "odds": {
+        "HOME": {
+          "frac": "4/7",
+          "num": 4,
+          "den": 7,
+          "decimal": 1.571
+        },
+        "DRAW": {
+          "frac": "4/1",
+          "num": 4,
+          "den": 1,
+          "decimal": 5.0
+        },
+        "AWAY": {
+          "frac": "3/1",
+          "num": 3,
+          "den": 1,
+          "decimal": 4.0
+        }
+      },
+      "matchId": "79",
+      "maxStake": 35
+    },
+    {
+      "utcDate": "2026-07-10T18:00:00Z",
+      "stage": "LAST_32",
+      "group": null,
+      "status": "TIMED",
+      "home": "Portugal",
+      "away": "England",
+      "homeOwner": "Ismail",
+      "awayOwner": "Reuben",
+      "homeScore": 0,
+      "awayScore": 0,
+      "minute": 0,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW",
+      "odds": {
+        "HOME": {
+          "frac": "15/8",
+          "num": 15,
+          "den": 8,
+          "decimal": 2.875
+        },
+        "DRAW": {
+          "frac": "5/2",
+          "num": 5,
+          "den": 2,
+          "decimal": 3.5
+        },
+        "AWAY": {
+          "frac": "11/8",
+          "num": 11,
+          "den": 8,
+          "decimal": 2.375
+        }
+      },
+      "matchId": "80",
+      "maxStake": 35
+    },
+    {
+      "utcDate": "2026-07-10T18:00:00Z",
+      "stage": "LAST_32",
+      "group": null,
+      "status": "TIMED",
+      "home": "Mexico",
+      "away": "Haiti",
+      "homeOwner": "Reuben",
+      "awayOwner": "Erol",
+      "homeScore": 0,
+      "awayScore": 0,
+      "minute": 0,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW",
+      "odds": {
+        "HOME": {
+          "frac": "1/5",
+          "num": 1,
+          "den": 5,
+          "decimal": 1.2
+        },
+        "DRAW": {
+          "frac": "13/2",
+          "num": 13,
+          "den": 2,
+          "decimal": 7.5
+        },
+        "AWAY": {
+          "frac": "25/1",
+          "num": 25,
+          "den": 1,
+          "decimal": 26.0
+        }
+      },
+      "matchId": "81",
+      "maxStake": 35
+    },
+    {
+      "utcDate": "2026-07-10T18:00:00Z",
+      "stage": "LAST_32",
+      "group": null,
+      "status": "TIMED",
+      "home": "Canada",
+      "away": "Argentina",
+      "homeOwner": "Louis",
+      "awayOwner": "Louis",
+      "homeScore": 0,
+      "awayScore": 0,
+      "minute": 0,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW",
+      "odds": {
+        "HOME": {
+          "frac": "3/1",
+          "num": 3,
+          "den": 1,
+          "decimal": 4.0
+        },
+        "DRAW": {
+          "frac": "9/2",
+          "num": 9,
+          "den": 2,
+          "decimal": 5.5
+        },
+        "AWAY": {
+          "frac": "8/15",
+          "num": 8,
+          "den": 15,
+          "decimal": 1.533
+        }
+      },
+      "matchId": "82",
+      "maxStake": 35
+    },
+    {
+      "utcDate": "2026-07-10T18:00:00Z",
+      "stage": "LAST_32",
+      "group": null,
+      "status": "TIMED",
+      "home": "DR Congo",
+      "away": "Morocco",
+      "homeOwner": "Reuben",
+      "awayOwner": "Erol",
+      "homeScore": 0,
+      "awayScore": 0,
+      "minute": 0,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW",
+      "odds": {
+        "HOME": {
+          "frac": "3/1",
+          "num": 3,
+          "den": 1,
+          "decimal": 4.0
+        },
+        "DRAW": {
+          "frac": "4/1",
+          "num": 4,
+          "den": 1,
+          "decimal": 5.0
+        },
+        "AWAY": {
+          "frac": "4/7",
+          "num": 4,
+          "den": 7,
+          "decimal": 1.571
+        }
+      },
+      "matchId": "83",
+      "maxStake": 35
+    },
+    {
+      "utcDate": "2026-07-10T18:00:00Z",
+      "stage": "LAST_32",
+      "group": null,
+      "status": "TIMED",
+      "home": "Netherlands",
+      "away": "Croatia",
+      "homeOwner": "Louis",
+      "awayOwner": "Louis",
+      "homeScore": 0,
+      "awayScore": 0,
+      "minute": 0,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW",
+      "odds": {
+        "HOME": {
+          "frac": "11/8",
+          "num": 11,
+          "den": 8,
+          "decimal": 2.375
+        },
+        "DRAW": {
+          "frac": "5/2",
+          "num": 5,
+          "den": 2,
+          "decimal": 3.5
+        },
+        "AWAY": {
+          "frac": "15/8",
+          "num": 15,
+          "den": 8,
+          "decimal": 2.875
+        }
+      },
+      "matchId": "84",
+      "maxStake": 35
+    },
+    {
+      "utcDate": "2026-07-10T18:00:00Z",
+      "stage": "LAST_32",
+      "group": null,
+      "status": "TIMED",
+      "home": "Egypt",
+      "away": "Uruguay",
+      "homeOwner": "Erol",
+      "awayOwner": "James",
+      "homeScore": 0,
+      "awayScore": 0,
+      "minute": 0,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW",
+      "odds": {
+        "HOME": {
+          "frac": "2/1",
+          "num": 2,
+          "den": 1,
+          "decimal": 3.0
+        },
+        "DRAW": {
+          "frac": "11/4",
+          "num": 11,
+          "den": 4,
+          "decimal": 3.75
+        },
+        "AWAY": {
+          "frac": "11/10",
+          "num": 11,
+          "den": 10,
+          "decimal": 2.1
+        }
+      },
+      "matchId": "85",
+      "maxStake": 35
+    },
+    {
+      "utcDate": "2026-07-10T18:00:00Z",
+      "stage": "LAST_32",
+      "group": null,
+      "status": "TIMED",
+      "home": "Senegal",
+      "away": "Ivory Coast",
+      "homeOwner": "Erol",
+      "awayOwner": "James",
+      "homeScore": 0,
+      "awayScore": 0,
+      "minute": 0,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW",
+      "odds": {
+        "HOME": {
+          "frac": "10/11",
+          "num": 10,
+          "den": 11,
+          "decimal": 1.909
+        },
+        "DRAW": {
+          "frac": "3/1",
+          "num": 3,
+          "den": 1,
+          "decimal": 4.0
+        },
+        "AWAY": {
+          "frac": "9/4",
+          "num": 9,
+          "den": 4,
+          "decimal": 3.25
+        }
+      },
+      "matchId": "86",
+      "maxStake": 35
+    },
+    {
+      "utcDate": "2026-07-10T18:00:00Z",
+      "stage": "LAST_32",
+      "group": null,
+      "status": "TIMED",
+      "home": "Ecuador",
+      "away": "Korea Republic",
+      "homeOwner": "Erol",
+      "awayOwner": "Reuben",
+      "homeScore": 0,
+      "awayScore": 0,
+      "minute": 0,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW",
+      "odds": {
+        "HOME": {
+          "frac": "6/4",
+          "num": 6,
+          "den": 4,
+          "decimal": 2.5
+        },
+        "DRAW": {
+          "frac": "9/4",
+          "num": 9,
+          "den": 4,
+          "decimal": 3.25
+        },
+        "AWAY": {
+          "frac": "7/4",
+          "num": 7,
+          "den": 4,
+          "decimal": 2.75
+        }
+      },
+      "matchId": "87",
+      "maxStake": 35
+    },
+    {
+      "utcDate": "2026-07-10T18:00:00Z",
+      "stage": "LAST_32",
+      "group": null,
+      "status": "TIMED",
+      "home": "Australia",
+      "away": "Germany",
+      "homeOwner": "Louis",
+      "awayOwner": "Reuben",
+      "homeScore": 0,
+      "awayScore": 0,
+      "minute": 0,
+      "aet": false,
+      "shootout": false,
+      "penHome": null,
+      "penAway": null,
+      "winner": "DRAW",
+      "odds": {
+        "HOME": {
+          "frac": "5/2",
+          "num": 5,
+          "den": 2,
+          "decimal": 3.5
+        },
+        "DRAW": {
+          "frac": "7/2",
+          "num": 7,
+          "den": 2,
+          "decimal": 4.5
+        },
+        "AWAY": {
+          "frac": "5/6",
+          "num": 5,
+          "den": 6,
+          "decimal": 1.833
+        }
+      },
+      "matchId": "88",
+      "maxStake": 35
+    }
+  ],
+  "wager_stats": {
+    "Erol": {
+      "player": "Erol",
+      "staked": 35.0,
+      "won": 0.0,
+      "lost": 0.0,
+      "net": 0.0,
+      "bets": 3,
+      "open": 3,
+      "biggest_win": 0.0
+    },
+    "James": {
+      "player": "James",
+      "staked": 5.0,
+      "won": 0.0,
+      "lost": 0.0,
+      "net": 0.0,
+      "bets": 1,
+      "open": 1,
+      "biggest_win": 0.0
+    },
+    "Louis": {
+      "player": "Louis",
+      "staked": 17.0,
+      "won": 0.0,
+      "lost": 0.0,
+      "net": 0.0,
+      "bets": 2,
+      "open": 2,
+      "biggest_win": 0.0
+    },
+    "Ismail": {
+      "player": "Ismail",
+      "staked": 4.0,
+      "won": 0.0,
+      "lost": 0.0,
+      "net": 0.0,
+      "bets": 1,
+      "open": 1,
+      "biggest_win": 0.0
+    },
+    "Reuben": {
+      "player": "Reuben",
+      "staked": 6.0,
+      "won": 0.0,
+      "lost": 0.0,
+      "net": 0.0,
+      "bets": 1,
+      "open": 1,
+      "biggest_win": 0.0
+    }
+  },
+  "wager_leaders": {
+    "most_wagered": {
+      "player": "Erol",
+      "staked": 35.0,
+      "won": 0.0,
+      "lost": 0.0,
+      "net": 0.0,
+      "bets": 3,
+      "open": 3,
+      "biggest_win": 0.0
+    },
+    "most_won": null,
+    "most_lost": null
+  },
+  "betting_locked": false,
+  "history": [
+    {
+      "m": 1,
+      "p": {
+        "Erol": {
+          "pts": 0,
+          "srv": 0,
+          "hyb": 0
+        },
+        "James": {
+          "pts": 0,
+          "srv": 0,
+          "hyb": 0
+        },
+        "Louis": {
+          "pts": 0,
+          "srv": 0,
+          "hyb": 0
+        },
+        "Ismail": {
+          "pts": 0,
+          "srv": 0,
+          "hyb": 0
+        },
+        "Reuben": {
+          "pts": 5,
+          "srv": 0,
+          "hyb": 5
+        }
+      }
+    },
+    {
+      "m": 2,
+      "p": {
+        "Erol": {
+          "pts": 0,
+          "srv": 0,
+          "hyb": 0
+        },
+        "James": {
+          "pts": 6,
+          "srv": 0,
+          "hyb": 6
+        },
+        "Louis": {
+          "pts": 0,
+          "srv": 0,
+          "hyb": 0
+        },
+        "Ismail": {
+          "pts": 0,
+          "srv": 0,
+          "hyb": 0
+        },
+        "Reuben": {
+          "pts": 5,
+          "srv": 0,
+          "hyb": 5
+        }
+      }
+    },
+    {
+      "m": 3,
+      "p": {
+        "Erol": {
+          "pts": 0,
+          "srv": 0,
+          "hyb": 0
+        },
+        "James": {
+          "pts": 6,
+          "srv": 0,
+          "hyb": 6
+        },
+        "Louis": {
+          "pts": 0,
+          "srv": 0,
+          "hyb": 0
+        },
+        "Ismail": {
+          "pts": 0,
+          "srv": 0,
+          "hyb": 0
+        },
+        "Reuben": {
+          "pts": 10,
+          "srv": 0,
+          "hyb": 10
+        }
+      }
+    },
+    {
+      "m": 4,
+      "p": {
+        "Erol": {
+          "pts": 1,
+          "srv": 0,
+          "hyb": 1
+        },
+        "James": {
+          "pts": 6,
+          "srv": 0,
+          "hyb": 6
+        },
+        "Louis": {
+          "pts": 0,
+          "srv": 0,
+          "hyb": 0
+        },
+        "Ismail": {
+          "pts": 0,
+          "srv": 0,
+          "hyb": 0
+        },
+        "Reuben": {
+          "pts": 15,
+          "srv": 0,
+          "hyb": 15
+        }
+      }
+    },
+    {
+      "m": 5,
+      "p": {
+        "Erol": {
+          "pts": 1,
+          "srv": 0,
+          "hyb": 1
+        },
+        "James": {
+          "pts": 6,
+          "srv": 0,
+          "hyb": 6
+        },
+        "Louis": {
+          "pts": 0,
+          "srv": 0,
+          "hyb": 0
+        },
+        "Ismail": {
+          "pts": 0,
+          "srv": 0,
+          "hyb": 0
+        },
+        "Reuben": {
+          "pts": 21,
+          "srv": 0,
+          "hyb": 21
+        }
+      }
+    },
+    {
+      "m": 6,
+      "p": {
+        "Erol": {
+          "pts": 3,
+          "srv": 0,
+          "hyb": 3
+        },
+        "James": {
+          "pts": 6,
+          "srv": 0,
+          "hyb": 6
+        },
+        "Louis": {
+          "pts": 0,
+          "srv": 0,
+          "hyb": 0
+        },
+        "Ismail": {
+          "pts": 0,
+          "srv": 0,
+          "hyb": 0
+        },
+        "Reuben": {
+          "pts": 23,
+          "srv": 0,
+          "hyb": 23
+        }
+      }
+    },
+    {
+      "m": 7,
+      "p": {
+        "Erol": {
+          "pts": 3,
+          "srv": 0,
+          "hyb": 3
+        },
+        "James": {
+          "pts": 6,
+          "srv": 0,
+          "hyb": 6
+        },
+        "Louis": {
+          "pts": 9,
+          "srv": 0,
+          "hyb": 9
+        },
+        "Ismail": {
+          "pts": 0,
+          "srv": 0,
+          "hyb": 0
+        },
+        "Reuben": {
+          "pts": 23,
+          "srv": 0,
+          "hyb": 23
+        }
+      }
+    },
+    {
+      "m": 8,
+      "p": {
+        "Erol": {
+          "pts": 3,
+          "srv": 0,
+          "hyb": 3
+        },
+        "James": {
+          "pts": 6,
+          "srv": 0,
+          "hyb": 6
+        },
+        "Louis": {
+          "pts": 14,
+          "srv": 0,
+          "hyb": 14
+        },
+        "Ismail": {
+          "pts": 0,
+          "srv": 0,
+          "hyb": 0
+        },
+        "Reuben": {
+          "pts": 23,
+          "srv": 0,
+          "hyb": 23
+        }
+      }
+    },
+    {
+      "m": 9,
+      "p": {
+        "Erol": {
+          "pts": 3,
+          "srv": 0,
+          "hyb": 3
+        },
+        "James": {
+          "pts": 6,
+          "srv": 0,
+          "hyb": 6
+        },
+        "Louis": {
+          "pts": 19,
+          "srv": 0,
+          "hyb": 19
+        },
+        "Ismail": {
+          "pts": 1,
+          "srv": 0,
+          "hyb": 1
+        },
+        "Reuben": {
+          "pts": 23,
+          "srv": 0,
+          "hyb": 23
+        }
+      }
+    },
+    {
+      "m": 10,
+      "p": {
+        "Erol": {
+          "pts": 3,
+          "srv": 0,
+          "hyb": 3
+        },
+        "James": {
+          "pts": 6,
+          "srv": 0,
+          "hyb": 6
+        },
+        "Louis": {
+          "pts": 24,
+          "srv": 0,
+          "hyb": 24
+        },
+        "Ismail": {
+          "pts": 1,
+          "srv": 0,
+          "hyb": 1
+        },
+        "Reuben": {
+          "pts": 23,
+          "srv": 0,
+          "hyb": 23
+        }
+      }
+    },
+    {
+      "m": 11,
+      "p": {
+        "Erol": {
+          "pts": 3,
+          "srv": 0,
+          "hyb": 3
+        },
+        "James": {
+          "pts": 6,
+          "srv": 0,
+          "hyb": 6
+        },
+        "Louis": {
+          "pts": 26,
+          "srv": 0,
+          "hyb": 26
+        },
+        "Ismail": {
+          "pts": 3,
+          "srv": 0,
+          "hyb": 3
+        },
+        "Reuben": {
+          "pts": 23,
+          "srv": 0,
+          "hyb": 23
+        }
+      }
+    },
+    {
+      "m": 12,
+      "p": {
+        "Erol": {
+          "pts": 3,
+          "srv": 0,
+          "hyb": 3
+        },
+        "James": {
+          "pts": 6,
+          "srv": 0,
+          "hyb": 6
+        },
+        "Louis": {
+          "pts": 26,
+          "srv": 0,
+          "hyb": 26
+        },
+        "Ismail": {
+          "pts": 5,
+          "srv": 0,
+          "hyb": 5
+        },
+        "Reuben": {
+          "pts": 23,
+          "srv": 0,
+          "hyb": 23
+        }
+      }
+    },
+    {
+      "m": 13,
+      "p": {
+        "Erol": {
+          "pts": 6,
+          "srv": 0,
+          "hyb": 6
+        },
+        "James": {
+          "pts": 6,
+          "srv": 0,
+          "hyb": 6
+        },
+        "Louis": {
+          "pts": 26,
+          "srv": 0,
+          "hyb": 26
+        },
+        "Ismail": {
+          "pts": 8,
+          "srv": 0,
+          "hyb": 8
+        },
+        "Reuben": {
+          "pts": 23,
+          "srv": 0,
+          "hyb": 23
+        }
+      }
+    },
+    {
+      "m": 14,
+      "p": {
+        "Erol": {
+          "pts": 6,
+          "srv": 0,
+          "hyb": 6
+        },
+        "James": {
+          "pts": 6,
+          "srv": 0,
+          "hyb": 6
+        },
+        "Louis": {
+          "pts": 26,
+          "srv": 0,
+          "hyb": 26
+        },
+        "Ismail": {
+          "pts": 12,
+          "srv": 0,
+          "hyb": 12
+        },
+        "Reuben": {
+          "pts": 23,
+          "srv": 0,
+          "hyb": 23
+        }
+      }
+    },
+    {
+      "m": 15,
+      "p": {
+        "Erol": {
+          "pts": 8,
+          "srv": 0,
+          "hyb": 8
+        },
+        "James": {
+          "pts": 6,
+          "srv": 0,
+          "hyb": 6
+        },
+        "Louis": {
+          "pts": 26,
+          "srv": 0,
+          "hyb": 26
+        },
+        "Ismail": {
+          "pts": 14,
+          "srv": 0,
+          "hyb": 14
+        },
+        "Reuben": {
+          "pts": 23,
+          "srv": 0,
+          "hyb": 23
+        }
+      }
+    },
+    {
+      "m": 16,
+      "p": {
+        "Erol": {
+          "pts": 13,
+          "srv": 0,
+          "hyb": 13
+        },
+        "James": {
+          "pts": 6,
+          "srv": 0,
+          "hyb": 6
+        },
+        "Louis": {
+          "pts": 26,
+          "srv": 0,
+          "hyb": 26
+        },
+        "Ismail": {
+          "pts": 15,
+          "srv": 0,
+          "hyb": 15
+        },
+        "Reuben": {
+          "pts": 23,
+          "srv": 0,
+          "hyb": 23
+        }
+      }
+    },
+    {
+      "m": 17,
+      "p": {
+        "Erol": {
+          "pts": 17,
+          "srv": 0,
+          "hyb": 17
+        },
+        "James": {
+          "pts": 6,
+          "srv": 0,
+          "hyb": 6
+        },
+        "Louis": {
+          "pts": 26,
+          "srv": 0,
+          "hyb": 26
+        },
+        "Ismail": {
+          "pts": 15,
+          "srv": 0,
+          "hyb": 15
+        },
+        "Reuben": {
+          "pts": 23,
+          "srv": 0,
+          "hyb": 23
+        }
+      }
+    },
+    {
+      "m": 18,
+      "p": {
+        "Erol": {
+          "pts": 22,
+          "srv": 0,
+          "hyb": 22
+        },
+        "James": {
+          "pts": 6,
+          "srv": 0,
+          "hyb": 6
+        },
+        "Louis": {
+          "pts": 26,
+          "srv": 0,
+          "hyb": 26
+        },
+        "Ismail": {
+          "pts": 16,
+          "srv": 0,
+          "hyb": 16
+        },
+        "Reuben": {
+          "pts": 23,
+          "srv": 0,
+          "hyb": 23
+        }
+      }
+    },
+    {
+      "m": 19,
+      "p": {
+        "Erol": {
+          "pts": 22,
+          "srv": 0,
+          "hyb": 22
+        },
+        "James": {
+          "pts": 9,
+          "srv": 0,
+          "hyb": 9
+        },
+        "Louis": {
+          "pts": 26,
+          "srv": 0,
+          "hyb": 26
+        },
+        "Ismail": {
+          "pts": 16,
+          "srv": 0,
+          "hyb": 16
+        },
+        "Reuben": {
+          "pts": 26,
+          "srv": 0,
+          "hyb": 26
+        }
+      }
+    },
+    {
+      "m": 20,
+      "p": {
+        "Erol": {
+          "pts": 22,
+          "srv": 0,
+          "hyb": 22
+        },
+        "James": {
+          "pts": 15,
+          "srv": 0,
+          "hyb": 15
+        },
+        "Louis": {
+          "pts": 26,
+          "srv": 0,
+          "hyb": 26
+        },
+        "Ismail": {
+          "pts": 16,
+          "srv": 0,
+          "hyb": 16
+        },
+        "Reuben": {
+          "pts": 26,
+          "srv": 0,
+          "hyb": 26
+        }
+      }
+    },
+    {
+      "m": 21,
+      "p": {
+        "Erol": {
+          "pts": 27,
+          "srv": 0,
+          "hyb": 27
+        },
+        "James": {
+          "pts": 15,
+          "srv": 0,
+          "hyb": 15
+        },
+        "Louis": {
+          "pts": 26,
+          "srv": 0,
+          "hyb": 26
+        },
+        "Ismail": {
+          "pts": 16,
+          "srv": 0,
+          "hyb": 16
+        },
+        "Reuben": {
+          "pts": 26,
+          "srv": 0,
+          "hyb": 26
+        }
+      }
+    },
+    {
+      "m": 22,
+      "p": {
+        "Erol": {
+          "pts": 27,
+          "srv": 0,
+          "hyb": 27
+        },
+        "James": {
+          "pts": 15,
+          "srv": 0,
+          "hyb": 15
+        },
+        "Louis": {
+          "pts": 31,
+          "srv": 0,
+          "hyb": 31
+        },
+        "Ismail": {
+          "pts": 16,
+          "srv": 0,
+          "hyb": 16
+        },
+        "Reuben": {
+          "pts": 27,
+          "srv": 0,
+          "hyb": 27
+        }
+      }
+    },
+    {
+      "m": 23,
+      "p": {
+        "Erol": {
+          "pts": 32,
+          "srv": 0,
+          "hyb": 32
+        },
+        "James": {
+          "pts": 15,
+          "srv": 0,
+          "hyb": 15
+        },
+        "Louis": {
+          "pts": 31,
+          "srv": 0,
+          "hyb": 31
+        },
+        "Ismail": {
+          "pts": 16,
+          "srv": 0,
+          "hyb": 16
+        },
+        "Reuben": {
+          "pts": 28,
+          "srv": 0,
+          "hyb": 28
+        }
+      }
+    },
+    {
+      "m": 24,
+      "p": {
+        "Erol": {
+          "pts": 33,
+          "srv": 0,
+          "hyb": 33
+        },
+        "James": {
+          "pts": 15,
+          "srv": 0,
+          "hyb": 15
+        },
+        "Louis": {
+          "pts": 36,
+          "srv": 0,
+          "hyb": 36
+        },
+        "Ismail": {
+          "pts": 16,
+          "srv": 0,
+          "hyb": 16
+        },
+        "Reuben": {
+          "pts": 28,
+          "srv": 0,
+          "hyb": 28
+        }
+      }
+    },
+    {
+      "m": 25,
+      "p": {
+        "Erol": {
+          "pts": 40,
+          "srv": 0,
+          "hyb": 40
+        },
+        "James": {
+          "pts": 15,
+          "srv": 0,
+          "hyb": 15
+        },
+        "Louis": {
+          "pts": 36,
+          "srv": 0,
+          "hyb": 36
+        },
+        "Ismail": {
+          "pts": 16,
+          "srv": 0,
+          "hyb": 16
+        },
+        "Reuben": {
+          "pts": 31,
+          "srv": 0,
+          "hyb": 31
+        }
+      }
+    },
+    {
+      "m": 26,
+      "p": {
+        "Erol": {
+          "pts": 40,
+          "srv": 0,
+          "hyb": 40
+        },
+        "James": {
+          "pts": 15,
+          "srv": 0,
+          "hyb": 15
+        },
+        "Louis": {
+          "pts": 36,
+          "srv": 0,
+          "hyb": 36
+        },
+        "Ismail": {
+          "pts": 16,
+          "srv": 0,
+          "hyb": 16
+        },
+        "Reuben": {
+          "pts": 36,
+          "srv": 0,
+          "hyb": 36
+        }
+      }
+    },
+    {
+      "m": 27,
+      "p": {
+        "Erol": {
+          "pts": 40,
+          "srv": 0,
+          "hyb": 40
+        },
+        "James": {
+          "pts": 15,
+          "srv": 0,
+          "hyb": 15
+        },
+        "Louis": {
+          "pts": 36,
+          "srv": 0,
+          "hyb": 36
+        },
+        "Ismail": {
+          "pts": 16,
+          "srv": 0,
+          "hyb": 16
+        },
+        "Reuben": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        }
+      }
+    },
+    {
+      "m": 28,
+      "p": {
+        "Erol": {
+          "pts": 40,
+          "srv": 0,
+          "hyb": 40
+        },
+        "James": {
+          "pts": 21,
+          "srv": 0,
+          "hyb": 21
+        },
+        "Louis": {
+          "pts": 36,
+          "srv": 0,
+          "hyb": 36
+        },
+        "Ismail": {
+          "pts": 16,
+          "srv": 0,
+          "hyb": 16
+        },
+        "Reuben": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        }
+      }
+    },
+    {
+      "m": 29,
+      "p": {
+        "Erol": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        },
+        "James": {
+          "pts": 21,
+          "srv": 0,
+          "hyb": 21
+        },
+        "Louis": {
+          "pts": 36,
+          "srv": 0,
+          "hyb": 36
+        },
+        "Ismail": {
+          "pts": 18,
+          "srv": 0,
+          "hyb": 18
+        },
+        "Reuben": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        }
+      }
+    },
+    {
+      "m": 30,
+      "p": {
+        "Erol": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        },
+        "James": {
+          "pts": 28,
+          "srv": 0,
+          "hyb": 28
+        },
+        "Louis": {
+          "pts": 36,
+          "srv": 0,
+          "hyb": 36
+        },
+        "Ismail": {
+          "pts": 18,
+          "srv": 0,
+          "hyb": 18
+        },
+        "Reuben": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        }
+      }
+    },
+    {
+      "m": 31,
+      "p": {
+        "Erol": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        },
+        "James": {
+          "pts": 28,
+          "srv": 0,
+          "hyb": 28
+        },
+        "Louis": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        },
+        "Ismail": {
+          "pts": 19,
+          "srv": 0,
+          "hyb": 19
+        },
+        "Reuben": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        }
+      }
+    },
+    {
+      "m": 32,
+      "p": {
+        "Erol": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        },
+        "James": {
+          "pts": 28,
+          "srv": 0,
+          "hyb": 28
+        },
+        "Louis": {
+          "pts": 43,
+          "srv": 0,
+          "hyb": 43
+        },
+        "Ismail": {
+          "pts": 19,
+          "srv": 0,
+          "hyb": 19
+        },
+        "Reuben": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        }
+      }
+    },
+    {
+      "m": 33,
+      "p": {
+        "Erol": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        },
+        "James": {
+          "pts": 28,
+          "srv": 0,
+          "hyb": 28
+        },
+        "Louis": {
+          "pts": 51,
+          "srv": 0,
+          "hyb": 51
+        },
+        "Ismail": {
+          "pts": 19,
+          "srv": 0,
+          "hyb": 19
+        },
+        "Reuben": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        }
+      }
+    },
+    {
+      "m": 34,
+      "p": {
+        "Erol": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        },
+        "James": {
+          "pts": 28,
+          "srv": 0,
+          "hyb": 28
+        },
+        "Louis": {
+          "pts": 51,
+          "srv": 0,
+          "hyb": 51
+        },
+        "Ismail": {
+          "pts": 25,
+          "srv": 0,
+          "hyb": 25
+        },
+        "Reuben": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        }
+      }
+    },
+    {
+      "m": 35,
+      "p": {
+        "Erol": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        },
+        "James": {
+          "pts": 28,
+          "srv": 0,
+          "hyb": 28
+        },
+        "Louis": {
+          "pts": 56,
+          "srv": 0,
+          "hyb": 56
+        },
+        "Ismail": {
+          "pts": 25,
+          "srv": 0,
+          "hyb": 25
+        },
+        "Reuben": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        }
+      }
+    },
+    {
+      "m": 36,
+      "p": {
+        "Erol": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        },
+        "James": {
+          "pts": 28,
+          "srv": 0,
+          "hyb": 28
+        },
+        "Louis": {
+          "pts": 58,
+          "srv": 0,
+          "hyb": 58
+        },
+        "Ismail": {
+          "pts": 25,
+          "srv": 0,
+          "hyb": 25
+        },
+        "Reuben": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        }
+      }
+    },
+    {
+      "m": 37,
+      "p": {
+        "Erol": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        },
+        "James": {
+          "pts": 32,
+          "srv": 0,
+          "hyb": 32
+        },
+        "Louis": {
+          "pts": 58,
+          "srv": 0,
+          "hyb": 58
+        },
+        "Ismail": {
+          "pts": 25,
+          "srv": 0,
+          "hyb": 25
+        },
+        "Reuben": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        }
+      }
+    },
+    {
+      "m": 38,
+      "p": {
+        "Erol": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        },
+        "James": {
+          "pts": 37,
+          "srv": 0,
+          "hyb": 37
+        },
+        "Louis": {
+          "pts": 58,
+          "srv": 0,
+          "hyb": 58
+        },
+        "Ismail": {
+          "pts": 25,
+          "srv": 0,
+          "hyb": 25
+        },
+        "Reuben": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        }
+      }
+    },
+    {
+      "m": 39,
+      "p": {
+        "Erol": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        },
+        "James": {
+          "pts": 44,
+          "srv": 0,
+          "hyb": 44
+        },
+        "Louis": {
+          "pts": 58,
+          "srv": 0,
+          "hyb": 58
+        },
+        "Ismail": {
+          "pts": 25,
+          "srv": 0,
+          "hyb": 25
+        },
+        "Reuben": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        }
+      }
+    },
+    {
+      "m": 40,
+      "p": {
+        "Erol": {
+          "pts": 47,
+          "srv": 0,
+          "hyb": 47
+        },
+        "James": {
+          "pts": 45,
+          "srv": 0,
+          "hyb": 45
+        },
+        "Louis": {
+          "pts": 58,
+          "srv": 0,
+          "hyb": 58
+        },
+        "Ismail": {
+          "pts": 25,
+          "srv": 0,
+          "hyb": 25
+        },
+        "Reuben": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        }
+      }
+    },
+    {
+      "m": 41,
+      "p": {
+        "Erol": {
+          "pts": 47,
+          "srv": 0,
+          "hyb": 47
+        },
+        "James": {
+          "pts": 47,
+          "srv": 0,
+          "hyb": 47
+        },
+        "Louis": {
+          "pts": 60,
+          "srv": 0,
+          "hyb": 60
+        },
+        "Ismail": {
+          "pts": 25,
+          "srv": 0,
+          "hyb": 25
+        },
+        "Reuben": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        }
+      }
+    },
+    {
+      "m": 42,
+      "p": {
+        "Erol": {
+          "pts": 52,
+          "srv": 0,
+          "hyb": 52
+        },
+        "James": {
+          "pts": 47,
+          "srv": 0,
+          "hyb": 47
+        },
+        "Louis": {
+          "pts": 61,
+          "srv": 0,
+          "hyb": 61
+        },
+        "Ismail": {
+          "pts": 25,
+          "srv": 0,
+          "hyb": 25
+        },
+        "Reuben": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        }
+      }
+    },
+    {
+      "m": 43,
+      "p": {
+        "Erol": {
+          "pts": 52,
+          "srv": 0,
+          "hyb": 52
+        },
+        "James": {
+          "pts": 53,
+          "srv": 0,
+          "hyb": 53
+        },
+        "Louis": {
+          "pts": 61,
+          "srv": 0,
+          "hyb": 61
+        },
+        "Ismail": {
+          "pts": 25,
+          "srv": 0,
+          "hyb": 25
+        },
+        "Reuben": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        }
+      }
+    },
+    {
+      "m": 44,
+      "p": {
+        "Erol": {
+          "pts": 52,
+          "srv": 0,
+          "hyb": 52
+        },
+        "James": {
+          "pts": 60,
+          "srv": 0,
+          "hyb": 60
+        },
+        "Louis": {
+          "pts": 61,
+          "srv": 0,
+          "hyb": 61
+        },
+        "Ismail": {
+          "pts": 25,
+          "srv": 0,
+          "hyb": 25
+        },
+        "Reuben": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        }
+      }
+    },
+    {
+      "m": 45,
+      "p": {
+        "Erol": {
+          "pts": 52,
+          "srv": 0,
+          "hyb": 52
+        },
+        "James": {
+          "pts": 65,
+          "srv": 0,
+          "hyb": 65
+        },
+        "Louis": {
+          "pts": 61,
+          "srv": 0,
+          "hyb": 61
+        },
+        "Ismail": {
+          "pts": 25,
+          "srv": 0,
+          "hyb": 25
+        },
+        "Reuben": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        }
+      }
+    },
+    {
+      "m": 46,
+      "p": {
+        "Erol": {
+          "pts": 52,
+          "srv": 0,
+          "hyb": 52
+        },
+        "James": {
+          "pts": 69,
+          "srv": 0,
+          "hyb": 69
+        },
+        "Louis": {
+          "pts": 61,
+          "srv": 0,
+          "hyb": 61
+        },
+        "Ismail": {
+          "pts": 25,
+          "srv": 0,
+          "hyb": 25
+        },
+        "Reuben": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        }
+      }
+    },
+    {
+      "m": 47,
+      "p": {
+        "Erol": {
+          "pts": 52,
+          "srv": 0,
+          "hyb": 52
+        },
+        "James": {
+          "pts": 74,
+          "srv": 0,
+          "hyb": 74
+        },
+        "Louis": {
+          "pts": 61,
+          "srv": 0,
+          "hyb": 61
+        },
+        "Ismail": {
+          "pts": 25,
+          "srv": 0,
+          "hyb": 25
+        },
+        "Reuben": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        }
+      }
+    },
+    {
+      "m": 48,
+      "p": {
+        "Erol": {
+          "pts": 52,
+          "srv": 0,
+          "hyb": 52
+        },
+        "James": {
+          "pts": 75,
+          "srv": 0,
+          "hyb": 75
+        },
+        "Louis": {
+          "pts": 61,
+          "srv": 0,
+          "hyb": 61
+        },
+        "Ismail": {
+          "pts": 25,
+          "srv": 0,
+          "hyb": 25
+        },
+        "Reuben": {
+          "pts": 48,
+          "srv": 0,
+          "hyb": 48
+        }
+      }
+    },
+    {
+      "m": 49,
+      "p": {
+        "Erol": {
+          "pts": 62,
+          "srv": 0,
+          "hyb": 62
+        },
+        "James": {
+          "pts": 75,
+          "srv": 0,
+          "hyb": 75
+        },
+        "Louis": {
+          "pts": 61,
+          "srv": 0,
+          "hyb": 61
+        },
+        "Ismail": {
+          "pts": 25,
+          "srv": 0,
+          "hyb": 25
+        },
+        "Reuben": {
+          "pts": 48,
+          "srv": 0,
+          "hyb": 48
+        }
+      }
+    },
+    {
+      "m": 50,
+      "p": {
+        "Erol": {
+          "pts": 64,
+          "srv": 0,
+          "hyb": 64
+        },
+        "James": {
+          "pts": 75,
+          "srv": 0,
+          "hyb": 75
+        },
+        "Louis": {
+          "pts": 61,
+          "srv": 0,
+          "hyb": 61
+        },
+        "Ismail": {
+          "pts": 27,
+          "srv": 0,
+          "hyb": 27
+        },
+        "Reuben": {
+          "pts": 48,
+          "srv": 0,
+          "hyb": 48
+        }
+      }
+    },
+    {
+      "m": 51,
+      "p": {
+        "Erol": {
+          "pts": 64,
+          "srv": 0,
+          "hyb": 64
+        },
+        "James": {
+          "pts": 75,
+          "srv": 0,
+          "hyb": 75
+        },
+        "Louis": {
+          "pts": 66,
+          "srv": 0,
+          "hyb": 66
+        },
+        "Ismail": {
+          "pts": 27,
+          "srv": 0,
+          "hyb": 27
+        },
+        "Reuben": {
+          "pts": 48,
+          "srv": 0,
+          "hyb": 48
+        }
+      }
+    },
+    {
+      "m": 52,
+      "p": {
+        "Erol": {
+          "pts": 69,
+          "srv": 0,
+          "hyb": 69
+        },
+        "James": {
+          "pts": 75,
+          "srv": 0,
+          "hyb": 75
+        },
+        "Louis": {
+          "pts": 66,
+          "srv": 0,
+          "hyb": 66
+        },
+        "Ismail": {
+          "pts": 27,
+          "srv": 0,
+          "hyb": 27
+        },
+        "Reuben": {
+          "pts": 48,
+          "srv": 0,
+          "hyb": 48
+        }
+      }
+    },
+    {
+      "m": 53,
+      "p": {
+        "Erol": {
+          "pts": 69,
+          "srv": 0,
+          "hyb": 69
+        },
+        "James": {
+          "pts": 75,
+          "srv": 0,
+          "hyb": 75
+        },
+        "Louis": {
+          "pts": 71,
+          "srv": 0,
+          "hyb": 71
+        },
+        "Ismail": {
+          "pts": 27,
+          "srv": 0,
+          "hyb": 27
+        },
+        "Reuben": {
+          "pts": 48,
+          "srv": 0,
+          "hyb": 48
+        }
+      }
+    },
+    {
+      "m": 54,
+      "p": {
+        "Erol": {
+          "pts": 69,
+          "srv": 0,
+          "hyb": 69
+        },
+        "James": {
+          "pts": 75,
+          "srv": 0,
+          "hyb": 75
+        },
+        "Louis": {
+          "pts": 76,
+          "srv": 0,
+          "hyb": 76
+        },
+        "Ismail": {
+          "pts": 27,
+          "srv": 0,
+          "hyb": 27
+        },
+        "Reuben": {
+          "pts": 48,
+          "srv": 0,
+          "hyb": 48
+        }
+      }
+    },
+    {
+      "m": 55,
+      "p": {
+        "Erol": {
+          "pts": 70,
+          "srv": 0,
+          "hyb": 70
+        },
+        "James": {
+          "pts": 75,
+          "srv": 0,
+          "hyb": 75
+        },
+        "Louis": {
+          "pts": 82,
+          "srv": 0,
+          "hyb": 82
+        },
+        "Ismail": {
+          "pts": 27,
+          "srv": 0,
+          "hyb": 27
+        },
+        "Reuben": {
+          "pts": 48,
+          "srv": 0,
+          "hyb": 48
+        }
+      }
+    },
+    {
+      "m": 56,
+      "p": {
+        "Erol": {
+          "pts": 70,
+          "srv": 0,
+          "hyb": 70
+        },
+        "James": {
+          "pts": 75,
+          "srv": 0,
+          "hyb": 75
+        },
+        "Louis": {
+          "pts": 88,
+          "srv": 0,
+          "hyb": 88
+        },
+        "Ismail": {
+          "pts": 27,
+          "srv": 0,
+          "hyb": 27
+        },
+        "Reuben": {
+          "pts": 48,
+          "srv": 0,
+          "hyb": 48
+        }
+      }
+    },
+    {
+      "m": 57,
+      "p": {
+        "Erol": {
+          "pts": 70,
+          "srv": 0,
+          "hyb": 70
+        },
+        "James": {
+          "pts": 75,
+          "srv": 0,
+          "hyb": 75
+        },
+        "Louis": {
+          "pts": 93,
+          "srv": 0,
+          "hyb": 93
+        },
+        "Ismail": {
+          "pts": 27,
+          "srv": 0,
+          "hyb": 27
+        },
+        "Reuben": {
+          "pts": 48,
+          "srv": 0,
+          "hyb": 48
+        }
+      }
+    },
+    {
+      "m": 58,
+      "p": {
+        "Erol": {
+          "pts": 76,
+          "srv": 0,
+          "hyb": 76
+        },
+        "James": {
+          "pts": 75,
+          "srv": 0,
+          "hyb": 75
+        },
+        "Louis": {
+          "pts": 93,
+          "srv": 0,
+          "hyb": 93
+        },
+        "Ismail": {
+          "pts": 27,
+          "srv": 0,
+          "hyb": 27
+        },
+        "Reuben": {
+          "pts": 48,
+          "srv": 0,
+          "hyb": 48
+        }
+      }
+    },
+    {
+      "m": 59,
+      "p": {
+        "Erol": {
+          "pts": 78,
+          "srv": 0,
+          "hyb": 78
+        },
+        "James": {
+          "pts": 77,
+          "srv": 0,
+          "hyb": 77
+        },
+        "Louis": {
+          "pts": 93,
+          "srv": 0,
+          "hyb": 93
+        },
+        "Ismail": {
+          "pts": 27,
+          "srv": 0,
+          "hyb": 27
+        },
+        "Reuben": {
+          "pts": 48,
+          "srv": 0,
+          "hyb": 48
+        }
+      }
+    },
+    {
+      "m": 60,
+      "p": {
+        "Erol": {
+          "pts": 78,
+          "srv": 0,
+          "hyb": 78
+        },
+        "James": {
+          "pts": 82,
+          "srv": 0,
+          "hyb": 82
+        },
+        "Louis": {
+          "pts": 93,
+          "srv": 0,
+          "hyb": 93
+        },
+        "Ismail": {
+          "pts": 27,
+          "srv": 0,
+          "hyb": 27
+        },
+        "Reuben": {
+          "pts": 48,
+          "srv": 0,
+          "hyb": 48
+        }
+      }
+    },
+    {
+      "m": 61,
+      "p": {
+        "Erol": {
+          "pts": 78,
+          "srv": 0,
+          "hyb": 78
+        },
+        "James": {
+          "pts": 82,
+          "srv": 0,
+          "hyb": 82
+        },
+        "Louis": {
+          "pts": 93,
+          "srv": 0,
+          "hyb": 93
+        },
+        "Ismail": {
+          "pts": 35,
+          "srv": 0,
+          "hyb": 35
+        },
+        "Reuben": {
+          "pts": 48,
+          "srv": 0,
+          "hyb": 48
+        }
+      }
+    },
+    {
+      "m": 62,
+      "p": {
+        "Erol": {
+          "pts": 78,
+          "srv": 0,
+          "hyb": 78
+        },
+        "James": {
+          "pts": 82,
+          "srv": 0,
+          "hyb": 82
+        },
+        "Louis": {
+          "pts": 93,
+          "srv": 0,
+          "hyb": 93
+        },
+        "Ismail": {
+          "pts": 36,
+          "srv": 0,
+          "hyb": 36
+        },
+        "Reuben": {
+          "pts": 55,
+          "srv": 0,
+          "hyb": 55
+        }
+      }
+    },
+    {
+      "m": 63,
+      "p": {
+        "Erol": {
+          "pts": 78,
+          "srv": 0,
+          "hyb": 78
+        },
+        "James": {
+          "pts": 82,
+          "srv": 0,
+          "hyb": 82
+        },
+        "Louis": {
+          "pts": 93,
+          "srv": 0,
+          "hyb": 93
+        },
+        "Ismail": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        },
+        "Reuben": {
+          "pts": 56,
+          "srv": 0,
+          "hyb": 56
+        }
+      }
+    },
+    {
+      "m": 64,
+      "p": {
+        "Erol": {
+          "pts": 78,
+          "srv": 0,
+          "hyb": 78
+        },
+        "James": {
+          "pts": 82,
+          "srv": 0,
+          "hyb": 82
+        },
+        "Louis": {
+          "pts": 93,
+          "srv": 0,
+          "hyb": 93
+        },
+        "Ismail": {
+          "pts": 42,
+          "srv": 0,
+          "hyb": 42
+        },
+        "Reuben": {
+          "pts": 61,
+          "srv": 0,
+          "hyb": 61
+        }
+      }
+    },
+    {
+      "m": 65,
+      "p": {
+        "Erol": {
+          "pts": 78,
+          "srv": 0,
+          "hyb": 78
+        },
+        "James": {
+          "pts": 82,
+          "srv": 0,
+          "hyb": 82
+        },
+        "Louis": {
+          "pts": 93,
+          "srv": 0,
+          "hyb": 93
+        },
+        "Ismail": {
+          "pts": 47,
+          "srv": 0,
+          "hyb": 47
+        },
+        "Reuben": {
+          "pts": 62,
+          "srv": 0,
+          "hyb": 62
+        }
+      }
+    },
+    {
+      "m": 66,
+      "p": {
+        "Erol": {
+          "pts": 78,
+          "srv": 0,
+          "hyb": 78
+        },
+        "James": {
+          "pts": 82,
+          "srv": 0,
+          "hyb": 82
+        },
+        "Louis": {
+          "pts": 93,
+          "srv": 0,
+          "hyb": 93
+        },
+        "Ismail": {
+          "pts": 47,
+          "srv": 0,
+          "hyb": 47
+        },
+        "Reuben": {
+          "pts": 68,
+          "srv": 0,
+          "hyb": 68
+        }
+      }
+    },
+    {
+      "m": 67,
+      "p": {
+        "Erol": {
+          "pts": 78,
+          "srv": 0,
+          "hyb": 78
+        },
+        "James": {
+          "pts": 82,
+          "srv": 0,
+          "hyb": 82
+        },
+        "Louis": {
+          "pts": 98,
+          "srv": 0,
+          "hyb": 98
+        },
+        "Ismail": {
+          "pts": 47,
+          "srv": 0,
+          "hyb": 47
+        },
+        "Reuben": {
+          "pts": 68,
+          "srv": 0,
+          "hyb": 68
+        }
+      }
+    },
+    {
+      "m": 68,
+      "p": {
+        "Erol": {
+          "pts": 78,
+          "srv": 0,
+          "hyb": 78
+        },
+        "James": {
+          "pts": 82,
+          "srv": 0,
+          "hyb": 82
+        },
+        "Louis": {
+          "pts": 98,
+          "srv": 0,
+          "hyb": 98
+        },
+        "Ismail": {
+          "pts": 47,
+          "srv": 0,
+          "hyb": 47
+        },
+        "Reuben": {
+          "pts": 72,
+          "srv": 0,
+          "hyb": 72
+        }
+      }
+    },
+    {
+      "m": 69,
+      "p": {
+        "Erol": {
+          "pts": 78,
+          "srv": 0,
+          "hyb": 78
+        },
+        "James": {
+          "pts": 82,
+          "srv": 0,
+          "hyb": 82
+        },
+        "Louis": {
+          "pts": 98,
+          "srv": 0,
+          "hyb": 98
+        },
+        "Ismail": {
+          "pts": 47,
+          "srv": 0,
+          "hyb": 47
+        },
+        "Reuben": {
+          "pts": 77,
+          "srv": 0,
+          "hyb": 77
+        }
+      }
+    },
+    {
+      "m": 70,
+      "p": {
+        "Erol": {
+          "pts": 78,
+          "srv": 0,
+          "hyb": 78
+        },
+        "James": {
+          "pts": 82,
+          "srv": 0,
+          "hyb": 82
+        },
+        "Louis": {
+          "pts": 100,
+          "srv": 0,
+          "hyb": 100
+        },
+        "Ismail": {
+          "pts": 47,
+          "srv": 0,
+          "hyb": 47
+        },
+        "Reuben": {
+          "pts": 79,
+          "srv": 0,
+          "hyb": 79
+        }
+      }
+    },
+    {
+      "m": 71,
+      "p": {
+        "Erol": {
+          "pts": 78,
+          "srv": 0,
+          "hyb": 78
+        },
+        "James": {
+          "pts": 82,
+          "srv": 0,
+          "hyb": 82
+        },
+        "Louis": {
+          "pts": 100,
+          "srv": 0,
+          "hyb": 100
+        },
+        "Ismail": {
+          "pts": 47,
+          "srv": 0,
+          "hyb": 47
+        },
+        "Reuben": {
+          "pts": 79,
+          "srv": 0,
+          "hyb": 79
+        }
+      }
+    },
+    {
+      "m": 72,
+      "p": {
+        "Erol": {
+          "pts": 78,
+          "srv": 0,
+          "hyb": 78
+        },
+        "James": {
+          "pts": 82,
+          "srv": 0,
+          "hyb": 82
+        },
+        "Louis": {
+          "pts": 100,
+          "srv": 0,
+          "hyb": 100
+        },
+        "Ismail": {
+          "pts": 47,
+          "srv": 0,
+          "hyb": 47
+        },
+        "Reuben": {
+          "pts": 85,
+          "srv": 0,
+          "hyb": 85
+        }
+      }
+    }
+  ]
+}
