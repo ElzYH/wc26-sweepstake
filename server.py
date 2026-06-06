@@ -2648,6 +2648,29 @@ class Handler(BaseHTTPRequestHandler):
             save_config(cfg)
             log("admin unlinked betting for", player, "(%d account[s])" % len(removed))
             return self._send(200, json.dumps({"ok": True, "removed": len(removed)}))
+        if path == "/api/wager_void":               # admin-only: cancel/void open bet(s) — refunds the stake, no win/loss
+            if not key_ok(body):
+                return self._send(403, json.dumps({"ok": False, "need_key": True, "error": "Admin key required."}))
+            wid = str(body.get("id", "")).strip()
+            player = str(body.get("player", "")).strip()
+            if not wid and not player:
+                return self._send(400, json.dumps({"ok": False, "error": "Pass an 'id' (one bet) or a 'player' (all their open bets)."}))
+            with _lock:
+                wl = load_wagers()
+                targets = [w for w in wl
+                           if w.get("status") == "pending" and not w.get("credit")
+                           and ((wid and w.get("id") == wid) or (player and not wid and w.get("player") == player))]
+                if wid and not targets:
+                    return self._send(404, json.dumps({"ok": False, "error": "No open bet with that id (it may be settled already)."}))
+                for w in targets:
+                    w["status"] = "void"; w["settled_at"] = time.time()   # void = stake refunded, counts as neither win nor loss
+                if targets:
+                    save_wagers(wl)
+            if targets:
+                update_now(load_config())          # recompute so the refunded stake shows immediately
+                log("admin voided %d bet(s)" % len(targets), ("id=" + wid) if wid else ("player=" + player))
+            return self._send(200, json.dumps({"ok": True, "voided": len(targets),
+                                                "stake_refunded": round(sum(w.get("stake", 0) for w in targets), 2)}))
         if path == "/api/send_pin":                # admin-only: DM a player their passcode privately via the bot
             if not key_ok(body):
                 return self._send(403, json.dumps({"ok": False, "need_key": True}))

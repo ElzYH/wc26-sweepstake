@@ -198,6 +198,13 @@ def run():
         check("wager_unlink needs admin key (403)", st == 403, str(st))
         st, body = req("POST", "/api/wager_unlink", {"admin_key": KEY, "player": "x"})
         check("wager_unlink ok with admin key", st == 200 and json.loads(body).get("ok") is True, body[:120])
+        # admin can void/cancel bets — guards: needs the key, and a bad id 404s
+        st, _ = req("POST", "/api/wager_void", {"id": "anything"})
+        check("wager_void needs admin key (403)", st == 403, str(st))
+        st, body = req("POST", "/api/wager_void", {"admin_key": KEY, "id": "no-such-bet"})
+        check("wager_void on unknown id -> 404", st == 404, str(st) + " " + body[:80])
+        st, body = req("POST", "/api/wager_void", {"admin_key": KEY})
+        check("wager_void with no id/player -> 400", st == 400, str(st))
         # self-unlink is passcode-gated (a random can't unlink someone)
         st, _ = req("POST", "/api/wager_self_unlink", {"player": "x", "pin": "WRONG"})
         check("self-unlink rejects a wrong passcode (403)", st == 403, str(st))
