@@ -368,6 +368,19 @@
         <div id="pinList" style="margin-top:8px;font-size:13px"></div>
         <div class="hint" id="setWagerMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
       </div>
+      <div id="voidSetup" style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
+        <p style="margin:0 0 8px"><b>🛑 Cancel bets.</b> Cancel anyone's open bet — the stake is refunded and it counts as neither a win nor a loss. Bets on games that have already finished can't be cancelled.</p>
+        <div class="row2" style="align-items:flex-end">
+          <label style="flex:1;font-size:12.5px;color:var(--muted)">Whose bets?<select id="setVoidWho" style="margin-top:4px;width:100%;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px"></select></label>
+          <button id="setLoadBets" class="mini">Show open bets</button>
+        </div>
+        <div id="voidList" style="margin-top:10px;font-size:13px"></div>
+        <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">
+          <p style="margin:0 0 6px;font-size:12.5px;color:var(--muted)"><b>Discord logins.</b> Force everyone to log in with Discord again (e.g. a shared or lost device). Passcodes are unaffected.</p>
+          <button id="setLogoutAll" class="mini">Log everyone out</button>
+        </div>
+        <div class="hint" id="setVoidMsg" style="color:var(--muted);font-size:12px;margin-top:8px"></div>
+      </div>
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
         <p style="margin:0 0 8px"><b>Discord bot (slash commands).</b> Lets anyone in the server type <code>/leaderboard</code>, <code>/summary</code>, <code>/odds</code>, <code>/fixtures</code>, <code>/myteams</code> to pull live data. Read-only — no admin commands.</p>
         <p style="margin:0 0 8px;color:var(--muted);font-size:12px">Create an app at <b>discord.com/developers</b> → copy the three values below. Then set its <b>Interactions Endpoint URL</b> to:<br><code id="botEndpoint" style="word-break:break-all">https://YOUR-SITE/api/discord_interactions</code></p>
@@ -1631,6 +1644,7 @@ async function refreshStatus(){
   const caps=STATUS.wager_caps||{}; const mr=document.getElementById('setMaxReturn'), ma=document.getElementById('setMaxAcca');
   if(mr) mr.value=(typeof caps.max_return==='number'&&caps.max_return>0)?caps.max_return:'';
   if(ma) ma.value=caps.max_acca_legs||3;
+  if(typeof _fillVoidWho==='function') _fillVoidWho();
   const dh=document.getElementById('setDigestHour'); if(dh) dh.value=(STATUS.digest_hour!=null?STATUS.digest_hour:9);
   const ep=document.getElementById('botEndpoint'); if(ep) ep.textContent=(STATUS.site_url||location.origin)+'/api/discord_interactions';
   if(STATUS.bot_ready){ const ba=document.getElementById('setBotApp'), bt=document.getElementById('setBotToken');
@@ -1800,6 +1814,51 @@ async function _pins(regen){
 }
 document.getElementById('setGenPins').onclick=()=>_pins(false);
 document.getElementById('setRegenPins').onclick=()=>{ if(confirm('Regenerate ALL passcodes? Everyone will need their new code.')) _pins(true); };
+// ---- Cancel bets (admin) ----
+function _fillVoidWho(){
+  const sel=document.getElementById('setVoidWho'); if(!sel) return;
+  const players=(DATA&&DATA.players?DATA.players:[]).map(p=>p&&p.name?p.name:p).filter(Boolean);
+  if(players.length && sel.options.length!==players.length){
+    sel.innerHTML=players.map(p=>'<option>'+esc(p)+'</option>').join('');
+  }
+}
+function _betRowLabel(w){
+  if(Array.isArray(w.legs)&&w.legs.length) return '🎰 Accumulator ('+w.legs.length+' legs)';
+  const sel=w.selection==='DRAW'?'the draw':(w.pick_label||w.selection||'a result');
+  return esc(String(sel));
+}
+async function _loadBets(){
+  const who=document.getElementById('setVoidWho').value; const m=document.getElementById('setVoidMsg');
+  const box=document.getElementById('voidList'); if(!who){ m.textContent='Pick a player first.'; return; }
+  m.textContent='Loading '+who+'\u2019s open bets…'; box.innerHTML='';
+  try{
+    const all=await fetch('/api/wagers?player='+encodeURIComponent(who)).then(r=>r.json());
+    const open=(Array.isArray(all)?all:(all.wagers||[])).filter(w=>w.status==='pending'&&!w.credit);
+    if(!open.length){ box.innerHTML='<div style="color:var(--muted)">No open bets for '+esc(who)+'.</div>'; m.textContent=''; return; }
+    box.innerHTML=open.map(w=>'<div style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:4px;gap:8px;flex-wrap:wrap"><span>'+_betRowLabel(w)+' · stake <b>'+(w.stake)+'</b>'+(w.return?(' → returns '+w.return):'')+'</span><button class="mini voidone" data-id="'+esc(w.id)+'" style="border-color:#b3343a;color:#ff9a9a">Cancel &amp; refund</button></div>').join('')
+      +'<button class="mini voidall" style="margin-top:6px;border-color:#b3343a;color:#ff9a9a">Cancel ALL '+esc(who)+'\u2019s open bets ('+open.length+')</button>';
+    box.querySelectorAll('.voidone').forEach(b=>b.onclick=()=>_void({id:b.dataset.id}, 'that bet'));
+    box.querySelector('.voidall').onclick=()=>{ if(confirm('Cancel ALL of '+who+'\u2019s open bets and refund the stakes?')) _void({player:who}, 'all '+who+'\u2019s open bets'); };
+    m.textContent='';
+  }catch(e){ m.textContent='Could not load bets.'; }
+}
+async function _void(target, what){
+  const m=document.getElementById('setVoidMsg'); m.textContent='Cancelling '+what+'…';
+  try{ const j=await fetch('/api/wager_void',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({admin_key:ADMINKEY},target))}).then(r=>r.json());
+    if(j.need_key){ ADMINKEY=''; m.textContent='Session expired — reopen Settings and unlock again.'; }
+    else if(j.ok){ m.textContent='Cancelled '+j.voided+' bet'+(j.voided===1?'':'s')+', refunded '+j.stake_refunded+' point'+(j.stake_refunded===1?'':'s')+'.'; _loadBets(); refreshStatus(); load(); }
+    else m.textContent=j.error||'Could not cancel.';
+  }catch(e){ m.textContent='Could not reach the server.'; }
+}
+document.getElementById('setLoadBets').onclick=_loadBets;
+document.getElementById('setLogoutAll').onclick=async()=>{
+  if(!confirm('Log EVERYONE out of Discord login? They\u2019ll each need to log in again. Passcodes are unaffected.')) return;
+  const m=document.getElementById('setVoidMsg'); m.textContent='Logging everyone out…';
+  try{ const j=await fetch('/api/logout_all',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:ADMINKEY})}).then(r=>r.json());
+    if(j.need_key){ ADMINKEY=''; m.textContent='Session expired — reopen Settings and unlock again.'; }
+    else m.textContent=j.ok?'Done — everyone has been logged out of Discord login.':(j.error||'Could not do that.');
+  }catch(e){ m.textContent='Could not reach the server.'; }
+};
 document.getElementById('setSaveInvite').onclick=async()=>{
   const m=document.getElementById('setInviteMsg'); const inv=document.getElementById('setInvite').value.trim();
   if(inv && !inv.startsWith('https://')){ m.textContent='Invite must start with https:// .'; return; }
