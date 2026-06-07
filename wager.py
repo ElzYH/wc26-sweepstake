@@ -193,6 +193,8 @@ def _winner_side(m):
 
 def can_bet_on(match, now=None):
     """Only before kick-off: status must be pre-match AND the kick-off time must still be in the future."""
+    if not isinstance(match, dict):
+        return False
     if match.get("status") not in OPEN_STATUSES:
         return False
     ts = _utc_ts(match.get("utcDate") or "")
@@ -333,7 +335,7 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
         return False, "Pick which player is betting first."
     if selection not in SELECTIONS:
         return False, "Pick home, draw or away."
-    if match is None:
+    if not isinstance(match, dict):
         return False, "That game could not be found."
     if selection == "DRAW" and match.get("stage") not in (None, "GROUP_STAGE"):
         return False, "No draw bets on knockout games — pick the side to go through."
@@ -427,6 +429,8 @@ def _leg_result(leg, match):
 def settle(wagers, match, now=None):
     """Settle every pending wager affected by this match. Singles settle outright; accumulators settle
     leg-by-leg and only resolve once every leg has a result. Mutates `wagers`. Returns the number fully settled."""
+    if not isinstance(match, dict):
+        return 0
     mid = match_id(match)
     status = match.get("status")
     side = _winner_side(match)
@@ -453,24 +457,22 @@ def settle(wagers, match, now=None):
                 w["status"] = "lost"; w["return"] = 0; w["settled_at"] = ts; n += 1
             elif None not in results:              # every leg decided, none lost
                 won_legs = [leg for leg in legs if leg.get("result") == "won"]
-                if not won_legs:                   # all void -> refund the stake
-                    w["status"] = "void"; w["settled_at"] = ts; n += 1
-                else:
-                    dec = 1.0
-                    for leg in won_legs:           # void legs drop out (odds treated as 1.0)
-                        den = _num(leg.get("den"))
-                        num = _num(leg.get("num"))
-                        if den > 0:
-                            dec *= (1.0 + num / den)
-                    rv = round(_num(w.get("stake")) * dec, 2)
-                    w["return"] = min(MAX_RETURN, rv) if MAX_RETURN is not None else rv
-                    w["status"] = "won"; w["settled_at"] = ts; n += 1
+                dec = 1.0
+                for leg in won_legs:               # void legs drop out (odds treated as 1.0)
+                    den = _num(leg.get("den"))
+                    num = _num(leg.get("num"))
+                    if den > 0:
+                        dec *= (1.0 + num / den)
+                rv = round(_num(w.get("stake")) * dec, 2)   # all-void -> dec 1.0 -> return == stake (refund)
+                w["return"] = min(MAX_RETURN, rv) if MAX_RETURN is not None else rv
+                w["status"] = "void" if not won_legs else "won"   # every leg void = a push (stake back)
+                w["settled_at"] = ts; n += 1
             continue
         # ---- single ----
         if w.get("matchId") != mid:
             continue
         if status in VOID_STATUSES:
-            w["status"] = "void"; w["settled_at"] = ts; n += 1; continue
+            w["status"] = "void"; w["return"] = _num(w.get("stake")); w["settled_at"] = ts; n += 1; continue
         if status not in ("FINISHED", "AWARDED") or side is None:
             continue
         if side == "DRAW" and _norm_stage(w.get("stage")) != "GROUP_STAGE":

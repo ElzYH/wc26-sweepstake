@@ -80,6 +80,12 @@ if python3 test_wager.py >/dev/null; then echo "  ok"; else echo "  FAIL"; pytho
 say "Betting QA (void lifecycle, mid-game/last-min void, accas, sequencing, free-points)"
 if python3 qa_betting.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_betting.py | tail -20; FAIL=1; fi
 
+say "Deep betting QA (~111 checks: odds, limits, settlement, accas, free bets, money conservation, adversarial)"
+if python3 qa_betting_deep.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_betting_deep.py | tail -24; FAIL=1; fi
+
+say "Deep scoring QA (~60 checks: point math, ownership, live points, survival, NO infinity/negative/crash)"
+if python3 qa_scoring_deep.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_scoring_deep.py | tail -24; FAIL=1; fi
+
 say "Concurrency QA (free claims strictly one-per-player-per-drop under load)"
 if python3 qa_concurrency.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_concurrency.py | tail -16; FAIL=1; fi
 

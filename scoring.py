@@ -103,8 +103,20 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
     matches = results.get("matches", [])
     # Defensive normalisation: a malformed/partial match (hand-edited results.json, an old backup with a
     # different schema, or a feed format change) must NEVER crash the whole rebuild — that would freeze the
-    # tracker for everyone. Drop non-dicts and guarantee the keys the engine reads downstream.
-    _clean = []
+    # tracker for everyone. Drop non-dicts, guarantee the keys the engine reads, sanitise scores to safe
+    # non-negative whole numbers (so a string/inf/NaN/negative score can't crash or create silly points),
+    # and de-duplicate so the same match appearing twice can't double-count points.
+    def _score(v):
+        if v is None:
+            return None
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            return None                      # non-numeric score -> treat as "no score yet"
+        if v != v or v in (float("inf"), float("-inf")):
+            return None                      # NaN / inf -> no points can ever be infinite
+        return max(0, min(1000, int(v)))     # whole, non-negative, sanely bounded goals
+    _clean, _seen = [], set()
     for _m in matches:
         if not isinstance(_m, dict):
             continue
@@ -114,6 +126,14 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
         _m.setdefault("home", None)
         _m.setdefault("away", None)
         _m.setdefault("utcDate", None)
+        _m["homeScore"] = _score(_m.get("homeScore"))
+        _m["awayScore"] = _score(_m.get("awayScore"))
+        key = _m.get("id")
+        if key in (None, ""):
+            key = (_m.get("home"), _m.get("away"), _m.get("utcDate"), _m.get("stage"))
+        if key in _seen:
+            continue                         # same match twice -> count it once
+        _seen.add(key)
         _clean.append(_m)
     matches = _clean
     owner = {t["name"]: p["name"] for p in draw["players"] for t in p["teams"]}
