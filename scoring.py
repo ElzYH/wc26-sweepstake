@@ -136,6 +136,17 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
         _seen.add(key)
         _clean.append(_m)
     matches = _clean
+    # Defensive normalisation of the DRAW too: a corrupt/hand-edited draw_result.json (or a bad import
+    # bundle) must not crash the rebuild. Guarantee draw["players"] is a list of {name, teams:[{name,...}]}.
+    _players = draw.get("players") if isinstance(draw, dict) else None
+    _dp = []
+    for _p in (_players if isinstance(_players, list) else []):
+        if not isinstance(_p, dict) or not _p.get("name"):
+            continue
+        _teams = [_t for _t in (_p.get("teams") if isinstance(_p.get("teams"), list) else [])
+                  if isinstance(_t, dict) and _t.get("name")]
+        _dp.append({**_p, "name": _p["name"], "teams": _teams})
+    draw = {"players": _dp}
     owner = {t["name"]: p["name"] for p in draw["players"] for t in p["teams"]}
 
     finished = [m for m in matches if m["status"] in FINAL_STATUSES]
@@ -225,7 +236,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
         teams_out = []
         for t in p["teams"]:
             name = t["name"]; st, stage = status(name); w, d, l = record[name]
-            teams_out.append({"name": name, "tier": t["tier"], "group": t["group"],
+            teams_out.append({"name": name, "tier": t.get("tier"), "group": t.get("group"),
                               "points": pts[name], "survival": survival_pts(name),
                               "status": st, "stage": stage, "record": f"{w}-{d}-{l}",
                               "gf": gf[name], "ga": ga[name], "live": live_pts[name],

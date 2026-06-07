@@ -618,10 +618,13 @@ def _apply_wager_caps(cfg=None):
         return None
     cfg = cfg if cfg is not None else load_config()
     mr = cfg.get("max_return", None)
-    try:
-        wager_mod.MAX_RETURN = float(mr) if mr not in (None, "", 0) else None
-    except (TypeError, ValueError):
-        wager_mod.MAX_RETURN = None
+    if mr in (None, "", 0) or str(mr).strip().lower() in ("0", "none", ""):
+        wager_mod.MAX_RETURN = None                       # blank / 0 / none = unlimited winnings
+    else:
+        try:
+            wager_mod.MAX_RETURN = max(1.0, float(mr))    # a real cap, but never below the minimum (no negative/zero returns)
+        except (TypeError, ValueError):
+            wager_mod.MAX_RETURN = None
     try:
         legs = int(cfg.get("max_acca_legs", 3))
         wager_mod.MAX_ACCA_LEGS = max(2, min(10, legs))
