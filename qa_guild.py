@@ -115,6 +115,23 @@ finally:
     try: proc.wait(timeout=5)
     except Exception: proc.kill()
 
+print("\n=== admin-configurable bet/acca caps apply to the engine ===")
+import wager as Wm
+_dp, _da = S._WAGER_DEFAULTS["MAX_PENDING"], S._WAGER_DEFAULTS["MAX_ACTIVE_ACCAS"]
+c = S.load_config(); c["max_pending_bets"] = 3; c["max_active_accas"] = 1; S.save_config(c)
+S._apply_wager_caps(S.load_config())
+ck("max_pending_bets=3 -> engine MAX_PENDING is 3", Wm.MAX_PENDING == 3, Wm.MAX_PENDING)
+ck("max_active_accas=1 -> engine MAX_ACTIVE_ACCAS is 1", Wm.MAX_ACTIVE_ACCAS == 1, Wm.MAX_ACTIVE_ACCAS)
+caps = S._apply_wager_caps(S.load_config())
+ck("status caps reflect the new max_pending", caps.get("max_pending") == 3, caps.get("max_pending"))
+ck("status caps reflect the new max_active_accas", caps.get("max_active_accas") == 1, caps.get("max_active_accas"))
+c = S.load_config(); c["max_pending_bets"] = 9999; S.save_config(c); S._apply_wager_caps(S.load_config())
+ck("absurd max_pending is clamped (<=50)", Wm.MAX_PENDING == 50, Wm.MAX_PENDING)
+c = S.load_config(); c.pop("max_pending_bets", None); c.pop("max_active_accas", None); S.save_config(c)
+S._apply_wager_caps(S.load_config())
+ck("clearing max_pending_bets restores the default", Wm.MAX_PENDING == _dp, (Wm.MAX_PENDING, _dp))
+ck("clearing max_active_accas restores the default", Wm.MAX_ACTIVE_ACCAS == _da, (Wm.MAX_ACTIVE_ACCAS, _da))
+
 shutil.rmtree(TMP, ignore_errors=True)
 if FAILS:
     print("\nGUILD-GATE QA FAILED (%d): %s" % (len(FAILS), ", ".join(FAILS)))

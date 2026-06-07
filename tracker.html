@@ -362,6 +362,10 @@
           <label style="flex:1;font-size:12.5px;color:var(--muted)">Max winnings per bet <span style="opacity:.7">(blank = no limit)</span><input id="setMaxReturn" type="number" min="1" step="1" placeholder="no limit" style="margin-top:4px"></label>
           <label style="flex:1;font-size:12.5px;color:var(--muted)">Max accumulator legs <span style="opacity:.7">(default 3)</span><input id="setMaxAcca" type="number" min="2" max="10" step="1" placeholder="3" style="margin-top:4px"></label>
         </div>
+        <div class="row2" style="align-items:flex-end;margin-bottom:6px">
+          <label style="flex:1;font-size:12.5px;color:var(--muted)">Max open single bets / person <span style="opacity:.7">(blank = default 8)</span><input id="setMaxPending" type="number" min="1" max="50" step="1" placeholder="8" style="margin-top:4px"></label>
+          <label style="flex:1;font-size:12.5px;color:var(--muted)">Max open accas / person <span style="opacity:.7">(blank = default 2, 0 = off)</span><input id="setMaxAccas" type="number" min="0" max="20" step="1" placeholder="2" style="margin-top:4px"></label>
+        </div>
         <button id="setSaveCaps" class="mini">Save bet limits</button>
         <p style="margin:8px 0 6px;color:var(--muted);font-size:12.5px">• <b>Bet passcodes</b> — each player gets a private code so only they can stake their own points. Generate them, then send each person their code. Players enter it once on the Bets tab (and once on Discord via <code>/bet … pin:CODE</code>).</p>
         <div class="row2"><button id="setGenPins" class="mini">Generate / show passcodes</button><button id="setRegenPins" class="mini">Regenerate all</button></div>
@@ -558,10 +562,10 @@ function renderBets(){
   let h='';
   h+='<div class="ovsec"><div class="ovh">💷 Place a bet</div>';
   h+='<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--muted);line-height:1.55"><b style="color:#ffd97a">Everyone starts with 5 free betting points</b> — bet with them straight away. They\'re bet-only: <b>only winnings reach the leaderboard</b>, and losing them costs you nothing. After that you stake the points you\'ve <b style="color:var(--ink)">already earned</b> (settled games only) on any upcoming game. Win at the listed odds and the points are <b>added to your total once that game ends</b>; lose and your stake is gone. While a game is live your stake is held — nothing is credited until it finishes. Odds are fractional and <b>lock when you place</b>, bets close at kick-off, and <b style="color:#ffd97a">all bets are final — once placed they can\'t be changed, cancelled or cashed out.</b><br><b style="color:var(--ink)">Accumulator:</b> back up to '+maxLegs+' games in one bet — the odds multiply, but <b>every</b> leg must win; if a single leg loses, the whole acca loses and pays nothing.<br>You can never go below zero'+(retCap?(', and a bet can return at most <b>'+retCap+'</b> points'):' — there\'s no cap on winnings')+'.</div>';
-  // prominent: this round's max stake + what THIS player has left to bet
+  // prominent: the per-bet ceiling + the LIVE amount this player can stake right now (drops as bets open, recovers as they settle)
   h+='<div style="margin:12px 0;display:flex;gap:10px;flex-wrap:wrap">'
-    +'<div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--gold);border-radius:12px;padding:10px 14px"><div style="color:var(--muted);font-size:11.5px;letter-spacing:.04em">MAX STAKE THIS ROUND</div><div style="font-family:\'Anton\';color:var(--gold);font-size:26px;line-height:1.1">'+caps.max_stake+'</div><div style="color:var(--muted);font-size:11px">rises each round · 65 in the final</div></div>'
-    +'<div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px"><div style="color:var(--muted);font-size:11.5px;letter-spacing:.04em">'+esc(BETPLAYER.toUpperCase())+' CAN BET NOW</div><div style="font-family:\'Anton\';font-size:26px;line-height:1.1;color:'+(headroom>0?'var(--ink)':'#ff9a9a')+'" id="betAvail">'+Math.min(avail,headroom)+'</div><div style="color:var(--muted);font-size:11px">'+avail+' pts available'+(held>0?' · '+held+' already riding':'')+'</div></div>'
+    +'<div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px"><div style="color:var(--muted);font-size:11.5px;letter-spacing:.04em">MAX PER BET</div><div style="font-family:\'Anton\';font-size:26px;line-height:1.1">'+caps.max_stake+'</div><div style="color:var(--muted);font-size:11px">ceiling for one bet · rises each round (65 in the final)</div></div>'
+    +'<div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--gold);border-radius:12px;padding:10px 14px"><div style="color:var(--muted);font-size:11.5px;letter-spacing:.04em">'+esc(BETPLAYER.toUpperCase())+' CAN STAKE NOW</div><div style="font-family:\'Anton\';font-size:26px;line-height:1.1;color:'+(headroom>0?'var(--gold)':'#ff9a9a')+'" id="betAvail">'+Math.min(avail,headroom)+'</div><div style="color:var(--muted);font-size:11px">'+(held>0?held+' of '+caps.max_stake+' riding on open bets · frees up as they settle':'up to the '+caps.max_stake+' cap · '+avail+' pts available')+'</div></div>'
     +'</div>';
   h+='<div style="margin:0 0 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px">Betting as <select id="betWho"'+((SESSION.logged_in&&SESSION.player)?' disabled':'')+' style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:14px">'+players.map(p=>`<option${p===BETPLAYER?' selected':''}>${esc(p)}</option>`).join('')+'</select></div>';
   if(SESSION.logged_in && SESSION.player===BETPLAYER){
@@ -1673,6 +1677,9 @@ async function refreshStatus(){
   const caps=STATUS.wager_caps||{}; const mr=document.getElementById('setMaxReturn'), ma=document.getElementById('setMaxAcca');
   if(mr) mr.value=(typeof caps.max_return==='number'&&caps.max_return>0)?caps.max_return:'';
   if(ma) ma.value=caps.max_acca_legs||3;
+  const mpb=document.getElementById('setMaxPending'), mac=document.getElementById('setMaxAccas');
+  if(mpb) mpb.value=(typeof caps.max_pending==='number')?caps.max_pending:'';
+  if(mac) mac.value=(typeof caps.max_active_accas==='number')?caps.max_active_accas:'';
   if(typeof _fillVoidWho==='function') _fillVoidWho();
   const dh=document.getElementById('setDigestHour'); if(dh) dh.value=(STATUS.digest_hour!=null?STATUS.digest_hour:9);
   const ep=document.getElementById('botEndpoint'); if(ep) ep.textContent=(STATUS.site_url||location.origin)+'/api/discord_interactions';
@@ -1831,7 +1838,12 @@ document.getElementById('setWagerLock').onclick=()=>_saveWager({wager_locked:doc
 document.getElementById('setSaveCaps').onclick=()=>{
   const mrv=(document.getElementById('setMaxReturn').value||'').trim();
   const mav=parseInt(document.getElementById('setMaxAcca').value,10);
-  _saveWager({max_return:(mrv===''?'':mrv), max_acca_legs:(isNaN(mav)?3:mav)}, (mrv===''?'No cap on winnings':'Winnings capped at '+mrv)+'; accumulators up to '+(isNaN(mav)?3:Math.max(2,Math.min(10,mav)))+' legs.');
+  const mpv=(document.getElementById('setMaxPending').value||'').trim();
+  const mcv=(document.getElementById('setMaxAccas').value||'').trim();
+  const betsTxt=(mpv===''?'8':mpv)+' open bets';
+  const accaTxt=(mcv===''?'2':mcv)+' open accas'+((mcv==='0')?' (accas off)':'');
+  _saveWager({max_return:(mrv===''?'':mrv), max_acca_legs:(isNaN(mav)?3:mav), max_pending_bets:mpv, max_active_accas:mcv},
+             (mrv===''?'No cap on winnings':'Winnings capped at '+mrv)+'; accumulators up to '+(isNaN(mav)?3:Math.max(2,Math.min(10,mav)))+' legs; each person '+betsTxt+' · '+accaTxt+'.');
 };
 async function _pins(regen){
   const m=document.getElementById('setWagerMsg'); m.textContent='Working…';
