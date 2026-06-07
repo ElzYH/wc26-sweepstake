@@ -337,7 +337,7 @@ _g = server.discord_command("games", {}, uid="123")
 if _t1 not in _g or "/bet" not in _g:
     fails.append(("/games", "didn't list the upcoming game + odds: %r" % _g))
 # unlinked Discord user can't bet, and is told to link (passcode is NEVER asked for in-channel)
-_unl = server.discord_command("bet", {"team": _t1, "pick": "home", "stake": 5}, uid="123")
+_unl = server.discord_command("bet", {"match": _t1, "team": _t1, "result": "win", "stake": 5}, uid="123")
 if "linked" not in _unl.lower() or "linkdiscord" not in _unl.lower():
     fails.append(("/bet", "unlinked bet didn't point to the link flow: %r" % _unl))
 # a wrong link code is rejected
@@ -352,15 +352,35 @@ if "linked" not in _lk.lower() or server.load_config().get("wager_links", {}).ge
 if server.load_config().get("wager_link_codes", {}).get("GOOD12"):
     fails.append(("/linkdiscord", "code was not single-use"))
 # linked -> preview shows payout, no passcode ever typed in Discord
-_prev = server.discord_command("bet", {"team": _t1, "pick": "home", "stake": 5}, uid="123")
+_prev = server.discord_command("bet", {"match": _t1, "team": _t1, "result": "win", "stake": 5}, uid="123")
 if "preview" not in _prev.lower() or "returns" not in _prev.lower():
     fails.append(("/bet preview", "no payout preview once linked: %r" % _prev))
-_place = server.discord_command("bet", {"team": _t1, "pick": "home", "stake": 5, "confirm": True}, uid="123")
+# new /bet shape: typing a team that ISN'T in the chosen match is rejected (no bet placed)
+_badteam = server.discord_command("bet", {"match": _t1, "team": "Narnia", "result": "win", "stake": 5}, uid="123")
+if "isn't in that match" not in _badteam.lower() and "isn’t in that match" not in _badteam.lower():
+    fails.append(("/bet validate", "a team not in the match wasn't rejected: %r" % _badteam))
+# 'lose' backs the OPPONENT to win — preview should name the typed team losing
+_lose = server.discord_command("bet", {"match": _t1, "team": _t1, "result": "lose", "stake": 3}, uid="123")
+if "preview" not in _lose.lower() or "to lose" not in _lose.lower():
+    fails.append(("/bet lose", "lose-result preview wrong: %r" % _lose))
+# 'draw' in a group game is allowed and previews a draw
+_draw = server.discord_command("bet", {"match": _t1, "team": _t1, "result": "draw", "stake": 3}, uid="123")
+if "preview" not in _draw.lower() or "draw" not in _draw.lower():
+    fails.append(("/bet draw", "draw-result preview wrong: %r" % _draw))
+# the match autocomplete returns the upcoming game (and the typed team can be matched in it)
+_mc = server._bet_match_choices(_t1)
+if not _mc or not any(_t1.lower() in (c.get("name", "").lower()) for c in _mc):
+    fails.append(("/bet autocomplete", "match choices didn't include the upcoming game: %r" % _mc))
+# none of those previews placed anything yet
+if len(server.load_wagers()) != 0:
+    fails.append(("/bet", "a preview accidentally placed a bet: %d wagers" % len(server.load_wagers())))
+# now actually place (this recomputes the tracker)
+_place = server.discord_command("bet", {"match": _t1, "team": _t1, "result": "win", "stake": 5, "confirm": True}, uid="123")
 _wl = server.load_wagers()
 if "placed" not in _place.lower() or len(_wl) != 1 or _wl[0]["player"] != "Erol":
     fails.append(("/bet confirm", "did not place once linked: %r / %r" % (_place, _wl)))
 # a DIFFERENT, unlinked Discord account cannot bet as anyone
-_other = server.discord_command("bet", {"team": _t1, "pick": "home", "stake": 5}, uid="999")
+_other = server.discord_command("bet", {"match": _t1, "team": _t1, "result": "win", "stake": 5}, uid="999")
 if "link" not in _other.lower() or len(server.load_wagers()) != 1:
     fails.append(("/bet", "an unlinked account could act: %r" % _other))
 _mb = server.discord_command("mybets", {}, uid="123")
@@ -420,7 +440,7 @@ if "link" not in server.discord_command("resetpin", {}, uid="999").lower():
 _un = server.discord_command("unlink", {}, uid="123")
 if "unlink" not in _un.lower() or server.load_config().get("wager_links", {}).get("123"):
     fails.append(("/unlink", "did not remove the link: %r" % _un))
-if "link" not in server.discord_command("bet", {"team": _t1, "pick": "home", "stake": 5}, uid="123").lower():
+if "link" not in server.discord_command("bet", {"match": _t1, "team": _t1, "result": "win", "stake": 5}, uid="123").lower():
     fails.append(("/unlink", "could still bet after unlinking"))
 if not [f for f in fails if "/bet" in f[0] or "/games" in f[0] or "/mybets" in f[0] or "/linkdiscord" in f[0]
         or "/points" in f[0] or "/allbets" in f[0] or "/scores" in f[0] or "/unlink" in f[0]]:

@@ -470,6 +470,11 @@ try:
     import wager as wager_mod                 # optional wagering engine
 except Exception:
     wager_mod = None
+# Remember the engine's built-in cap defaults so an admin who clears a setting gets the default back.
+_WAGER_DEFAULTS = {
+    "MAX_PENDING": getattr(wager_mod, "MAX_PENDING", 8) if wager_mod else 8,
+    "MAX_ACTIVE_ACCAS": getattr(wager_mod, "MAX_ACTIVE_ACCAS", 2) if wager_mod else 2,
+}
 WAGERS_FILE = "wagers.json"
 
 
@@ -622,6 +627,16 @@ def _apply_wager_caps(cfg=None):
         wager_mod.MAX_ACCA_LEGS = max(2, min(10, legs))
     except (TypeError, ValueError):
         wager_mod.MAX_ACCA_LEGS = 3
+    try:
+        mp = cfg.get("max_pending_bets", None)
+        wager_mod.MAX_PENDING = max(1, min(50, int(mp))) if mp not in (None, "") else _WAGER_DEFAULTS["MAX_PENDING"]
+    except (TypeError, ValueError):
+        wager_mod.MAX_PENDING = _WAGER_DEFAULTS["MAX_PENDING"]
+    try:
+        ma = cfg.get("max_active_accas", None)
+        wager_mod.MAX_ACTIVE_ACCAS = max(0, min(20, int(ma))) if ma not in (None, "") else _WAGER_DEFAULTS["MAX_ACTIVE_ACCAS"]
+    except (TypeError, ValueError):
+        wager_mod.MAX_ACTIVE_ACCAS = _WAGER_DEFAULTS["MAX_ACTIVE_ACCAS"]
     return {"min_stake": wager_mod.MIN_STAKE, "max_stake": _current_round_max_stake(),
             "base_max_stake": wager_mod.MAX_STAKE, "max_return": wager_mod.MAX_RETURN,
             "max_pending": wager_mod.MAX_PENDING, "max_acca_legs": wager_mod.MAX_ACCA_LEGS,
@@ -1363,6 +1378,36 @@ def _active_mode():
     return m if m in ("points", "survival", "hybrid") else "hybrid"
 
 
+def _bet_match_choices(partial=""):
+    """Autocomplete choices for /bet `match`: each upcoming bettable game, shown as 'Brazil v Serbia — Sat 14:00',
+    value = the matchId so the handler resolves it exactly. Filtered by what's typed (matches either team or the
+    'A v B' label); Discord caps at 25."""
+    try:
+        d = _load_tracker() or {}
+        fx = sorted([m for m in (d.get("fixtures") or []) if m.get("odds") and m.get("matchId")],
+                    key=lambda m: m.get("utcDate") or "")
+    except Exception:
+        return []
+    q = (partial or "").strip().lower()
+    out = []
+    for m in fx:
+        home, away = m.get("home", ""), m.get("away", "")
+        if not home or not away:
+            continue
+        label = "%s v %s" % (home, away)
+        if q and q not in home.lower() and q not in away.lower() and q not in label.lower():
+            continue
+        when = ""
+        try:
+            when = " — " + (m.get("utcDate") or "")[:16].replace("T", " ")
+        except Exception:
+            when = ""
+        out.append({"name": (label + when)[:100], "value": str(m["matchId"])[:100]})
+        if len(out) >= 25:
+            break
+    return out
+
+
 def _bet_team_choices(partial=""):
     """Autocomplete choices for /bet `team`: every team in an upcoming bettable game,
     shown as 'Brazil — v Spain' so you're really picking the GAME + team. Filtered by what's typed; Discord caps at 25."""
@@ -1574,36 +1619,58 @@ def discord_command(name, opts, uid=None, interaction_id=None):
             return ("🔒 Your Discord isn't linked for betting yet (so your passcode never has to be typed here).\n"
                     "Open the tracker → **💷 Bets**, enter your passcode, tap **Connect Discord**, then run "
                     "`/linkdiscord code:<the code it shows>` (DM me to keep it private). Then `/bet` works with no passcode.")
+        match_val = str(opts.get("match", "")).strip()
         team = str(opts.get("team", "")).strip()
-        pick = str(opts.get("pick", "")).strip().lower() or "win"
+        result = (str(opts.get("result", "")).strip().lower() or "win")
         confirm = bool(opts.get("confirm"))
         try:
             stake = float(opts.get("stake"))
         except (TypeError, ValueError):
             return "Stake must be a number of points."
-        if pick in ("w", "winner"):
-            pick = "win"
-        if pick not in ("win", "draw", "home", "away"):     # natural picks are win / draw (relative to YOUR team)
-            return "Pick **win** (your team to win) or **draw**."
-        tl = team.lower()
-        m = next((x for x in fx if tl in (x["home"].lower(), x["away"].lower())), None) \
-            or next((x for x in fx if tl and (tl in x["home"].lower() or tl in x["away"].lower())), None)
+        # resolve the match: the dropdown sends the matchId; fall back to a text match on the team names
+        m = next((x for x in fx if str(x.get("matchId")) == match_val), None)
         if not m:
-            return "No upcoming game found for **%s**. Use `/games` to see what's on." % (team or "?")
-        team_is_home = tl in m["home"].lower()
-        if pick == "draw":
+            mv = match_val.lower()
+            m = next((x for x in fx if mv and (mv in x["home"].lower() or mv in x["away"].lower()
+                                               or mv in ("%s v %s" % (x["home"], x["away"])).lower())), None)
+        if not m:
+            return "Couldn't find that match — start typing in the **match** box and pick from the list. `/games` shows what's on."
+        # validate the typed team is actually in that match
+        tl = team.lower()
+        if tl and tl == m["home"].lower():
+            team_is_home = True
+        elif tl and tl == m["away"].lower():
+            team_is_home = False
+        elif tl and tl in m["home"].lower():
+            team_is_home = True
+        elif tl and tl in m["away"].lower():
+            team_is_home = False
+        else:
+            return "**%s** isn't in that match (**%s** v **%s**). Type one of those two teams." % (team or "?", m["home"], m["away"])
+        team_name = m["home"] if team_is_home else m["away"]
+        # map win / draw / lose (relative to the team you typed) to the match outcome
+        if result in ("w", "winner"):
+            result = "win"
+        if result in ("l", "loss", "lost"):
+            result = "lose"
+        if result == "draw":
             selection = "DRAW"
-        elif pick == "home":
-            selection = "HOME"
-        elif pick == "away":
-            selection = "AWAY"
-        else:                                               # "win" -> back the chosen team's side
+        elif result == "win":
             selection = "HOME" if team_is_home else "AWAY"
+        elif result == "lose":
+            selection = "AWAY" if team_is_home else "HOME"   # they lose -> the opponent wins
+        else:
+            return "Pick a result: **win**, **draw**, or **lose**."
         if selection == "DRAW" and m.get("stage") and m["stage"] != "GROUP_STAGE":
             return "Knockout games can't end in a draw — back **%s** or **%s** to win (whoever goes through counts)." % (m["home"], m["away"])
         o = m["odds"][selection]
         ret = wager_mod.potential_return(stake, o["num"], o["den"])
-        who = ("a draw" if selection == "DRAW" else "%s to win" % (m["home"] if selection == "HOME" else m["away"]))
+        if result == "draw":
+            who = "a draw (%s v %s)" % (m["home"], m["away"])
+        elif result == "lose":
+            who = "%s to lose" % team_name
+        else:
+            who = "%s to win" % team_name
         # points + stake-left info for the preview
         prow = next((p for p in (d.get("players") or []) if p.get("name") == player), {})
         settled = prow.get("points_settled")
@@ -1832,12 +1899,13 @@ def register_discord_commands():
          "options": [{"name": "player", "description": "Your player name in the sweepstake", "type": 3, "required": True}]},
         {"name": "stopnotify", "description": "Turn off your personal pings", "type": 1},
         {"name": "games", "description": "Upcoming games and their betting odds", "type": 1},
-        {"name": "bet", "description": "Bet your points on a game (shows the payout; add confirm to place)", "type": 1,
+        {"name": "bet", "description": "Bet your points on a match (shows the payout; add confirm to place)", "type": 1,
          "options": [
-             {"name": "team", "description": "Start typing — pick the game/team from the list", "type": 3, "required": True, "autocomplete": True},
+             {"name": "match", "description": "Start typing a team or match — pick the game from the list", "type": 3, "required": True, "autocomplete": True},
+             {"name": "team", "description": "Type which team you're backing (must be in that match)", "type": 3, "required": True},
+             {"name": "result", "description": "How they do: win, draw, or lose", "type": 3, "required": True,
+              "choices": [{"name": "win", "value": "win"}, {"name": "draw", "value": "draw"}, {"name": "lose", "value": "lose"}]},
              {"name": "stake", "description": "Points to stake", "type": 10, "required": True},
-             {"name": "pick", "description": "Back them to win, or back the draw (default: win)", "type": 3, "required": False,
-              "choices": [{"name": "win", "value": "win"}, {"name": "draw", "value": "draw"}]},
              {"name": "confirm", "description": "Set true to actually place the bet", "type": 5, "required": False}]},
         {"name": "claim", "description": "Claim today's FREE 5 betting points (when a drop is on) — bet them on any game", "type": 1},
         {"name": "mybets", "description": "Your open and settled bets", "type": 1},
@@ -2400,11 +2468,13 @@ class Handler(BaseHTTPRequestHandler):
         if body.get("type") == 4:                          # APPLICATION_COMMAND_AUTOCOMPLETE
             data = body.get("data") or {}
             focused = ""
+            focused_name = ""
             for o in (data.get("options") or []):
                 if o.get("focused"):
                     focused = o.get("value") or ""
+                    focused_name = o.get("name") or ""
                     break
-            choices = _bet_team_choices(focused) if data.get("name") == "bet" else []
+            choices = _bet_match_choices(focused) if (data.get("name") == "bet" and focused_name == "match") else []
             return self._send(200, json.dumps({"type": 8, "data": {"choices": choices[:25]}}))
         return self._send(200, json.dumps({"type": 4, "data": {"content": "Unsupported interaction."}}))
 
@@ -2563,6 +2633,24 @@ class Handler(BaseHTTPRequestHandler):
                     cfg["max_acca_legs"] = max(2, min(10, int(body["max_acca_legs"])))
                 except (TypeError, ValueError):
                     pass
+            if "max_pending_bets" in body:           # admin: most open single bets per player (blank = default)
+                v = str(body["max_pending_bets"]).strip()
+                if v in ("", "0", "none", "None"):
+                    cfg.pop("max_pending_bets", None)
+                else:
+                    try:
+                        cfg["max_pending_bets"] = max(1, min(50, int(float(v))))
+                    except (TypeError, ValueError):
+                        pass
+            if "max_active_accas" in body:           # admin: most open accumulators per player (blank = default, 0 = accas off)
+                v = str(body["max_active_accas"]).strip()
+                if v in ("", "none", "None"):
+                    cfg.pop("max_active_accas", None)
+                else:
+                    try:
+                        cfg["max_active_accas"] = max(0, min(20, int(float(v))))
+                    except (TypeError, ValueError):
+                        pass
             if "digest_hour" in body:
                 try:
                     cfg["digest_hour"] = max(0, min(23, int(body["digest_hour"])))
@@ -2608,7 +2696,8 @@ class Handler(BaseHTTPRequestHandler):
             cfg = load_config()
             if isinstance(b.get("config"), dict):
                 for k in ("players", "draw_mode", "scoring_mode", "competition",
-                          "poll_minutes", "leftover", "max_per_player", "t1_cap"):
+                          "poll_minutes", "leftover", "max_per_player", "t1_cap",
+                          "max_return", "max_acca_legs", "max_pending_bets", "max_active_accas"):
                     if k in b["config"]:
                         cfg[k] = b["config"][k]
             with _lock:
