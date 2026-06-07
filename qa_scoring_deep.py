@@ -210,6 +210,46 @@ print("\n== EMPTY / DEGENERATE ==")
 td, err = safe_run([], "empty")
 ck("no matches at all -> everyone on 0, no crash", err is None and all(p["points"] == 0 for p in td["players"]), err or td)
 
+print("\n== LIVE CHURN (score changes during a match; VAR removals; settle on full-time) ==")
+import wager as _W
+def live_points(td, pname, tname):
+    t = team_in(td, pname, tname); return (t["live"], t["points"])
+# walk Brazil's match through: IN_PLAY 0-0 -> 1-0 -> (VAR) 0-0 -> 1-0 -> FINISHED 2-1
+seq = [
+    ("IN_PLAY", 0, 0), ("IN_PLAY", 1, 0), ("IN_PLAY", 0, 0),  # a goal given then chalked off
+    ("IN_PLAY", 1, 0), ("PAUSED", 1, 0),
+]
+prev_live = None
+for st, hs, as_ in seq:
+    td = run(A2, [M("m1", "Brazil", "Serbia", hs, as_, status=st, winner=None)])
+    lv, pts = live_points(td, "Erol", "Brazil")
+    ck("live churn %s %d-%d: live points finite & >=0" % (st, hs, as_), math.isfinite(lv) and lv >= 0, lv)
+    ck("live churn %s %d-%d: total finite & >=0" % (st, hs, as_), math.isfinite(pts) and pts >= 0, pts)
+    if hs == 0:
+        ck("VAR removal (0-0) drops live back to a clean-sheet baseline (<=2)", lv <= 2, lv)
+    if hs == 1:
+        ck("a live 1-0 shows provisional goal+win+CS = 5", lv == 5, lv)
+# now FINISHED 2-1: live must clear, final points booked
+td = run(A2, [M("m1", "Brazil", "Serbia", 2, 1, status="FINISHED", winner="HOME")])
+lv, pts = live_points(td, "Erol", "Brazil")
+ck("on full-time, live points clear to 0", lv == 0, lv)
+ck("on full-time, final points booked (2 goals+3 win = 5, no CS conceded 1)", pts == 5, pts)
+# a bet on this match: pending through live, settles at full-time, no double-count under repeated settle
+w = []
+_W.place(w, "Erol", {"id": "m1", "home": "Brazil", "away": "Serbia", "stage": "GROUP_STAGE",
+                     "status": "TIMED", "utcDate": "2099-01-01T00:00:00Z"}, "HOME", 5,
+         settled_points=999, comp_home=80, comp_away=50, now=1_700_000_000)
+_W.settle(w, M("m1", "Brazil", "Serbia", 1, 0, status="IN_PLAY", winner=None))
+ck("a bet stays pending while the match is live", w[0]["status"] == "pending", w[0]["status"])
+_W.settle(w, M("m1", "Brazil", "Serbia", 2, 1, status="FINISHED", winner="HOME"))
+ck("the bet settles to won at full-time", w[0]["status"] == "won", w[0]["status"])
+r = w[0]["return"]
+_W.settle(w, M("m1", "Brazil", "Serbia", 2, 1, status="FINISHED", winner="HOME"))
+ck("re-settling after full-time doesn't change it (idempotent under churn)", w[0]["return"] == r, w[0])
+# a score correction AFTER settlement must not retro-change the booked bet
+_W.settle(w, M("m1", "Brazil", "Serbia", 0, 3, status="FINISHED", winner="AWAY"))
+ck("a post-settlement score correction does NOT flip a settled bet", w[0]["status"] == "won", w[0]["status"])
+
 shutil.rmtree(TMP, ignore_errors=True)
 if FAILS:
     print("\nDEEP SCORING QA FAILED (%d): %s" % (len(FAILS), ", ".join(FAILS)))

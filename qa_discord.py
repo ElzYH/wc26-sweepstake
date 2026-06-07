@@ -90,6 +90,22 @@ bad = bytearray(pb); bad[0] ^= 1
 ck("pure verify rejects a flipped signature bit", not S._ed25519_verify_pure(bytes.fromhex(GP), bytes(bad), pmsg), "")
 ck("dispatcher accepts the golden PING (hex args)", S._verify_ed25519(GP, G["ping"][1], pmsg), "")
 ck("dispatcher rejects junk hex safely", not S._verify_ed25519("zzz", "qqq", pmsg), "")
+
+# claim/link hijack protection: a DIFFERENT Discord account can't link to an already-claimed player
+import time as _t
+_c = S.load_config()
+_c["wager_link_codes"] = {"AAA111": {"player": "Erol", "exp": _t.time() + 900},
+                          "BBB222": {"player": "Erol", "exp": _t.time() + 900},
+                          "CCC333": {"player": "Erol", "exp": _t.time() + 900}}
+_c["wager_links"] = {}
+S.save_config(_c)
+r1 = S.discord_command("linkdiscord", {"code": "AAA111"}, "uid-A", "i1")
+ck("link: first Discord account claims the name", "linked" in (r1 or "").lower(), r1)
+r2 = S.discord_command("linkdiscord", {"code": "BBB222"}, "uid-B", "i2")
+ck("link: a DIFFERENT account is BLOCKED from the claimed name", "already linked" in (r2 or "").lower(), r2)
+ck("link: the second account was NOT added to links", S.load_config().get("wager_links", {}).get("uid-B") is None, S.load_config().get("wager_links"))
+r3 = S.discord_command("linkdiscord", {"code": "CCC333"}, "uid-A", "i3")
+ck("link: the SAME account can still re-link (idempotent)", "linked" in (r3 or "").lower(), r3)
 os.chdir(_cwd)
 
 # ============================================================== PART B — HTTP SIGNATURE BOUNDARY (golden)

@@ -1538,6 +1538,10 @@ def discord_command(name, opts, uid=None, interaction_id=None):
             return "That link code is wrong or has expired. Get a fresh one: tracker → 💷 Bets → **Connect Discord**."
         player = rec["player"]
         lk = cfg.get("wager_links"); lk = lk if isinstance(lk, dict) else {}
+        holder = next((u for u, pl in lk.items() if pl == player and str(u) != str(uid)), None)
+        if holder is not None:        # first-come lock (same as the web claim): another account already holds this name
+            return ("**%s** is already linked to a different Discord account. If that's you, disconnect it first "
+                    "(tracker → 💷 Bets → **Disconnect**) or ask the organiser to reset it — then try the code again." % player)
         subs = cfg.get("discord_subs"); subs = subs if isinstance(subs, dict) else {}
         lk[str(uid)] = player; subs[str(uid)] = player
         codes.pop(code, None)                         # single use
