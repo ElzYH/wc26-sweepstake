@@ -95,6 +95,9 @@ if python3 qa_http.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; pyt
 say "Idempotency + live-edge QA (no double bets; odds/settle/compute survive weird data)"
 if python3 qa_idempotency.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_idempotency.py 2>&1 | tail -16; FAIL=1; fi
 
+say "Guild-gate QA (only Discord members can claim a name; safe-off until configured; fails closed)"
+if python3 qa_guild.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_guild.py 2>&1 | tail -16; FAIL=1; fi
+
 say "Bot command tests"
 if python3 test_bot.py; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
 

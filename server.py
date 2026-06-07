@@ -857,6 +857,61 @@ def _oauth_enabled():
     return bool(c.get("discord_oauth_client_id") and c.get("discord_oauth_client_secret"))
 
 
+def _member_from_status(code):
+    """Map Discord's guild-member lookup HTTP status to a membership verdict:
+       True  = confirmed member, False = confirmed NOT a member (404),
+       None  = couldn't determine (bad token/intent 401/403, rate-limit 429, 5xx, network) -> fail closed but allow retry."""
+    if code == 200:
+        return True
+    if code == 404:
+        return False
+    return None
+
+
+def _is_guild_member(user_id, cfg=None):
+    """Ask Discord whether this user is in our server, using the bot token. Returns True / False / None
+    (None = couldn't check). Never raises. Needs the bot in the guild + 'Server Members Intent' enabled."""
+    cfg = cfg if cfg is not None else load_config()
+    token = (cfg.get("discord_bot_token") or "").strip()
+    guild = (cfg.get("discord_guild_id") or "").strip()
+    if not token or not guild or not user_id:
+        return None
+    url = "https://discord.com/api/v10/guilds/%s/members/%s" % (guild, user_id)
+    req = urllib.request.Request(url, headers={"Authorization": "Bot " + token,
+                                               "User-Agent": "WC26-Sweepstake/1.0 (+https://bbmsweepstake.co.uk)"})
+    try:
+        with urllib.request.urlopen(req, timeout=8) as r:
+            return _member_from_status(r.status)
+    except urllib.error.HTTPError as e:
+        return _member_from_status(e.code)
+    except Exception:
+        return None
+
+
+def _guild_gate_on(cfg):
+    """The membership gate is active only when a bot token AND guild id are configured (so a check is even
+    possible) and it hasn't been explicitly switched off. If they're not set, the gate is OFF automatically —
+    so deploying this can never lock anyone out of a site that isn't wired for it."""
+    return bool((cfg.get("discord_bot_token") or "").strip()
+                and (cfg.get("discord_guild_id") or "").strip()
+                and cfg.get("discord_guild_gate", True))
+
+
+def _guild_claim_check(user_id, cfg):
+    """Decision for whether a Discord account may claim a player name:
+       'ok'         -> allowed (gate off, or confirmed member)
+       'not_member' -> in our server check, they're NOT a member -> refuse
+       'unverified' -> couldn't check right now -> fail closed, ask them to retry."""
+    if not _guild_gate_on(cfg):
+        return "ok"
+    m = _is_guild_member(user_id, cfg)
+    if m is True:
+        return "ok"
+    if m is False:
+        return "not_member"
+    return "unverified"
+
+
 
 def _entry_sub(e):
     return e.get("sub", e) if isinstance(e, dict) else e
@@ -2277,6 +2332,7 @@ class Handler(BaseHTTPRequestHandler):
                 "wager_pins_set": bool(_wager_pins()),
                 "wager_pins_for": sorted(_wager_pins().keys()),
                 "discord_oauth": _oauth_enabled(),
+                "discord_guild_gate": _guild_gate_on(cfg),
                 "wager_budget": (wager_mod.STAGE_BUDGET if wager_mod is not None else None),
                 "free_bet": ((lambda dr: {"open": True, "id": dr["id"], "closes": dr["closes"], "stake": wager_mod.FREE_BET_STAKE,
                                           "claimed": sorted((cfg.get("free_bet_claims", {}).get(dr["id"]) or {}).keys())}
@@ -2714,6 +2770,13 @@ class Handler(BaseHTTPRequestHandler):
             player = str(body.get("player", "")).strip()
             if player not in players:
                 return self._send(400, json.dumps({"ok": False, "error": "Pick a valid player."}))
+            decision = _guild_claim_check(did, cfg)        # membership check happens OUTSIDE the lock (it's a network call)
+            if decision == "not_member":
+                return self._send(403, json.dumps({"ok": False, "not_member": True,
+                    "error": "To claim a name you need to be in the sweepstake's Discord server. Ask the organiser for an invite, then try again."}))
+            if decision == "unverified":
+                return self._send(503, json.dumps({"ok": False, "retry": True,
+                    "error": "Couldn't check your Discord membership just now — give it a moment and try again."}))
             with _lock:                            # atomic: re-read links inside the lock so two accounts can't grab the same name, and a concurrent write can't clobber it
                 cfg = load_config()
                 lk = cfg.get("wager_links") if isinstance(cfg.get("wager_links"), dict) else {}
