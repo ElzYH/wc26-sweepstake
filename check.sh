@@ -113,6 +113,9 @@ if python3 qa_integration.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAI
 say "Admin/IO QA (~51 checks: caps clamping, export/import round-trip + secret whitelist, hostile payloads)"
 if python3 qa_admin_io.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_admin_io.py 2>&1 | tail -28; FAIL=1; fi
 
+say "Claims/pins QA (~41 checks: passcode set/change/no-hijack, deterministic drops, one-per-person free claim)"
+if python3 qa_claims_pins.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_claims_pins.py 2>&1 | tail -24; FAIL=1; fi
+
 say "Guild-gate QA (only Discord members can claim a name; safe-off until configured; fails closed)"
 if python3 qa_guild.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_guild.py 2>&1 | tail -16; FAIL=1; fi
 
