@@ -3171,6 +3171,13 @@ class Handler(BaseHTTPRequestHandler):
                 settled = round((prow.get("points", 0) or 0) - (prow.get("live", 0) or 0), 1)
             nonce = str(body.get("nonce", "")).strip()[:64]
             with _lock:
+                try:        # re-read the fixture under the lock: a kickoff/void that landed since we looked can't slip a bet through
+                    _fm = next((m for m in json.load(open("results.json")).get("matches", [])
+                                if wager_mod.match_id(m) == match_id), None)
+                    if isinstance(_fm, dict):
+                        match = _fm
+                except Exception:
+                    pass
                 wlist = load_wagers()
                 dup = _dedup_wager(wlist, player, nonce)
                 if dup is not None:
@@ -3263,6 +3270,14 @@ class Handler(BaseHTTPRequestHandler):
                 settled = round((prow.get("points", 0) or 0) - (prow.get("live", 0) or 0), 1)
             nonce = str(body.get("nonce", "")).strip()[:64]
             with _lock:
+                try:        # refresh each leg's fixture under the lock so a just-kicked-off/voided leg can't slip in
+                    _fresh = {wager_mod.match_id(m): m for m in json.load(open("results.json")).get("matches", []) if isinstance(m, dict)}
+                    for _s in selections:
+                        _fm = _fresh.get(wager_mod.match_id(_s.get("match") or {}))
+                        if isinstance(_fm, dict):
+                            _s["match"] = _fm
+                except Exception:
+                    pass
                 wl = load_wagers()
                 dup = _dedup_wager(wl, player, nonce)
                 if dup is not None:

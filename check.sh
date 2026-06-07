@@ -110,14 +110,20 @@ if python3 qa_idempotency.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAI
 say "End-to-end integration QA (real HTTP bets, live settlement + scoring together, concurrent over the wire)"
 if python3 qa_integration.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_integration.py 2>&1 | tail -24; FAIL=1; fi
 
+say "Bet-race QA (~35 checks: kickoff/void flip rejects a bet — engine matrix + real-HTTP flip + concurrency around a flip)"
+if python3 qa_bet_race.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_bet_race.py 2>&1 | tail -30; FAIL=1; fi
+
 say "Admin/IO QA (~51 checks: caps clamping, export/import round-trip + secret whitelist, hostile payloads)"
 if python3 qa_admin_io.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_admin_io.py 2>&1 | tail -28; FAIL=1; fi
 
 say "Claims/pins QA (~41 checks: passcode set/change/no-hijack, deterministic drops, one-per-person free claim)"
 if python3 qa_claims_pins.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_claims_pins.py 2>&1 | tail -24; FAIL=1; fi
 
-say "Frontend QA (~31 checks: JS parses, XSS escaping, owner lookup, KO captions, 2-dp money)"
+say "Frontend QA (~58 checks: JS parses, XSS escaping, owner lookup, KO captions, 2-dp money, wheel draw, multi-page)"
 if python3 qa_frontend.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_frontend.py 2>&1 | tail -22; FAIL=1; fi
+
+say "Teams/odds integrity (~296 checks: per-team decimal/implied/american agree; favourite not inverted; composites usable)"
+if python3 qa_teams_integrity.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_teams_integrity.py 2>&1 | tail -20; FAIL=1; fi
 
 say "Discord QA (~34 checks: command dispatch + Ed25519 signature boundary — forged interactions rejected)"
 if python3 qa_discord.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_discord.py 2>&1 | tail -22; FAIL=1; fi

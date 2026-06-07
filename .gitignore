@@ -9,3 +9,7 @@ __pycache__/
 backups/
 .DS_Store
 .idea/
+config.json
+.env
+odds_*.txt
+*.key
