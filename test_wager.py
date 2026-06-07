@@ -67,6 +67,15 @@ def run():
     ck("2.999 clamps to 3.0 (round to 2dp)", ok and res["stake"] == 3.0, res)
     ok, res = wager.place([], "Erol", fx(), "HOME", 999, settled_points=99999, comp_home=80, comp_away=40)
     ck("over-max stake rejected", (not ok) and "Max stake" in res, res)
+    # non-numeric / junk stakes are rejected cleanly (no crash, nothing appended) — covers letters, empty, NaN, inf, mixed
+    for bad in ["abc", "", "   ", None, [], {}, "5abc", "1.2.3", "ten", "$5", float("nan"), float("inf"), "1e9999"]:
+        _w = []
+        try:
+            _ok, _res = wager.place(_w, "Erol", fx(), "HOME", bad, settled_points=999, comp_home=80, comp_away=40)
+            _crash = False
+        except Exception as e:
+            _ok, _res, _crash = True, e, True
+        ck("junk stake %r rejected, no wager, no crash" % (bad,), (_ok is False) and len(_w) == 0 and not _crash, (_ok, _res, len(_w)))
     # a big-odds underdog hitting the return cap — set an explicit cap since default is now unlimited
     _saved_mr = wager.MAX_RETURN
     wager.MAX_RETURN = 140

@@ -378,6 +378,10 @@ if len(server.load_wagers()) != 0:
 _dec = server.discord_command("bet", {"match": _t1, "team": _t1, "result": "win", "stake": 1.23}, uid="123")
 if "preview" not in _dec.lower() or "1.23" not in _dec:
     fails.append(("/bet decimals", "a 2-decimal stake wasn't accepted on Discord: %r" % _dec))
+# typing letters instead of a number is rejected cleanly on Discord (no crash, no bet)
+_lett = server.discord_command("bet", {"match": _t1, "team": _t1, "result": "win", "stake": "abc"}, uid="123")
+if "number" not in _lett.lower() or len(server.load_wagers()) != 0:
+    fails.append(("/bet non-numeric", "letters as a stake weren't rejected on Discord: %r" % _lett))
 # now actually place (this recomputes the tracker)
 _place = server.discord_command("bet", {"match": _t1, "team": _t1, "result": "win", "stake": 5, "confirm": True}, uid="123")
 _wl = server.load_wagers()
