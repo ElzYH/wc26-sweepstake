@@ -141,7 +141,7 @@ def live_strength(base, team, matches):
 
 def potential_return(stake, num, den):
     """Total returned if it wins = stake + profit (profit = stake * num/den). e.g. 5 @ 9/2 -> 27.5."""
-    return round(stake * (1.0 + num / den), 1)
+    return round(stake * (1.0 + num / den), 2)
 
 
 def match_id(m):
@@ -236,7 +236,7 @@ def budget_remaining(wagers, player, epoch, budget=STAGE_BUDGET):
             spent += w.get("stake", 0) or 0
         if st == "won":
             back += w.get("return", 0) or 0
-    return max(0.0, min(float(budget), round(budget - spent + back, 1)))
+    return max(0.0, min(float(budget), round(budget - spent + back, 2)))
 
 
 def free_bonus(player, wagers):
@@ -251,7 +251,7 @@ def available_points(player, settled_points, wagers):
     """Points a player can still stake: their earned points + their free points (starting bonus + claimed drops)
     + settled bet profit/loss - points already on open bets, floored at 0."""
     d = player_deltas(wagers).get(player, {})
-    return max(0.0, round(settled_points + free_bonus(player, wagers) + d.get("settled_net", 0.0) - d.get("pending_stake", 0.0), 1))
+    return max(0.0, round(settled_points + free_bonus(player, wagers) + d.get("settled_net", 0.0) - d.get("pending_stake", 0.0), 2))
 
 
 def leaderboard_net(player, wagers, bonus=None):
@@ -260,7 +260,7 @@ def leaderboard_net(player, wagers, bonus=None):
     only genuine winnings, and losses beyond the free points, move the leaderboard."""
     b = free_bonus(player, wagers) if bonus is None else float(bonus)
     net = player_deltas(wagers).get(player, {}).get("settled_net", 0.0)
-    return round(net + min(b, max(0.0, -net)), 1)
+    return round(net + min(b, max(0.0, -net)), 2)
 
 
 def grant_free_points(wagers, player, drop_id, amount=None, now=None):
@@ -278,7 +278,7 @@ def grant_free_points(wagers, player, drop_id, amount=None, now=None):
 def applied_points(base_points, player, wagers):
     """A player's displayed points once wagers are applied: base + leaderboard net (free-cushioned) - open stakes, floored at 0."""
     d = player_deltas(wagers).get(player, {})
-    return max(0.0, round(base_points + leaderboard_net(player, wagers) - d.get("pending_stake", 0.0), 1))
+    return max(0.0, round(base_points + leaderboard_net(player, wagers) - d.get("pending_stake", 0.0), 2))
 
 
 def place(wagers, player, match, selection, stake, settled_points, comp_home, comp_away, now=None, group_mid_ts=None):
@@ -297,7 +297,7 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
     if not can_bet_on(match, now):
         return False, "Betting on that game is closed — it has kicked off or finished."
     try:
-        stake = round(float(stake), 1)
+        stake = round(float(stake), 2)
     except (TypeError, ValueError):
         return False, "Enter a number of points to stake."
     if stake != stake or stake in (float("inf"), float("-inf")):   # NaN / inf guard
@@ -315,7 +315,7 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
     pending = d.get("pending_stake", 0.0)
     if pending + stake > cap + 1e-9:
         return False, ("You can have at most %d points riding on open bets at once — you've already got %g out there, "
-                       "so you can add %g more until one settles." % (cap, pending, round(max(0.0, cap - pending), 1)))
+                       "so you can add %g more until one settles." % (cap, pending, round(max(0.0, cap - pending), 2)))
     avail = available_points(player, settled_points, wagers)
     if stake > avail + 1e-9:
         return False, "You only have %g points available to stake." % avail
@@ -414,7 +414,7 @@ def settle(wagers, match, now=None):
                     dec = 1.0
                     for leg in won_legs:           # void legs drop out (odds treated as 1.0)
                         dec *= (1.0 + leg["num"] / leg["den"])
-                    rv = round(w["stake"] * dec, 1)
+                    rv = round(w["stake"] * dec, 2)
                     w["return"] = min(MAX_RETURN, rv) if MAX_RETURN is not None else rv
                     w["status"] = "won"; w["settled_at"] = ts; n += 1
             continue
@@ -455,7 +455,7 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
     if len(set(ids)) != len(ids):
         return False, "You can't pick the same game twice in one accumulator."
     try:
-        stake = round(float(stake), 1)
+        stake = round(float(stake), 2)
     except (TypeError, ValueError):
         return False, "Enter a number of points to stake."
     if stake != stake or stake in (float("inf"), float("-inf")):
@@ -478,7 +478,7 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
     pending = d.get("pending_stake", 0.0)
     if pending + stake > cap + 1e-9:
         return False, ("You can have at most %d points riding on open bets at once — you've already got %g out there, "
-                       "so you can add %g more until one settles." % (cap, pending, round(max(0.0, cap - pending), 1)))
+                       "so you can add %g more until one settles." % (cap, pending, round(max(0.0, cap - pending), 2)))
     avail = available_points(player, settled_points, wagers)
     if stake > avail + 1e-9:
         return False, "You only have %g points available to stake." % avail
@@ -502,7 +502,7 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
                      "home": s["match"].get("home"), "away": s["match"].get("away"),
                      "stage": s["match"].get("stage"), "num": o["num"], "den": o["den"], "frac": o["frac"]})
         dec *= o["decimal"]
-    ret = round(stake * dec, 1)
+    ret = round(stake * dec, 2)
     if MAX_RETURN is not None and ret > MAX_RETURN + 1e-9:
         return False, "That acca would return %g — the cap is %g per bet. Lower your stake." % (ret, MAX_RETURN)
     w = {"id": uuid.uuid4().hex[:12], "player": player, "type": "acca", "legs": legs, "epoch": epoch,
@@ -537,18 +537,18 @@ def stats(wagers):
         d = out.setdefault(w["player"], {"player": w["player"], "staked": 0.0, "won": 0.0, "lost": 0.0,
                                          "net": 0.0, "bets": 0, "open": 0, "biggest_win": 0.0})
         d["bets"] += 1
-        d["staked"] = round(d["staked"] + w.get("stake", 0), 1)
+        d["staked"] = round(d["staked"] + w.get("stake", 0), 2)
         st = w.get("status")
         if st == "pending":
             d["open"] += 1
         elif st == "won":
-            prof = round(w.get("return", 0) - w["stake"], 1)
-            d["won"] = round(d["won"] + prof, 1)
-            d["net"] = round(d["net"] + prof, 1)
+            prof = round(w.get("return", 0) - w["stake"], 2)
+            d["won"] = round(d["won"] + prof, 2)
+            d["net"] = round(d["net"] + prof, 2)
             d["biggest_win"] = max(d["biggest_win"], prof)
         elif st == "lost":
-            d["lost"] = round(d["lost"] + w["stake"], 1)
-            d["net"] = round(d["net"] - w["stake"], 1)
+            d["lost"] = round(d["lost"] + w["stake"], 2)
+            d["net"] = round(d["net"] - w["stake"], 2)
     return out
 
 

@@ -55,7 +55,16 @@ def run():
 
     # --- stake bounds + caps ---
     ok, res = wager.place([], "Erol", fx(), "HOME", 0.5, settled_points=999, comp_home=80, comp_away=40)
-    ck("below-minimum stake rejected", not ok, res)
+    ck("below-minimum stake rejected (min is 1)", not ok, res)
+    ck("MIN_STAKE is exactly 1", wager.MIN_STAKE == 1, wager.MIN_STAKE)
+    # 2 decimal places are allowed and preserved
+    ok, res = wager.place([], "Erol", fx(), "HOME", 1.23, settled_points=999, comp_home=80, comp_away=40)
+    ck("a 2-decimal stake (1.23) is accepted and stored exactly", ok and res["stake"] == 1.23, res)
+    # more than 2 decimals is clamped to 2 (not rejected, not left as a long float)
+    ok, res = wager.place([], "Erol", fx(), "HOME", 1.234, settled_points=999, comp_home=80, comp_away=40)
+    ck("a 3-decimal stake (1.234) is clamped to 1.23", ok and res["stake"] == 1.23, res)
+    ok, res = wager.place([], "Erol", fx(), "HOME", 2.999, settled_points=999, comp_home=80, comp_away=40)
+    ck("2.999 clamps to 3.0 (round to 2dp)", ok and res["stake"] == 3.0, res)
     ok, res = wager.place([], "Erol", fx(), "HOME", 999, settled_points=99999, comp_home=80, comp_away=40)
     ck("over-max stake rejected", (not ok) and "Max stake" in res, res)
     # a big-odds underdog hitting the return cap — set an explicit cap since default is now unlimited
@@ -211,7 +220,7 @@ def run():
         prod = 1.0
         for lg in res["legs"]:
             prod *= (1 + lg["num"] / lg["den"])
-        ck("acca odds multiply (return = stake x product)", res["return"] == round(5 * prod, 1),
+        ck("acca odds multiply (return = stake x product)", res["return"] == round(5 * prod, 2),
            (res["return"], round(5 * prod, 1)))
     ck("acca default leg limit is 3", wager.MAX_ACCA_LEGS == 3, wager.MAX_ACCA_LEGS)
     ck("acca rejects more than the leg limit",

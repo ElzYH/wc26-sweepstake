@@ -556,7 +556,7 @@ function renderBets(){
   const me=(DATA.players||[]).find(p=>p.name===BETPLAYER)||{};
   const avail=(me.bettable!=null)?Math.max(0,Math.round(me.bettable*10)/10):Math.max(0,Math.round((((me.points_settled||0)+(me.wager_net||0)-(me.wager_held||0)))*10)/10);
   const held=Math.max(0,Math.round((me.wager_held||0)*10)/10);
-  const headroom=Math.max(0,Math.round((caps.max_stake-held)*10)/10);
+  const headroom=Math.max(0,Math.round((caps.max_stake-held)*100)/100);
   const fx=(DATA.fixtures||[]).filter(m=>m.odds&&m.matchId).sort((a,b)=>(a.utcDate||'').localeCompare(b.utcDate||'')).slice(0,40);
   const SEL={HOME:'home',DRAW:'draw',AWAY:'away'};
   let h='';
@@ -628,7 +628,7 @@ function renderBets(){
       +'<div style="font-weight:600;margin-bottom:8px">🎰 '+ACCA.length+'-fold accumulator <span style="color:var(--muted);font-weight:400">· max stake '+accaCap+'</span></div>'
       +ACCA.map((l,i)=>{const fxp=fx.find(m=>m.matchId===l.matchId); const who=l.sel==='HOME'?(fxp?fxp.home:'home'):(l.sel==='AWAY'?(fxp?fxp.away:'away'):'Draw');
         return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>'+esc(who)+' <span style="color:var(--gold)">'+l.frac+'</span></span><button class="accarm" data-i="'+i+'" style="background:none;border:none;color:#ff7a7a;cursor:pointer">✕</button></div>';}).join('')
-      +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;border-top:1px solid var(--line);padding-top:8px"><input id="accaStake" type="number" min="'+caps.min_stake+'" max="'+Math.min(accaCap,avail)+'" step="0.5" placeholder="stake (pts)" style="width:120px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px">'
+      +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;border-top:1px solid var(--line);padding-top:8px"><input id="accaStake" type="number" min="'+caps.min_stake+'" max="'+Math.min(accaCap,avail)+'" step="0.01" placeholder="stake (pts)" style="width:120px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px">'
       +'<span id="accaReturn" style="color:var(--muted);font-size:13px">combined ~'+(Math.round(dec*100)/100)+'×</span>'
       +'<button id="accaPlace" class="mini cta">Place acca</button></div><div style="color:var(--muted);font-size:11.5px;margin-top:6px">Once placed, this acca is final — it can\'t be cancelled.</div></div>';
   }
@@ -637,7 +637,7 @@ function renderBets(){
     if(fxp){ const o=fxp.odds[BETPICK.sel], who=BETPICK.sel==='HOME'?fxp.home:(BETPICK.sel==='AWAY'?fxp.away:'Draw'); const smax=Math.min(fxp.maxStake||caps.max_stake, headroom);
       h+='<div style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
         +'<div style="font-size:13.5px;margin-bottom:8px">Bet on <b>'+esc(who)+'</b> @ <b style="color:var(--gold)">'+o.frac+'</b> <span style="color:var(--muted)">· max '+smax+'</span></div>'
-        +(smax<=0?'<div style="color:#ffb86b;font-size:13px">You\'ve hit the open-bet limit — wait for a bet to settle.</div>':('<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="betStake" type="number" min="'+caps.min_stake+'" max="'+Math.min(smax,avail)+'" step="0.5" placeholder="stake (pts)" style="width:120px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px">'
+        +(smax<=0?'<div style="color:#ffb86b;font-size:13px">You\'ve hit the open-bet limit — wait for a bet to settle.</div>':('<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="betStake" type="number" min="'+caps.min_stake+'" max="'+Math.min(smax,avail)+'" step="0.01" placeholder="stake (pts)" style="width:120px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px">'
         +'<span id="betReturn" style="color:var(--muted);font-size:13px"></span>'
         +'<button id="betPlace" class="mini cta">Place bet</button></div><div style="color:var(--muted);font-size:11.5px;margin-top:6px">Once placed, this bet is final — it can\'t be cancelled.</div>'))+'</div>';
     }
@@ -786,7 +786,7 @@ function refreshBetsLive(){
   loadMyBets(); loadAllBets();
   const caps=STATUS.wager_caps||{max_stake:30}; const me=(DATA.players||[]).find(p=>p.name===BETPLAYER); const av=document.getElementById('betAvail');
   if(me && av){ const avail=(me.bettable!=null)?Math.max(0,Math.round(me.bettable*10)/10):Math.max(0,Math.round((((me.points_settled||0)+(me.wager_net||0)-(me.wager_held||0)))*10)/10);
-    const head=Math.max(0,Math.round((caps.max_stake-Math.max(0,me.wager_held||0))*10)/10);
+    const head=Math.max(0,Math.round((caps.max_stake-Math.max(0,me.wager_held||0))*100)/100);
     av.textContent=Math.min(avail,head); }
 }
 function betCardHTML(w, opts){

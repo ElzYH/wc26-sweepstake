@@ -374,6 +374,10 @@ if not _mc or not any(_t1.lower() in (c.get("name", "").lower()) for c in _mc):
 # none of those previews placed anything yet
 if len(server.load_wagers()) != 0:
     fails.append(("/bet", "a preview accidentally placed a bet: %d wagers" % len(server.load_wagers())))
+# a 2-decimal stake works through Discord too (shared engine) — preview shows it, doesn't reject
+_dec = server.discord_command("bet", {"match": _t1, "team": _t1, "result": "win", "stake": 1.23}, uid="123")
+if "preview" not in _dec.lower() or "1.23" not in _dec:
+    fails.append(("/bet decimals", "a 2-decimal stake wasn't accepted on Discord: %r" % _dec))
 # now actually place (this recomputes the tracker)
 _place = server.discord_command("bet", {"match": _t1, "team": _t1, "result": "win", "stake": 5, "confirm": True}, uid="123")
 _wl = server.load_wagers()
