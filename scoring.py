@@ -372,9 +372,14 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
         most_cs = max(pcs, key=pcs.get) if max(pcs.values(), default=0) > 0 else None
         leaders = defaultdict(int)
         for st_ in results.get("standings", []):
+            if not isinstance(st_, dict) or not isinstance(st_.get("table"), list):
+                continue
             for r in st_["table"]:
-                if r.get("position") == 1 and owner.get(r["team"], "-") not in ("-", "—"):
-                    leaders[owner[r["team"]]] += 1
+                if not isinstance(r, dict):
+                    continue
+                tm = r.get("team")
+                if r.get("position") == 1 and tm and owner.get(tm, "-") not in ("-", "—"):
+                    leaders[owner[tm]] += 1
         gl = max(leaders, key=leaders.get) if leaders else None
     fin_goals = sum((m["homeScore"] or 0) + (m["awayScore"] or 0)
                     for m in finished if m.get("homeScore") is not None)
@@ -426,12 +431,13 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
             "leaderboards": {"points": board("points"), "survival": board("survival"), "hybrid": board("hybrid"), "fair": board("fair")},
             "champion": champ_board, "strength": strength_board, "stats": stats,
             "players": players_out,
-            "groups": [{"group": s["group"],
-                        "table": [{**r, "owner": owner.get(r["team"], "—"),
-                                   "tier": teams.get(r["team"], {}).get("tier"),
-                                   "composite": teams.get(r["team"], {}).get("composite", 0),
-                                   "implied": teams.get(r["team"], {}).get("implied_prob", 0)} for r in s["table"]]}
-                       for s in results.get("standings", [])],
+            "groups": [{"group": s.get("group"),
+                        "table": [{**r, "owner": owner.get(r.get("team"), "—"),
+                                   "tier": teams.get(r.get("team"), {}).get("tier"),
+                                   "composite": teams.get(r.get("team"), {}).get("composite", 0),
+                                   "implied": teams.get(r.get("team"), {}).get("implied_prob", 0)}
+                                  for r in s["table"] if isinstance(r, dict)]}
+                       for s in results.get("standings", []) if isinstance(s, dict) and isinstance(s.get("table"), list)],
             "fixtures": [{"utcDate": m.get("utcDate"), "stage": m.get("stage"), "group": m.get("group"),
                           "status": m.get("status"), "home": m.get("home"), "away": m.get("away"),
                           "homeOwner": owner.get(m.get("home"), "—"), "awayOwner": owner.get(m.get("away"), "—"),

@@ -86,8 +86,14 @@ if python3 qa_betting_deep.py >/dev/null; then echo "  ok"; else echo "  FAIL"; 
 say "Deep scoring QA (~60 checks: point math, ownership, live points, survival, NO infinity/negative/crash)"
 if python3 qa_scoring_deep.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_scoring_deep.py | tail -24; FAIL=1; fi
 
+say "Deep survival/forecast QA (~66 checks: alive/out, furthest-stage, champion odds, leaderboards, churn)"
+if python3 qa_survival_deep.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_survival_deep.py | tail -24; FAIL=1; fi
+
 say "Concurrency QA (free claims strictly one-per-player-per-drop under load)"
 if python3 qa_concurrency.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_concurrency.py | tail -16; FAIL=1; fi
+
+say "Bet-concurrency QA (~25 checks: simultaneous bets can't overspend/breach caps/go negative)"
+if python3 qa_concurrency_bets.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_concurrency_bets.py | tail -20; FAIL=1; fi
 
 say "Settlement QA (FT, extra time, penalty shootout, abandoned, glitch guard)"
 if python3 qa_settlement.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_settlement.py | tail -20; FAIL=1; fi
@@ -100,6 +106,9 @@ if python3 qa_http.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; pyt
 
 say "Idempotency + live-edge QA (no double bets; odds/settle/compute survive weird data)"
 if python3 qa_idempotency.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_idempotency.py 2>&1 | tail -16; FAIL=1; fi
+
+say "End-to-end integration QA (real HTTP bets, live settlement + scoring together, concurrent over the wire)"
+if python3 qa_integration.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_integration.py 2>&1 | tail -24; FAIL=1; fi
 
 say "Guild-gate QA (only Discord members can claim a name; safe-off until configured; fails closed)"
 if python3 qa_guild.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_guild.py 2>&1 | tail -16; FAIL=1; fi
