@@ -1,7 +1,7 @@
 {
   "tournament": "FIFA World Cup 2026",
   "fifa_source": "football-ranking.com live table, 10 June 2026",
-  "odds_source": "BetMGM outright winner (via Yahoo Sports), late-Apr 2026",
+  "odds_source": "BetMGM outright winner (via Yahoo Sports), late-Apr 2026; outright display refreshed to market consensus 7 Jun 2026 (Spain favourite). Match-betting composites unchanged.",
   "blend": {
     "w_fifa": 0.65,
     "w_odds": 0.35,
@@ -41,9 +41,9 @@
   "teams": [
     {
       "name": "France",
-      "american_odds": 450,
-      "decimal_odds": 5.5,
-      "implied_prob": 0.1818,
+      "american_odds": 500,
+      "decimal_odds": 6.0,
+      "implied_prob": 0.1667,
       "fifa_points": 1877.32,
       "confederation": "UEFA",
       "group": "I",
@@ -56,9 +56,9 @@
     },
     {
       "name": "Spain",
-      "american_odds": 500,
-      "decimal_odds": 6.0,
-      "implied_prob": 0.1667,
+      "american_odds": 450,
+      "decimal_odds": 5.5,
+      "implied_prob": 0.1818,
       "fifa_points": 1876.4,
       "confederation": "UEFA",
       "group": "H",
