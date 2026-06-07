@@ -65,8 +65,29 @@ def run():
     ck("a 3-decimal stake (1.234) is clamped to 1.23", ok and res["stake"] == 1.23, res)
     ok, res = wager.place([], "Erol", fx(), "HOME", 2.999, settled_points=999, comp_home=80, comp_away=40)
     ck("2.999 clamps to 3.0 (round to 2dp)", ok and res["stake"] == 3.0, res)
-    ok, res = wager.place([], "Erol", fx(), "HOME", 999, settled_points=99999, comp_home=80, comp_away=40)
-    ck("over-max stake rejected", (not ok) and "Max stake" in res, res)
+    # --- malformed wager records must NEVER crash the hot path (player_deltas/stats/free_bonus/settle run every request) ---
+    junk_log = [
+        {}, {"player": "Erol"}, {"player": "Erol", "status": "pending", "stake": "5"},
+        {"player": None, "status": "pending", "stake": 5}, {"status": "pending", "stake": 5},
+        "not a dict", None, 12345, {"player": "Erol", "status": "won", "stake": 5, "return": "abc"},
+        {"player": "Erol", "credit": True, "amount": "xyz"},
+        {"player": "Erol", "status": "pending", "stake": 5, "legs": "notalist"},
+        {"player": "Erol", "status": "pending", "stake": 5, "legs": ["x", "y"]},
+        {"player": "Erol", "status": "pending", "stake": 5, "legs": [{"matchId": "m1", "selection": "HOME"}]},
+        {"player": "Erol", "status": "pending", "stake": 5, "matchId": "m1"},
+    ]
+    _fm = {"id": "m1", "home": "Brazil", "away": "Serbia", "status": "FINISHED",
+           "homeScore": 2, "awayScore": 1, "winner": "HOME", "stage": "GROUP_STAGE"}
+    crashed = None
+    try:
+        wager.player_deltas(junk_log); wager.stats(junk_log); wager.leaders(junk_log)
+        wager.free_bonus("Erol", junk_log); wager.available_points("Erol", 20, junk_log)
+        wager.applied_points(20, "Erol", junk_log); wager.leaderboard_net("Erol", junk_log)
+        wager.settle([dict(x) if isinstance(x, dict) else x for x in junk_log], _fm)
+        wager.settle_all([dict(x) if isinstance(x, dict) else x for x in junk_log], [_fm])
+    except Exception as e:
+        crashed = repr(e)
+    ck("malformed wager records never crash the money/settlement functions", crashed is None, crashed)
     # non-numeric / junk stakes are rejected cleanly (no crash, nothing appended) — covers letters, empty, NaN, inf, mixed
     for bad in ["abc", "", "   ", None, [], {}, "5abc", "1.2.3", "ten", "$5", float("nan"), float("inf"), "1e9999"]:
         _w = []

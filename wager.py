@@ -77,8 +77,16 @@ def _nearest_fraction(decimal):
 
 def _fair_probs(ch, ca):
     """Home/draw/away probabilities from team strength — same shape as the tracker's win-prob model."""
-    ch = (ch or 40) + 1
-    ca = (ca or 40) + 1
+    def _fin(x):
+        try:
+            x = float(x)
+        except (TypeError, ValueError):
+            return 40.0
+        if x != x or x in (float("inf"), float("-inf")) or x < 0:   # NaN / inf / negative -> neutral default
+            return 40.0
+        return x
+    ch = _fin(ch) + 1
+    ca = _fin(ca) + 1
     pw = ch / (ch + ca)
     edge = abs(pw - 0.5)
     pd = max(0.12, 0.30 - edge * 0.55)
@@ -115,6 +123,12 @@ def team_form(team, matches):
         hs, as_ = m.get("homeScore"), m.get("awayScore")
         if hs is None or as_ is None:
             continue
+        try:
+            hs = float(hs); as_ = float(as_)
+        except (TypeError, ValueError):
+            continue                                # a non-numeric score (bad data) can't poison the odds
+        if hs != hs or as_ != as_ or hs in (float("inf"), float("-inf")) or as_ in (float("inf"), float("-inf")):
+            continue                                # NaN / inf guard
         is_home = (m.get("home") == team)
         gf, ga = (hs, as_) if is_home else (as_, hs)
         side = _winner_side(m)
@@ -136,7 +150,13 @@ def team_form(team, matches):
 def live_strength(base, team, matches):
     """A team's base FIFA strength nudged by current tournament form (bounded). Used only for pricing odds —
     never touches an already-placed bet, which keeps the odds it was struck at."""
-    return (base or 0) * team_form(team, matches)
+    try:
+        b = float(base or 0)
+    except (TypeError, ValueError):
+        b = 0.0
+    if b != b or b in (float("inf"), float("-inf")):   # NaN / inf -> treat as unknown strength
+        b = 0.0
+    return b * team_form(team, matches)
 
 
 def potential_return(stake, num, den):
@@ -181,25 +201,47 @@ def can_bet_on(match, now=None):
     return True
 
 
+def _num(x, default=0.0):
+    """Safe float: a non-numeric / NaN / inf value (corrupt or old-format record) becomes the default
+    instead of throwing. Used wherever the wager log feeds money math on the hot path."""
+    try:
+        v = float(x)
+    except (TypeError, ValueError):
+        return default
+    if v != v or v in (float("inf"), float("-inf")):
+        return default
+    return v
+
+
 def player_deltas(wagers):
-    """Per-player effect of the wager log: settled profit/loss, points held in open bets, open count."""
+    """Per-player effect of the wager log: settled profit/loss, points held in open bets, open count.
+    Defensive: a malformed record (not a dict, missing/blank player, non-numeric stake/return) is skipped
+    rather than crashing — this runs on EVERY request, so one bad row must never take down the
+    leaderboard, the odds, or /api/status."""
     out = {}
     for w in wagers or []:
+        if not isinstance(w, dict):
+            continue
+        player = w.get("player")
+        if not player or not isinstance(player, str):
+            continue
         if w.get("credit"):                              # a claimed free-points drop: not a bet (see free_bonus); skip
             continue
-        d = out.setdefault(w["player"], {"settled_net": 0.0, "pending_stake": 0.0, "pending_count": 0})
+        stake = _num(w.get("stake"))
+        ret = _num(w.get("return"))
+        d = out.setdefault(player, {"settled_net": 0.0, "pending_stake": 0.0, "pending_count": 0})
         st = w.get("status")
         if w.get("free"):                                # a free bet: only a WIN matters, and only its profit counts.
-            if st == "won":                              # the 5-point stake was never the player's, so credit return - stake (profit).
-                d["settled_net"] += (w.get("return", 0) - w["stake"])
+            if st == "won":                              # the stake was never the player's, so credit return - stake (profit).
+                d["settled_net"] += (ret - stake)
             continue                                     # pending/lost/void free bets hold nothing and cost nothing
         if st == "pending":
-            d["pending_stake"] += w["stake"]
+            d["pending_stake"] += stake
             d["pending_count"] += 1
         elif st == "won":
-            d["settled_net"] += (w.get("return", 0) - w["stake"])   # profit only (stake is returned)
+            d["settled_net"] += (ret - stake)            # profit only (stake is returned)
         elif st == "lost":
-            d["settled_net"] -= w["stake"]
+            d["settled_net"] -= stake
         # "void" -> no effect (stake refunded)
     return out
 
@@ -243,7 +285,8 @@ def free_bonus(player, wagers):
     """A player's total FREE betting points: the 5 everyone starts with, plus 5 for each free-points drop they've
     claimed. These never sit on the leaderboard — they let you bet, and they cushion the first `free_bonus` of net
     losses (so only genuine winnings, and losses beyond your free points, move the leaderboard)."""
-    extra = sum(w.get("amount", 0) for w in (wagers or []) if w.get("credit") and w.get("player") == player)
+    extra = sum(_num(w.get("amount")) for w in (wagers or [])
+                if isinstance(w, dict) and w.get("credit") and w.get("player") == player)
     return float(STARTING_BONUS + extra)
 
 
@@ -390,10 +433,12 @@ def settle(wagers, match, now=None):
     ts = int(now if now is not None else time.time())
     n = 0
     for w in wagers or []:
-        if w.get("status") != "pending":
+        if not isinstance(w, dict) or w.get("status") != "pending":
             continue
         legs = w.get("legs")
         if legs:                                   # ---- accumulator ----
+            if not isinstance(legs, list) or not all(isinstance(leg, dict) for leg in legs):
+                continue                           # malformed acca record — leave it untouched rather than crash
             touched = False
             for leg in legs:
                 if leg.get("matchId") == mid and not leg.get("result"):
@@ -413,8 +458,11 @@ def settle(wagers, match, now=None):
                 else:
                     dec = 1.0
                     for leg in won_legs:           # void legs drop out (odds treated as 1.0)
-                        dec *= (1.0 + leg["num"] / leg["den"])
-                    rv = round(w["stake"] * dec, 2)
+                        den = _num(leg.get("den"))
+                        num = _num(leg.get("num"))
+                        if den > 0:
+                            dec *= (1.0 + num / den)
+                    rv = round(_num(w.get("stake")) * dec, 2)
                     w["return"] = min(MAX_RETURN, rv) if MAX_RETURN is not None else rv
                     w["status"] = "won"; w["settled_at"] = ts; n += 1
             continue
@@ -427,7 +475,10 @@ def settle(wagers, match, now=None):
             continue
         if side == "DRAW" and _norm_stage(w.get("stage")) != "GROUP_STAGE":
             continue                     # knockout shouldn't end level; don't settle side bets as lost on glitchy data — wait for winner/pens
-        if w["selection"] == side:
+        sel = w.get("selection")
+        if sel not in SELECTIONS:
+            continue                     # malformed single (no valid selection) — don't settle it
+        if sel == side:
             w["status"] = "won"
         else:
             w["status"] = "lost"; w["return"] = 0
@@ -529,26 +580,35 @@ def betting_locked(tracker):
 
 
 def stats(wagers):
-    """Per-player wager stats for the analysis board: staked, profit won, points lost, biggest win, counts."""
+    """Per-player wager stats for the analysis board: staked, profit won, points lost, biggest win, counts.
+    Skips malformed records (not a dict, blank player) and coerces money safely, so the analysis board
+    never crashes on a bad row."""
     out = {}
     for w in wagers or []:
+        if not isinstance(w, dict):
+            continue
+        player = w.get("player")
+        if not player or not isinstance(player, str):
+            continue
         if w.get("credit") or w.get("status") == "void":
             continue                              # free-points credits and cancelled/voided bets aren't real bets — don't tally them
-        d = out.setdefault(w["player"], {"player": w["player"], "staked": 0.0, "won": 0.0, "lost": 0.0,
-                                         "net": 0.0, "bets": 0, "open": 0, "biggest_win": 0.0})
+        stake = _num(w.get("stake"))
+        ret = _num(w.get("return"))
+        d = out.setdefault(player, {"player": player, "staked": 0.0, "won": 0.0, "lost": 0.0,
+                                    "net": 0.0, "bets": 0, "open": 0, "biggest_win": 0.0})
         d["bets"] += 1
-        d["staked"] = round(d["staked"] + w.get("stake", 0), 2)
+        d["staked"] = round(d["staked"] + stake, 2)
         st = w.get("status")
         if st == "pending":
             d["open"] += 1
         elif st == "won":
-            prof = round(w.get("return", 0) - w["stake"], 2)
+            prof = round(ret - stake, 2)
             d["won"] = round(d["won"] + prof, 2)
             d["net"] = round(d["net"] + prof, 2)
             d["biggest_win"] = max(d["biggest_win"], prof)
         elif st == "lost":
-            d["lost"] = round(d["lost"] + w["stake"], 2)
-            d["net"] = round(d["net"] - w["stake"], 2)
+            d["lost"] = round(d["lost"] + stake, 2)
+            d["net"] = round(d["net"] - stake, 2)
     return out
 
 
