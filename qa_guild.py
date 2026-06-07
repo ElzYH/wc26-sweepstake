@@ -55,9 +55,65 @@ print("\n=== _is_guild_member returns None when not configured (no crash, no cal
 ck("no token/guild -> None without any network call", S._is_guild_member("u1", {}) is None, "")
 ck("missing user id -> None", S._is_guild_member("", {"discord_bot_token": "x", "discord_guild_id": "1"}) is None, "")
 
-print("\n=== status exposes the gate flag (off by default in this unconfigured test) ===")
-# the gate is off here (no token/guild in the test config), so existing claim flow is unchanged
-ck("gate is off for an unconfigured server", S._guild_gate_on(S.load_config()) is False, "")
+print("\n=== blocklist: a blocked account can never claim ===")
+ck("_is_blocked false when not on the list", S._is_blocked("u9", {"discord_blocklist": ["u1"]}) is False, "")
+ck("_is_blocked true when on the list", S._is_blocked("u1", {"discord_blocklist": ["u1"]}) is True, "")
+ck("_is_blocked matches numeric ids stored as ints too", S._is_blocked("123", {"discord_blocklist": [123]}) is True, "")
+# decision: blocked beats everything, even a confirmed member
+orig = S._is_guild_member
+try:
+    S._is_guild_member = lambda uid, cfg=None: True
+    ck("blocked account refused even if it IS a guild member", S._guild_claim_check("u1", {"discord_blocklist": ["u1"], "discord_bot_token": "x", "discord_guild_id": "1"}) == "blocked", "")
+    ck("a non-blocked member is still ok", S._guild_claim_check("u2", {"discord_blocklist": ["u1"], "discord_bot_token": "x", "discord_guild_id": "1"}) == "ok", "")
+finally:
+    S._is_guild_member = orig
+ck("blocked refused even when the gate is OFF", S._guild_claim_check("u1", {"discord_blocklist": ["u1"]}) == "blocked", "")
+
+print("\n=== HTTP: the new admin controls exist, are gated, and behave ===")
+import urllib.request, urllib.error, threading, subprocess, socket, time as _t
+def _free_port():
+    s = socket.socket(); s.bind(("127.0.0.1", 0)); p = s.getsockname()[1]; s.close(); return p
+PORT = _free_port(); BASE = "http://127.0.0.1:%d" % PORT; KEY = "QA_ADMIN_KEY_1234567"
+json.dump({"configured": True, "players": ["Erol", "James"], "admin_key": KEY,
+           "wager_links": {"111": "Erol", "999": "James"}, "wagering_enabled": True},
+          open(os.path.join(TMP, "config.json"), "w"))
+def req(method, path, body=None):
+    data = json.dumps(body).encode() if body is not None else None
+    r = urllib.request.Request(BASE + path, data=data, method=method, headers={"Content-Type": "application/json"} if data else {})
+    try:
+        with urllib.request.urlopen(r, timeout=5) as resp: return resp.status, resp.read().decode()
+    except urllib.error.HTTPError as e: return e.code, e.read().decode()
+proc = subprocess.Popen([sys.executable, os.path.join(TMP, "server.py")],
+                        env=dict(os.environ, WC26_DATA=TMP, WC26_CONFIG=os.path.join(TMP, "config.json"), PORT=str(PORT), HOST="127.0.0.1", ADMIN_KEY=KEY),
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+try:
+    for _ in range(80):
+        try:
+            s, _b = req("GET", "/api/status")
+            if s == 200: break
+        except Exception: _t.sleep(0.1)
+    st, _ = req("POST", "/api/wager_links_admin", {})
+    ck("links_admin needs the admin key (403)", st == 403, st)
+    st, _ = req("POST", "/api/wager_block", {})
+    ck("wager_block needs the admin key (403)", st == 403, st)
+    st, b = req("POST", "/api/wager_links_admin", {"admin_key": KEY})
+    j = json.loads(b)
+    ck("links_admin lists the two current links", st == 200 and len(j.get("links", [])) == 2, b[:120])
+    st, b = req("POST", "/api/wager_block", {"admin_key": KEY, "discord_id": "111"})
+    ck("blocking id 111 succeeds and lists it", st == 200 and "111" in json.loads(b).get("blocked", []), b[:120])
+    st, b = req("POST", "/api/wager_links_admin", {"admin_key": KEY})
+    j = json.loads(b)
+    ck("blocking 111 also unlinked it (only James remains)", [L["player"] for L in j["links"]] == ["James"], j.get("links"))
+    st, b = req("POST", "/api/wager_block", {"admin_key": KEY, "discord_id": "abc"})
+    ck("block rejects a non-numeric id (400)", st == 400, b[:80])
+    st, b = req("POST", "/api/wager_unlink", {"admin_key": KEY, "discord_id": "999"})
+    ck("unlink by specific discord_id removes exactly that account", st == 200 and json.loads(b).get("removed") == 1, b[:80])
+    st, b = req("POST", "/api/wager_block", {"admin_key": KEY, "discord_id": "111", "action": "unblock"})
+    ck("unblock removes it from the list", st == 200 and "111" not in json.loads(b).get("blocked", []), b[:120])
+finally:
+    proc.terminate()
+    try: proc.wait(timeout=5)
+    except Exception: proc.kill()
 
 shutil.rmtree(TMP, ignore_errors=True)
 if FAILS:

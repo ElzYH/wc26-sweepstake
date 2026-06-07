@@ -897,11 +897,19 @@ def _guild_gate_on(cfg):
                 and cfg.get("discord_guild_gate", True))
 
 
+def _is_blocked(user_id, cfg):
+    """True if this Discord account has been blocked by the organiser (can never claim a name)."""
+    return str(user_id) in [str(x) for x in (cfg.get("discord_blocklist") or [])]
+
+
 def _guild_claim_check(user_id, cfg):
     """Decision for whether a Discord account may claim a player name:
+       'blocked'    -> the organiser has blocked this account -> always refuse
        'ok'         -> allowed (gate off, or confirmed member)
        'not_member' -> in our server check, they're NOT a member -> refuse
        'unverified' -> couldn't check right now -> fail closed, ask them to retry."""
+    if _is_blocked(user_id, cfg):
+        return "blocked"
     if not _guild_gate_on(cfg):
         return "ok"
     m = _is_guild_member(user_id, cfg)
@@ -2771,6 +2779,9 @@ class Handler(BaseHTTPRequestHandler):
             if player not in players:
                 return self._send(400, json.dumps({"ok": False, "error": "Pick a valid player."}))
             decision = _guild_claim_check(did, cfg)        # membership check happens OUTSIDE the lock (it's a network call)
+            if decision == "blocked":
+                return self._send(403, json.dumps({"ok": False, "blocked": True,
+                    "error": "This Discord account can't claim a name. If you think that's a mistake, contact the organiser."}))
             if decision == "not_member":
                 return self._send(403, json.dumps({"ok": False, "not_member": True,
                     "error": "To claim a name you need to be in the sweepstake's Discord server. Ask the organiser for an invite, then try again."}))
@@ -2809,19 +2820,60 @@ class Handler(BaseHTTPRequestHandler):
             save_config(cfg)
             log("self-unlinked betting for", player, "(%d account[s])" % len(removed))
             return self._send(200, json.dumps({"ok": True, "removed": len(removed)}))
-        if path == "/api/wager_unlink":            # admin-only: remove a player's Discord betting link (wrong account etc.)
+        if path == "/api/wager_unlink":            # admin-only: remove a Discord betting link (wrong account etc.) — by player OR by a specific account id
             if not key_ok(body):
                 return self._send(403, json.dumps({"ok": False, "need_key": True}))
             player = str(body.get("player", "")).strip()
+            did = str(body.get("discord_id", "")).strip()
+            with _lock:
+                cfg = load_config()
+                lk = cfg.get("wager_links") if isinstance(cfg.get("wager_links"), dict) else {}
+                if did:
+                    removed = [u for u in list(lk.keys()) if str(u) == did]          # one precise account
+                else:
+                    removed = [u for u, pl in list(lk.items()) if pl == player]       # every account on this name
+                for u in removed:
+                    lk.pop(u, None)
+                cfg["wager_links"] = lk
+                save_config(cfg)
+            log("admin unlinked betting", ("id=" + did) if did else ("player=" + player), "(%d account[s])" % len(removed))
+            return self._send(200, json.dumps({"ok": True, "removed": len(removed)}))
+        if path == "/api/wager_block":             # admin-only: block (or unblock) a Discord account from claiming a name
+            if not key_ok(body):
+                return self._send(403, json.dumps({"ok": False, "need_key": True}))
+            did = str(body.get("discord_id", "")).strip()
+            action = str(body.get("action", "block")).strip()
+            if not did or not did.isdigit():
+                return self._send(400, json.dumps({"ok": False, "error": "Enter the Discord account ID (a number) to block."}))
+            with _lock:
+                cfg = load_config()
+                bl = [str(x) for x in (cfg.get("discord_blocklist") or []) if str(x).strip()]
+                lk = cfg.get("wager_links") if isinstance(cfg.get("wager_links"), dict) else {}
+                if action == "unblock":
+                    bl = [x for x in bl if x != did]
+                else:
+                    if did not in bl:
+                        bl.append(did)
+                    if did in lk:                       # blocking also drops any name they currently hold
+                        lk.pop(did, None)
+                        cfg["wager_links"] = lk
+                cfg["discord_blocklist"] = bl
+                save_config(cfg)
+            log("admin %s discord account %s" % (action, did))
+            return self._send(200, json.dumps({"ok": True, "blocked": cfg.get("discord_blocklist", [])}))
+        if path == "/api/wager_links_admin":       # admin-only: see who's linked to each name (spot a wrong/stranger link)
+            if not key_ok(body):
+                return self._send(403, json.dumps({"ok": False, "need_key": True}))
             cfg = load_config()
             lk = cfg.get("wager_links") if isinstance(cfg.get("wager_links"), dict) else {}
-            removed = [u for u, pl in list(lk.items()) if pl == player]
-            for u in removed:
-                lk.pop(u, None)
-            cfg["wager_links"] = lk
-            save_config(cfg)
-            log("admin unlinked betting for", player, "(%d account[s])" % len(removed))
-            return self._send(200, json.dumps({"ok": True, "removed": len(removed)}))
+            gate = _guild_gate_on(cfg)
+            links = []
+            for uid, pl in lk.items():
+                member = _is_guild_member(uid, cfg) if gate else None   # True/False/None; None when we can't/needn't check
+                links.append({"discord_id": str(uid), "player": pl, "member": member})
+            return self._send(200, json.dumps({"ok": True, "links": links,
+                                                "blocked": [str(x) for x in (cfg.get("discord_blocklist") or [])],
+                                                "gate": gate}))
         if path == "/api/wager_void":               # admin-only: cancel/void open bet(s) — refunds the stake, no win/loss
             if not key_ok(body):
                 return self._send(403, json.dumps({"ok": False, "need_key": True, "error": "Admin key required."}))

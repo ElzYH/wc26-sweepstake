@@ -381,6 +381,20 @@
         </div>
         <div class="hint" id="setVoidMsg" style="color:var(--muted);font-size:12px;margin-top:8px"></div>
       </div>
+      <div id="acctSetup" style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
+        <p style="margin:0 0 8px"><b>👤 Accounts &amp; access.</b> See who's linked to each name and fix anything that's wrong. <b>Unlink</b> frees a name so the right person can re-claim it. <b>Block</b> bars a Discord account from ever claiming (use if a stranger gets in) — it also unlinks them. You stay in full control here.</p>
+        <button id="acctShow" class="mini">Show linked accounts</button>
+        <div id="acctList" style="margin-top:10px;font-size:13px"></div>
+        <div style="border-top:1px solid var(--line);margin-top:12px;padding-top:10px">
+          <p style="margin:0 0 6px;font-size:12.5px;color:var(--muted)">Block a specific Discord account ID (right-click a user in Discord → <b>Copy User ID</b>, with Developer Mode on):</p>
+          <div class="row2" style="align-items:flex-end">
+            <input id="acctBlockId" type="text" inputmode="numeric" placeholder="Discord account ID" style="flex:1;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px">
+            <button id="acctBlockBtn" class="mini" style="border-color:#b3343a;color:#ff9a9a">Block &amp; unlink</button>
+          </div>
+          <div id="acctBlocked" style="margin-top:8px;font-size:12.5px"></div>
+        </div>
+        <div class="hint" id="acctMsg" style="color:var(--muted);font-size:12px;margin-top:8px"></div>
+      </div>
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
         <p style="margin:0 0 8px"><b>Discord bot (slash commands).</b> Lets anyone in the server type <code>/leaderboard</code>, <code>/summary</code>, <code>/odds</code>, <code>/fixtures</code>, <code>/myteams</code> to pull live data. Read-only — no admin commands.</p>
         <p style="margin:0 0 8px;color:var(--muted);font-size:12px">Create an app at <b>discord.com/developers</b> → copy the three values below. Then set its <b>Interactions Endpoint URL</b> to:<br><code id="botEndpoint" style="word-break:break-all">https://YOUR-SITE/api/discord_interactions</code></p>
@@ -1874,6 +1888,53 @@ document.getElementById('setLogoutAll').onclick=async()=>{
     else m.textContent=j.ok?'Done — everyone has been logged out of Discord login.':(j.error||'Could not do that.');
   }catch(e){ m.textContent='Could not reach the server.'; }
 };
+// ---- Accounts & access (admin) ----
+function _acctMsg(t){ const m=document.getElementById('acctMsg'); if(m) m.textContent=t; }
+async function _acctShow(){
+  const box=document.getElementById('acctList'), bl=document.getElementById('acctBlocked');
+  _acctMsg('Loading linked accounts…'); if(box) box.innerHTML=''; if(bl) bl.innerHTML='';
+  try{
+    const j=await fetch('/api/wager_links_admin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:ADMINKEY})}).then(r=>r.json());
+    if(j.need_key){ ADMINKEY=''; _acctMsg('Session expired — reopen Settings and unlock again.'); return; }
+    if(!j.ok){ _acctMsg(j.error||'Could not load accounts.'); return; }
+    if(!j.links||!j.links.length){ box.innerHTML='<div style="color:var(--muted)">Nobody has linked a Discord account yet (everyone\u2019s on passcodes).</div>'; }
+    else{
+      box.innerHTML=j.links.map(L=>{
+        const warn = (L.member===false) ? ' <span style="color:#ff9a9a">⚠ not in your Discord</span>' : (L.member===true ? ' <span style="color:#7ee787">✓ in server</span>' : '');
+        return '<div style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:4px;gap:8px;flex-wrap:wrap"><span><b>'+esc(L.player)+'</b> ← <code style="font-size:11px">'+esc(L.discord_id)+'</code>'+warn+'</span><span style="display:flex;gap:6px"><button class="mini acctUnlink" data-id="'+esc(L.discord_id)+'">Unlink</button><button class="mini acctBlock" data-id="'+esc(L.discord_id)+'" style="border-color:#b3343a;color:#ff9a9a">Block</button></span></div>';
+      }).join('');
+      box.querySelectorAll('.acctUnlink').forEach(b=>b.onclick=()=>_acctUnlink(b.dataset.id));
+      box.querySelectorAll('.acctBlock').forEach(b=>b.onclick=()=>_acctBlock(b.dataset.id,'block'));
+    }
+    _renderBlocked(j.blocked||[]);
+    _acctMsg(j.gate ? 'Members-only claiming is ON — only people in your Discord can claim.' : 'Members-only claiming is OFF (set a bot token + server ID to enable).');
+  }catch(e){ _acctMsg('Could not reach the server.'); }
+}
+function _renderBlocked(list){
+  const bl=document.getElementById('acctBlocked'); if(!bl) return;
+  if(!list.length){ bl.innerHTML='<span style="color:var(--muted)">No blocked accounts.</span>'; return; }
+  bl.innerHTML='<b>Blocked:</b> '+list.map(id=>'<span style="display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:6px;padding:2px 6px;margin:2px"><code style="font-size:11px">'+esc(id)+'</code><button class="mini acctUnblock" data-id="'+esc(id)+'" style="padding:0 6px">unblock</button></span>').join('');
+  bl.querySelectorAll('.acctUnblock').forEach(b=>b.onclick=()=>_acctBlock(b.dataset.id,'unblock'));
+}
+async function _acctUnlink(did){
+  if(!confirm('Unlink this Discord account? It frees the name so it can be claimed again.')) return;
+  _acctMsg('Unlinking…');
+  try{ const j=await fetch('/api/wager_unlink',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({discord_id:did,admin_key:ADMINKEY})}).then(r=>r.json());
+    if(j.need_key){ ADMINKEY=''; _acctMsg('Session expired — unlock again.'); return; }
+    _acctMsg(j.ok?('Unlinked '+(j.removed||0)+' account(s).'):'Could not unlink.'); _acctShow();
+  }catch(e){ _acctMsg('Could not reach the server.'); }
+}
+async function _acctBlock(did,action){
+  if(action==='block' && !confirm('Block this Discord account from claiming any name? It also unlinks them now.')) return;
+  _acctMsg(action==='block'?'Blocking…':'Unblocking…');
+  try{ const j=await fetch('/api/wager_block',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({discord_id:did,action:action,admin_key:ADMINKEY})}).then(r=>r.json());
+    if(j.need_key){ ADMINKEY=''; _acctMsg('Session expired — unlock again.'); return; }
+    if(!j.ok){ _acctMsg(j.error||'Could not do that.'); return; }
+    _acctMsg(action==='block'?'Blocked.':'Unblocked.'); _acctShow();
+  }catch(e){ _acctMsg('Could not reach the server.'); }
+}
+document.getElementById('acctShow').onclick=_acctShow;
+document.getElementById('acctBlockBtn').onclick=()=>{ const v=(document.getElementById('acctBlockId').value||'').trim(); if(!/^[0-9]+$/.test(v)){ _acctMsg('Enter the numeric Discord account ID.'); return; } _acctBlock(v,'block'); document.getElementById('acctBlockId').value=''; };
 document.getElementById('setSaveInvite').onclick=async()=>{
   const m=document.getElementById('setInviteMsg'); const inv=document.getElementById('setInvite').value.trim();
   if(inv && !inv.startsWith('https://')){ m.textContent='Invite must start with https:// .'; return; }
