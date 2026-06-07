@@ -48,7 +48,7 @@
 </head>
 <body>
 <div class="wrap">
-  <nav class="topnav"><a class="brand" href="/tracker">⚽ WC26 Sweepstake</a><div class="navlinks"><a href="/setup">Setup</a><a href="/wheel">Reveal</a><a href="/tracker">Tracker</a><a href="/me" class="on">My teams</a></div></nav>
+  <nav class="topnav"><a class="brand" href="/tracker">⚽ WC26 Sweepstake</a><div class="navlinks"><a href="/setup">Setup</a><a href="/wheel">Reveal</a><a href="/watch">Watch</a><a href="/tracker">Tracker</a><a href="/me" class="on">My teams</a></div></nav>
   <div id="gate" style="display:none;text-align:center;padding:50px 20px;border:1px dashed var(--line);border-radius:18px;margin-top:10px">
     <div style="font-family:'Anton';font-size:30px;color:var(--gold);text-transform:uppercase">The draw hasn't run yet</div>
     <p style="color:var(--muted);max-width:460px;margin:14px auto 22px">No teams have been handed out. Once the draw is run, this page shows each player their teams.</p>
@@ -72,6 +72,7 @@ const SAMPLE={"updated_at":"sample","players":[{"name":"Erol","points":0,"surviv
 const TIER={1:cv('--t1'),2:cv('--t2'),3:cv('--t3'),4:cv('--t4')};
 const STAGE={GROUP_STAGE:"Group",LAST_32:"R32",LAST_16:"R16",QUARTER_FINALS:"QF",SEMI_FINALS:"SF",THIRD_PLACE:"3rd",FINAL:"Final",WINNER:"Champions"};
 function cv(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+function esc(s){return String(s==null?'':s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));}
 let DATA=SAMPLE;
 
 function paramPlayer(){return new URLSearchParams(location.search).get('player');}
@@ -86,7 +87,7 @@ async function load(){
   if(!ok){ gate.style.display=''; live.style.display='none'; return; }
   gate.style.display='none'; live.style.display='';
   const sel=document.getElementById('who');
-  sel.innerHTML=DATA.players.map(p=>`<option>${p.name}</option>`).join('');
+  sel.innerHTML=DATA.players.map(p=>`<option>${esc(p.name)}</option>`).join('');
   const want=paramPlayer();
   if(want && DATA.players.some(p=>p.name===want)) sel.value=want;
   sel.onchange=()=>{setURL(sel.value);render(sel.value);};
@@ -101,13 +102,13 @@ function render(name){
   const p=DATA.players.find(x=>x.name===name)||DATA.players[0];if(!p)return;
   document.getElementById('card').innerHTML=`
     <div class="top">
-      <div><div class="name">${p.name}</div><div class="rank">${rankOf(p.name)} · ${p.alive_teams}/${p.total_teams} still in</div></div>
+      <div><div class="name">${esc(p.name)}</div><div class="rank">${rankOf(p.name)} · ${p.alive_teams}/${p.total_teams} still in</div></div>
       <div class="scores"><b>${p.hybrid}</b><small>${p.points} pts · ${p.survival} surv</small></div>
     </div>
     <div class="tl">${p.teams.map(t=>`
       <div class="trow ${t.status==='out'?'out':''}">
         <span class="dot" style="background:${TIER[t.tier]}"></span>
-        <span>${t.name}</span><span class="stg">${STAGE[t.stage]||t.stage}</span><span class="tp">${t.points+t.survival}</span>
+        <span>${esc(t.name)}</span><span class="stg">${STAGE[t.stage]||t.stage}</span><span class="tp">${t.points+t.survival}</span>
       </div>`).join('')}</div>`;
   document.getElementById('foot').textContent='World Cup 2026 Sweepstake · updated '+(DATA.updated_at||'');
 }

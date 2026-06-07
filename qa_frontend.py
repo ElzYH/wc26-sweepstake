@@ -127,6 +127,74 @@ else:
         if s.startswith("PASS "):
             pass
 
+# ---- 5. other pages parse + escape names; the wheel draw allocates correctly ----
+print("\n== 4. Other pages (me/watch/setup/wheel) ==")
+for page in ("me.html", "watch.html", "setup.html", "wheel.html"):
+    p = os.path.join(REPO, page)
+    if not os.path.exists(p):
+        continue
+    h = open(p).read()
+    pjs = "\n".join(re.findall(r"<script>(.*?)</script>", h, re.S))
+    open("/tmp/_pg.js", "w").write(pjs)
+    rr = subprocess.run(["node", "--check", "/tmp/_pg.js"], capture_output=True, text=True)
+    ck("%s JS parses" % page, rr.returncode == 0, rr.stderr[:150])
+    ck("%s CSS braces balanced" % page, h.count("{") == h.count("}"), page)
+
+# me.html / watch.html must escape interpolated names (defence-in-depth XSS, like tracker.html)
+for page in ("me.html", "watch.html"):
+    pjs = "\n".join(re.findall(r"<script>(.*?)</script>", open(os.path.join(REPO, page)).read(), re.S))
+    ck("%s defines an esc() helper" % page, ("esc=" in pjs or "function esc(" in pjs), page)
+    ck("%s does not interpolate a raw ${p.name} into innerHTML" % page, "${p.name}" not in pjs, page)
+    ck("%s does not interpolate a raw ${t.name} into innerHTML" % page, "${t.name}" not in pjs, page)
+wjs = "\n".join(re.findall(r"<script>(.*?)</script>", open(os.path.join(REPO, "watch.html")).read(), re.S))
+ck("watch.html escapes the team chip name", "esc(t.team" in wjs, "team not escaped")
+ck("watch.html escapes the player name", "esc(p)" in wjs, "player not escaped")
+
+# ---- 6. the wheel's client-side 'fair' draw allocates every team exactly once ----
+print("\n== 5. Wheel client draw allocation ==")
+wheel_html = open(os.path.join(REPO, "wheel.html")).read()
+wheel_js = "\n".join(re.findall(r"<script>(.*?)</script>", wheel_html, re.S))
+def _extract_from(js, name):
+    i = js.find("function %s(" % name)
+    if i < 0: return None
+    j = js.find("{", i); depth = 0; k = j
+    while k < len(js):
+        if js[k] == "{": depth += 1
+        elif js[k] == "}":
+            depth -= 1
+            if depth == 0: return js[i:k+1]
+        k += 1
+    return None
+cf = _extract_from(wheel_js, "computeFair")
+ck("computeFair found in wheel.html", bool(cf), "")
+if cf:
+    wheel_test = cf + r"""
+let order, teams, perPlayer, fairAssign=null;
+let fails=[];
+function ck(n,c){ console.log((c?"  PASS ":"  FAIL ")+n); if(!c)fails.push(n); }
+function mkTeams(N){ const o=[]; for(let i=0;i<N;i++) o.push({name:"T"+i,composite:100-i,implied_prob:Math.max(0.001,(N-i)/(N*N)),tier:(i<4?1:i<12?2:i<24?3:4)}); return o; }
+function run(P,per){ order=[]; for(let i=0;i<P;i++)order.push("P"+i); perPlayer=per; teams=mkTeams(P*per); fairAssign=null; computeFair(); return fairAssign; }
+for(const [P,per] of [[5,8],[5,9],[4,10],[2,11],[8,4]]){
+  const a=run(P,per), N=P*per; const all=[]; let okc=!!a;
+  if(a){ for(const p of order){ if(!a[p]||a[p].length!==per) okc=false; (a[p]||[]).forEach(t=>all.push(t.name)); } }
+  ck("draw "+P+"x"+per+": each player gets "+per+" teams", okc);
+  ck("draw "+P+"x"+per+": all "+N+" teams assigned, none duplicated/dropped", a && all.length===N && new Set(all).size===N);
+}
+if(fails.length){ console.log("WHEELFAIL:"+fails.join(",")); process.exit(1);} console.log("wheelok");
+"""
+    open("/tmp/_wheel_test.js", "w").write(wheel_test)
+    rr = subprocess.run(["node", "/tmp/_wheel_test.js"], capture_output=True, text=True)
+    for line in rr.stdout.splitlines():
+        s = line.strip()
+        if s.startswith(("PASS", "FAIL")): print("  " + s)
+        elif line.startswith(("  PASS", "  FAIL")): print(line)
+    if rr.returncode != 0:
+        if "WHEELFAIL:" in rr.stdout:
+            for nm in rr.stdout.split("WHEELFAIL:", 1)[1].splitlines()[0].split(","):
+                if nm: FAILS.append("wheel: " + nm)
+        else:
+            FAILS.append("wheel draw test crashed: " + (rr.stderr[:120] or "?"))
+
 if FAILS:
     print("\nFRONTEND QA FAILED (%d): %s" % (len(FAILS), ", ".join(FAILS)))
     sys.exit(1)

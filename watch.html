@@ -65,6 +65,7 @@
   <div class="grid" id="grid"></div>
 <script>
 const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
 const TIER={1:'#ffc83d',2:'#3dd9c9',3:'#5b8def',4:'#8a93a6'};
 let lastN=-1, lastOrderN=-1;
 function render(st){
@@ -77,10 +78,10 @@ function render(st){
     tag.textContent='Pick order'; tag.classList.remove('wait');
     status.textContent='Deciding the pick order…';
     grid.innerHTML='<div class="orderlist">'+(order.length?order.map((p,i)=>
-      `<div class="orow${(i===order.length-1 && order.length>lastOrderN && lastOrderN>=0)?' new':''}"><span class="onum">${i+1}</span><span class="oname">${p}</span></div>`).join('')
+      `<div class="orow${(i===order.length-1 && order.length>lastOrderN && lastOrderN>=0)?' new':''}"><span class="onum">${i+1}</span><span class="oname">${esc(p)}</span></div>`).join('')
       :'<span class="empty">waiting for the first pick…</span>')+'</div>';
     if(order.length>lastOrderN && lastOrderN>=0){ const rev=$('reveal');
-      rev.innerHTML=`PICK #${order.length}<span class="arrow">▶</span><span class="who">${order[order.length-1]}</span>`; rev.classList.add('show'); }
+      rev.innerHTML=`PICK #${order.length}<span class="arrow">▶</span><span class="who">${esc(order[order.length-1])}</span>`; rev.classList.add('show'); }
     lastOrderN=order.length; lastN=-1;
     return;
   }
@@ -95,12 +96,12 @@ function render(st){
   const newest=(picks.length>lastN && lastN>=0)?picks.length-1:-1;
   grid.innerHTML=order.map(p=>{
     const mine=[]; picks.forEach((x,i)=>{ if(x.player===p) mine.push({...x,i}); });
-    const chips=mine.map(t=>`<div class="chip${t.i===newest?' new':''}"><span class="dot" style="background:${TIER[t.tier]||'#8a93a6'}"></span>${t.team||''}<span class="grp">GRP ${t.group||'?'}</span></div>`).join('');
+    const chips=mine.map(t=>`<div class="chip${t.i===newest?' new':''}"><span class="dot" style="background:${TIER[t.tier]||'#8a93a6'}"></span>${esc(t.team||'')}<span class="grp">GRP ${esc(t.group||'?')}</span></div>`).join('');
     const n=mine.length;
-    return `<div class="card"><h3>${p}<span class="pts">${n} team${n===1?'':'s'}</span></h3><div class="chips">${chips||'<span class="empty">waiting…</span>'}</div></div>`;
+    return `<div class="card"><h3>${esc(p)}<span class="pts">${n} team${n===1?'':'s'}</span></h3><div class="chips">${chips||'<span class="empty">waiting…</span>'}</div></div>`;
   }).join('');
   if(newest>=0){ const last=picks[newest]; const rev=$('reveal');
-    rev.innerHTML=`${last.team}<span class="arrow">▶</span><span class="who">${last.player}</span>`; rev.classList.add('show'); }
+    rev.innerHTML=`${esc(last.team)}<span class="arrow">▶</span><span class="who">${esc(last.player)}</span>`; rev.classList.add('show'); }
   if(st.done){ $('reveal').classList.remove('show'); }
   lastN=picks.length;
 }
