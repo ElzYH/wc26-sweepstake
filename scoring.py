@@ -101,6 +101,21 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
     draw = _load(draw_path)
     results = _load(results_path)
     matches = results.get("matches", [])
+    # Defensive normalisation: a malformed/partial match (hand-edited results.json, an old backup with a
+    # different schema, or a feed format change) must NEVER crash the whole rebuild — that would freeze the
+    # tracker for everyone. Drop non-dicts and guarantee the keys the engine reads downstream.
+    _clean = []
+    for _m in matches:
+        if not isinstance(_m, dict):
+            continue
+        _m = dict(_m)
+        _m.setdefault("status", "SCHEDULED")
+        _m.setdefault("stage", "GROUP_STAGE")
+        _m.setdefault("home", None)
+        _m.setdefault("away", None)
+        _m.setdefault("utcDate", None)
+        _clean.append(_m)
+    matches = _clean
     owner = {t["name"]: p["name"] for p in draw["players"] for t in p["teams"]}
 
     finished = [m for m in matches if m["status"] in FINAL_STATUSES]
@@ -300,7 +315,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
     god = max(gc, key=gc.get) if gc else None                               # group of death (strongest)
     bw = None
     for m in finished:
-        if m.get("homeScore") is None:
+        if m.get("homeScore") is None or m.get("awayScore") is None:
             continue
         marg = abs(m["homeScore"] - m["awayScore"])
         if bw is None or marg > bw[0]:
@@ -397,9 +412,9 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                                    "composite": teams.get(r["team"], {}).get("composite", 0),
                                    "implied": teams.get(r["team"], {}).get("implied_prob", 0)} for r in s["table"]]}
                        for s in results.get("standings", [])],
-            "fixtures": [{"utcDate": m["utcDate"], "stage": m["stage"], "group": m.get("group"),
-                          "status": m["status"], "home": m["home"], "away": m["away"],
-                          "homeOwner": owner.get(m["home"], "—"), "awayOwner": owner.get(m["away"], "—"),
+            "fixtures": [{"utcDate": m.get("utcDate"), "stage": m.get("stage"), "group": m.get("group"),
+                          "status": m.get("status"), "home": m.get("home"), "away": m.get("away"),
+                          "homeOwner": owner.get(m.get("home"), "—"), "awayOwner": owner.get(m.get("away"), "—"),
                           "homeScore": m.get("homeScore"), "awayScore": m.get("awayScore"),
                           "minute": m.get("minute"),
                           "aet": m.get("aet"), "shootout": m.get("shootout"),

@@ -516,6 +516,13 @@ function flag(n){const f=FLAGS[n];return f?f+" ":"";}
 function isDone(s){return s==='FINISHED'||s==='AWARDED';}   // a forfeit (AWARDED) is a played, decided result
 let BETPLAYER=null, BETPICK=null, BETMSG='', ACCAMODE=false, ACCA=[];
 let BETPIN_DRAFT=null;  // what's typed in the passcode box this session — preserved across re-renders but NEVER persisted until it's proven correct
+// Idempotency: one nonce per in-flight bet, reused if a placement is retried after a dropped
+// connection (so the server dedupes instead of double-betting), regenerated only on success.
+let BETNONCE=null, ACCANONCE=null;
+function _nonce(){
+  try{ if(crypto&&crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
+  return 'n-'+Date.now()+'-'+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2);
+}
 function betPin(p){ try{ return localStorage.getItem('wc26_betpin_'+p)||''; }catch(e){ return ''; } }
 function setBetPin(p,v){ try{ if(v) localStorage.setItem('wc26_betpin_'+p,v); else localStorage.removeItem('wc26_betpin_'+p); }catch(e){} }
 function renderBets(){
@@ -747,10 +754,11 @@ async function placeAcca(){
     if(!pin){ BETMSG='Enter your bet passcode.'; renderBets(); return; }
   }
   const ap=document.getElementById('accaPlace'); if(ap){ ap.disabled=true; ap.textContent='Placing…'; }
+  if(!ACCANONCE) ACCANONCE=_nonce();
   try{
     const j=await fetch('/api/place_acca',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({player:BETPLAYER,legs:ACCA.map(l=>({matchId:l.matchId,selection:l.sel})),stake:stake,pin:pin})}).then(r=>r.json());
-    if(j.ok){ setBetPin(BETPLAYER,pin); BETPIN_DRAFT=null; BETMSG='✓ Acca placed: '+stake+' on a '+j.wager.legs.length+'-fold (returns '+j.wager.return+' if it all wins).'; ACCA=[]; await load(); renderBets(); }
+      body:JSON.stringify({player:BETPLAYER,legs:ACCA.map(l=>({matchId:l.matchId,selection:l.sel})),stake:stake,pin:pin,nonce:ACCANONCE})}).then(r=>r.json());
+    if(j.ok){ ACCANONCE=null; setBetPin(BETPLAYER,pin); BETPIN_DRAFT=null; BETMSG='✓ Acca placed: '+stake+' on a '+j.wager.legs.length+'-fold (returns '+j.wager.return+' if it all wins).'; ACCA=[]; await load(); renderBets(); }
     else if(j.bad_pin){ setBetPin(BETPLAYER,''); BETMSG='Wrong passcode for '+BETPLAYER+'.'; renderBets(); }
     else { BETMSG=j.error||'Could not place that acca.'; renderBets(); }
   }catch(e){ BETMSG='Could not reach the server.'; renderBets(); }
@@ -822,10 +830,11 @@ async function placeBet(){
     if(!pin){ BETMSG='Enter your bet passcode (ask the organiser if you don\'t have it).'; renderBets(); return; }
   }
   const pb=document.getElementById('betPlace'); if(pb){ pb.disabled=true; pb.textContent='Placing…'; }
+  if(!BETNONCE) BETNONCE=_nonce();                       // reused if this placement is retried after a network drop
   try{
     const j=await fetch('/api/place_wager',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({player:BETPLAYER,matchId:BETPICK.matchId,selection:BETPICK.sel,stake:stake,pin:pin})}).then(r=>r.json());
-    if(j.ok){ setBetPin(BETPLAYER,pin); BETPIN_DRAFT=null; BETMSG='✓ Bet placed: '+stake+' @ '+j.wager.frac+' (returns '+j.wager.return+' if it wins).'; BETPICK=null; await load(); renderBets(); }
+      body:JSON.stringify({player:BETPLAYER,matchId:BETPICK.matchId,selection:BETPICK.sel,stake:stake,pin:pin,nonce:BETNONCE})}).then(r=>r.json());
+    if(j.ok){ BETNONCE=null; setBetPin(BETPLAYER,pin); BETPIN_DRAFT=null; BETMSG='✓ Bet placed: '+stake+' @ '+j.wager.frac+' (returns '+j.wager.return+' if it wins).'; BETPICK=null; await load(); renderBets(); }
     else if(j.bad_pin){ setBetPin(BETPLAYER,''); BETMSG='Wrong passcode for '+BETPLAYER+'. Check with the organiser.'; renderBets(); }
     else { BETMSG=j.error||'Could not place that bet.'; renderBets(); }
   }catch(e){ BETMSG='Could not reach the server.'; renderBets(); }

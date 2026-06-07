@@ -64,6 +64,8 @@ STATIC = {"tracker.html", "wheel.html", "setup.html", "me.html", "watch.html",
           "teams.json", "tracker_data.json", "draw_result.json", "sw.js",
           "manifest.webmanifest", "icon.svg"}
 _lock = threading.RLock()   # reentrant: callers may hold it while update_now re-acquires for the wager settle
+_last_manual_poll = [0.0]
+MANUAL_POLL_MIN_INTERVAL = 25.0   # seconds; cap manual /api/poll upstream fetches so spamming can't burn the API quota
 
 # ---- lightweight access log (admin-only): who's opening the site, in-memory, capped ----
 import collections
@@ -493,6 +495,18 @@ def save_wagers(w):
         except Exception:
             pass
     _atomic_write_json(WAGERS_FILE, w)
+
+
+def _dedup_wager(wl, player, nonce):
+    """Idempotency: if this player already placed a wager tagged with this nonce, return it instead of
+    creating another. Stops a dropped connection (client retry) or a Discord interaction retry from
+    turning one bet into two. The nonce is stored on the wager record, so it survives a restart too."""
+    if not nonce:
+        return None
+    for w in wl:
+        if w.get("nonce") == nonce and w.get("player") == player:
+            return w
+    return None
 
 
 _PIN_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"     # no ambiguous 0/O/1/I/L
@@ -1310,7 +1324,7 @@ def _bet_team_choices(partial=""):
     return out
 
 
-def discord_command(name, opts, uid=None):
+def discord_command(name, opts, uid=None, interaction_id=None):
     """Build a read-only reply for a slash command. No admin actions."""
     d = _load_tracker() or {}
     mode = _active_mode()
@@ -1562,9 +1576,15 @@ def discord_command(name, opts, uid=None):
         ca = wager_mod.live_strength((teams.get(m["away"], {}) or {}).get("composite", 0), m["away"], _M)
         with _lock:
             wl = load_wagers()
-            ok, res = wager_mod.place(wl, player, raw, selection, stake, settled, ch, ca, group_mid_ts=_group_mid_ts())
-            if ok:
-                save_wagers(wl)
+            dup = _dedup_wager(wl, player, interaction_id)     # Discord retries reuse the interaction id -> no double bet
+            if dup is not None:
+                ok, res = True, dup
+            else:
+                ok, res = wager_mod.place(wl, player, raw, selection, stake, settled, ch, ca, group_mid_ts=_group_mid_ts())
+                if ok:
+                    if interaction_id:
+                        res["nonce"] = interaction_id
+                    save_wagers(wl)
         if ok:
             update_now(load_config())
             _announce_bet(player, res)
@@ -1886,26 +1906,33 @@ def maybe_send_daily_digest(cfg):
 
 def poller():
     while True:
-        cfg = load_config()
-        mins = cfg.get("poll_minutes", 10)
-        if cfg.get("players") and cfg.get("token") and os.path.exists("draw_result.json"):
-            with _lock:
-                ok, err = update_now(cfg)
-            if not ok:
-                print("[poller] update failed:", err)
         try:
-            maybe_send_daily_digest(load_config())
+            cfg = load_config()
+            mins = cfg.get("poll_minutes", 10)
+            if cfg.get("players") and cfg.get("token") and os.path.exists("draw_result.json"):
+                try:
+                    with _lock:
+                        ok, err = update_now(cfg)
+                    if not ok:
+                        print("[poller] update failed:", err)
+                except Exception as e:
+                    print("[poller] update raised:", e)        # never let one bad cycle kill the polling thread
+            try:
+                maybe_send_daily_digest(load_config())
+            except Exception as e:
+                print("[digest] error:", e)
+            try:
+                _maybe_announce_free_drop(load_config())
+            except Exception as e:
+                print("[freebet] error:", e)
+            try:
+                backup_snapshot()                 # timestamped rollback history, ~every 6h
+            except Exception as e:
+                print("[backup] snapshot error:", e)
         except Exception as e:
-            print("[digest] error:", e)
-        try:
-            _maybe_announce_free_drop(load_config())
-        except Exception as e:
-            print("[freebet] error:", e)
-        try:
-            backup_snapshot()                 # timestamped rollback history, ~every 6h
-        except Exception as e:
-            print("[backup] snapshot error:", e)
-        time.sleep(max(60, mins * 60))
+            print("[poller] loop error (continuing):", e)       # the thread keeps running no matter what
+            mins = 10
+        time.sleep(max(60, (mins if isinstance(mins, (int, float)) else 10) * 60))
 
 
 def _maybe_announce_free_drop(cfg):
@@ -2298,7 +2325,7 @@ class Handler(BaseHTTPRequestHandler):
             opts = {o.get("name"): o.get("value") for o in (data.get("options") or [])}
             uid = ((body.get("member") or {}).get("user") or {}).get("id") or (body.get("user") or {}).get("id")
             try:
-                content = discord_command(data.get("name"), opts, uid)
+                content = discord_command(data.get("name"), opts, uid, body.get("id"))
             except Exception as e:
                 log("discord command error:", e)
                 content = "Something went wrong building that."
@@ -2864,11 +2891,20 @@ class Handler(BaseHTTPRequestHandler):
             settled = prow.get("points_settled")
             if settled is None:
                 settled = round((prow.get("points", 0) or 0) - (prow.get("live", 0) or 0), 1)
+            nonce = str(body.get("nonce", "")).strip()[:64]
             with _lock:
                 wlist = load_wagers()
-                ok, res = wager_mod.place(wlist, player, match, selection, stake, settled, ch, ca, group_mid_ts=_group_mid_ts())
-                if ok:
-                    save_wagers(wlist)
+                dup = _dedup_wager(wlist, player, nonce)
+                if dup is not None:
+                    ok, res = True, dup                 # idempotent: a retry of the same bet returns the original
+                else:
+                    ok, res = wager_mod.place(wlist, player, match, selection, stake, settled, ch, ca, group_mid_ts=_group_mid_ts())
+                    if ok:
+                        if nonce:
+                            res["nonce"] = nonce
+                        save_wagers(wlist)
+            if ok and dup is not None:
+                return self._send(200, json.dumps({"ok": True, "wager": res, "duplicate": True}))
             if ok:
                 update_now(load_config())          # recompute so the held stake shows immediately
                 log("wager placed:", player, selection, "on", match_id)
@@ -2947,11 +2983,20 @@ class Handler(BaseHTTPRequestHandler):
             settled = prow.get("points_settled")
             if settled is None:
                 settled = round((prow.get("points", 0) or 0) - (prow.get("live", 0) or 0), 1)
+            nonce = str(body.get("nonce", "")).strip()[:64]
             with _lock:
                 wl = load_wagers()
-                ok, res = wager_mod.place_acca(wl, player, selections, stake, settled)
-                if ok:
-                    save_wagers(wl)
+                dup = _dedup_wager(wl, player, nonce)
+                if dup is not None:
+                    ok, res = True, dup
+                else:
+                    ok, res = wager_mod.place_acca(wl, player, selections, stake, settled)
+                    if ok:
+                        if nonce:
+                            res["nonce"] = nonce
+                        save_wagers(wl)
+            if ok and dup is not None:
+                return self._send(200, json.dumps({"ok": True, "wager": res, "duplicate": True}))
             if ok:
                 update_now(load_config())
                 log("acca placed:", player, len(selections), "legs")
@@ -3035,10 +3080,22 @@ class Handler(BaseHTTPRequestHandler):
             log("admin key rotated")
             return self._send(200, json.dumps({"ok": True, "key": newk}))
         if path == "/api/poll":
+            # A manual "refresh now" nudge from the client. The background poller already refreshes on its
+            # own schedule, so throttle the actual upstream fetch hard: if we refreshed very recently, just
+            # acknowledge without hitting football-data again. This makes spamming /api/poll harmless — it
+            # can't burn the upstream rate limit or pile requests on the lock and stall live updates.
+            now = time.time()
+            if now - _last_manual_poll[0] < MANUAL_POLL_MIN_INTERVAL:
+                return self._send(200, json.dumps({"ok": True, "throttled": True}))
+            _last_manual_poll[0] = now
             cfg = load_config()
-            with _lock:
-                ok, err = update_now(cfg)
-            return self._send(200 if ok else 500, json.dumps({"ok": ok, "error": err}))
+            try:
+                with _lock:
+                    ok, err = update_now(cfg)
+            except Exception as e:
+                log("manual poll error:", e)
+                return self._send(200, json.dumps({"ok": False, "error": "refresh failed"}))
+            return self._send(200, json.dumps({"ok": bool(ok), "error": err if not ok else None}))
         if path == "/api/live_pick":
             if not key_ok(body):
                 return self._send(403, json.dumps({"ok": False, "need_key": True}))
