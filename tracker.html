@@ -554,8 +554,8 @@ function renderBets(){
   if(!BETPLAYER||!players.includes(BETPLAYER)) BETPLAYER=players[0];
   if(SESSION.logged_in && SESSION.player && players.includes(SESSION.player)) BETPLAYER=SESSION.player;   // logged in -> you can only be yourself
   const me=(DATA.players||[]).find(p=>p.name===BETPLAYER)||{};
-  const avail=(me.bettable!=null)?Math.max(0,Math.round(me.bettable*10)/10):Math.max(0,Math.round((((me.points_settled||0)+(me.wager_net||0)-(me.wager_held||0)))*10)/10);
-  const held=Math.max(0,Math.round((me.wager_held||0)*10)/10);
+  const avail=(me.bettable!=null)?Math.max(0,Math.round(me.bettable*100)/100):Math.max(0,Math.round((((me.points_settled||0)+(me.wager_net||0)-(me.wager_held||0)))*100)/100);
+  const held=Math.max(0,Math.round((me.wager_held||0)*100)/100);
   const headroom=Math.max(0,Math.round((caps.max_stake-held)*100)/100);
   const fx=(DATA.fixtures||[]).filter(m=>m.odds&&m.matchId).sort((a,b)=>(a.utcDate||'').localeCompare(b.utcDate||'')).slice(0,40);
   const SEL={HOME:'home',DRAW:'draw',AWAY:'away'};
@@ -742,7 +742,7 @@ function renderBets(){
       if(isNaN(s)||s<=0){ art.textContent='⚠ Stake must be more than 0.'; art.style.color='#ff9a9a'; if(ap)ap.disabled=true; return; }
       if(s<amn){ art.textContent='⚠ Minimum stake is '+amn+'.'; art.style.color='#ff9a9a'; if(ap)ap.disabled=true; return; }
       if(s>amx){ art.textContent='⚠ Most you can stake here is '+amx+'.'; art.style.color='#ffb86b'; if(ap)ap.disabled=true; return; }
-      const ret=Math.round(s*dec*10)/10;
+      const ret=Math.round(s*dec*100)/100;
       if(retCap&&ret>retCap+1e-9){ art.textContent='⚠ Would return '+ret+' — over the '+retCap+' cap. Lower the stake.'; art.style.color='#ffb86b'; if(ap)ap.disabled=true; return; }
       art.textContent='returns '+ret+' if all win'; art.style.color='var(--muted)'; if(ap)ap.disabled=false; };
     ast.oninput=updA; }
@@ -754,7 +754,7 @@ function renderBets(){
       if(isNaN(s)||s<=0){ rt.textContent='⚠ Stake must be more than 0.'; rt.style.color='#ff9a9a'; if(pb)pb.disabled=true; return; }
       if(s<mn){ rt.textContent='⚠ Minimum stake is '+mn+'.'; rt.style.color='#ff9a9a'; if(pb)pb.disabled=true; return; }
       if(s>mx){ rt.textContent='⚠ Most you can stake here is '+mx+'.'; rt.style.color='#ffb86b'; if(pb)pb.disabled=true; return; }
-      const sret=Math.round(s*(1+fr[0]/fr[1])*10)/10;
+      const sret=Math.round(s*(1+fr[0]/fr[1])*100)/100;
       if(retCap&&sret>retCap+1e-9){ rt.textContent='⚠ Would return '+sret+' — over the '+retCap+' cap. Lower the stake.'; rt.style.color='#ffb86b'; if(pb)pb.disabled=true; return; }
       rt.textContent='returns '+sret+' if it wins'; rt.style.color='var(--muted)'; if(pb)pb.disabled=false; };
     st.oninput=upd; upd(); }
@@ -785,7 +785,7 @@ function refreshBetsLive(){
   // live-update only the parts that change, so we NEVER wipe an in-progress stake or passcode the user is typing
   loadMyBets(); loadAllBets();
   const caps=STATUS.wager_caps||{max_stake:30}; const me=(DATA.players||[]).find(p=>p.name===BETPLAYER); const av=document.getElementById('betAvail');
-  if(me && av){ const avail=(me.bettable!=null)?Math.max(0,Math.round(me.bettable*10)/10):Math.max(0,Math.round((((me.points_settled||0)+(me.wager_net||0)-(me.wager_held||0)))*10)/10);
+  if(me && av){ const avail=(me.bettable!=null)?Math.max(0,Math.round(me.bettable*100)/100):Math.max(0,Math.round((((me.points_settled||0)+(me.wager_net||0)-(me.wager_held||0)))*100)/100);
     const head=Math.max(0,Math.round((caps.max_stake-Math.max(0,me.wager_held||0))*100)/100);
     av.textContent=Math.min(avail,head); }
 }
@@ -806,7 +806,7 @@ function betCardHTML(w, opts){
     const pick=w.selection==='HOME'?w.home:(w.selection==='AWAY'?w.away:'Draw'); const isL=live.has(w.matchId);
     body='<div style="font-weight:600;font-size:13.5px">'+who+esc(pick)+' <span style="color:var(--gold)">'+w.frac+'</span></div><div style="color:var(--muted);font-size:12px">'+esc(w.home)+' v '+esc(w.away)+(isL?' · <span style="color:#ff6b6b">🔴 LIVE</span>':'')+'</div>';
   }
-  const outcome=w.status==='won'?('+'+Math.round((w.return-w.stake)*10)/10+' pts'):(w.status==='lost'?('−'+w.stake+' pts'):(w.status==='void'?'refunded':'→ '+w.return+' if it wins'));
+  const outcome=w.status==='won'?('+'+Math.round((w.return-w.stake)*100)/100+' pts'):(w.status==='lost'?('−'+w.stake+' pts'):(w.status==='void'?'refunded':'→ '+w.return+' if it wins'));
   return '<div style="border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:6px"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'
     +'<div style="flex:1;min-width:0">'+body+'</div>'
     +'<div style="text-align:right;white-space:nowrap"><span style="color:'+tg[0]+';font-weight:700;font-size:11px">'+tg[1]+'</span><div style="font-size:12.5px">stake <b>'+w.stake+'</b></div><div style="color:'+tg[0]+';font-size:12.5px;font-weight:600">'+outcome+'</div></div>'
@@ -867,8 +867,8 @@ async function loadMyBets(){
     const open=ws.filter(w=>w.status==='pending').slice().reverse();          // newest first
     const done=ws.filter(w=>w.status!=='pending').slice().reverse();
     const won=done.filter(w=>w.status==='won'), lost=done.filter(w=>w.status==='lost');
-    const net=Math.round((won.reduce((s,w)=>s+(w.return-w.stake),0)-lost.reduce((s,w)=>s+w.stake,0))*10)/10;
-    const held=Math.round(open.reduce((s,w)=>s+w.stake,0)*10)/10;
+    const net=Math.round((won.reduce((s,w)=>s+(w.return-w.stake),0)-lost.reduce((s,w)=>s+w.stake,0))*100)/100;
+    const held=Math.round(open.reduce((s,w)=>s+w.stake,0)*100)/100;
     let html='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:12.5px">'
       +'<span style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px 10px">Record <b style="color:#7ee787">'+won.length+'W</b> · <b style="color:#ff7a7a">'+lost.length+'L</b></span>'
       +'<span style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px 10px">Net <b style="color:'+(net>0?'#7ee787':(net<0?'#ff7a7a':'var(--ink)'))+'">'+(net>0?'+':'')+net+'</b> pts</span></div>';

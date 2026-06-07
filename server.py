@@ -54,6 +54,76 @@ def rate_ok(key, limit, window=60):     # key is (ip, class) so endpoints don't 
         return True
 
 
+# ---- Ed25519 (Discord interaction signatures) — pure-stdlib fallback so the server needs NO third-party crypto ----
+_ED_Q = 2**255 - 19
+_ED_L = 2**252 + 27742317777372353535851937790883648493
+def _ed_inv(x): return pow(x, _ED_Q - 2, _ED_Q)
+_ED_D = (-121665 * _ed_inv(121666)) % _ED_Q
+_ED_I = pow(2, (_ED_Q - 1) // 4, _ED_Q)
+def _ed_xrecover(y):
+    xx = (y * y - 1) * _ed_inv(_ED_D * y * y + 1)
+    x = pow(xx, (_ED_Q + 3) // 8, _ED_Q)
+    if (x * x - xx) % _ED_Q != 0: x = (x * _ED_I) % _ED_Q
+    if x % 2 != 0: x = _ED_Q - x
+    return x
+_ED_BY = (4 * _ed_inv(5)) % _ED_Q
+_ED_B = (_ed_xrecover(_ED_BY) % _ED_Q, _ED_BY % _ED_Q)
+def _ed_add(P, Q):
+    x1, y1 = P; x2, y2 = Q
+    dm = _ED_D * x1 * x2 * y1 * y2
+    return (((x1 * y2 + x2 * y1) * _ed_inv(1 + dm)) % _ED_Q,
+            ((y1 * y2 + x1 * x2) * _ed_inv(1 - dm)) % _ED_Q)
+def _ed_mul(P, e):
+    Q = (0, 1)
+    while e > 0:
+        if e & 1: Q = _ed_add(Q, P)
+        P = _ed_add(P, P); e >>= 1
+    return Q
+def _ed_oncurve(P):
+    x, y = P
+    return (-x * x + y * y - 1 - _ED_D * x * x * y * y) % _ED_Q == 0
+def _ed_decpoint(s):
+    n = int.from_bytes(s, "little"); y = n & ((1 << 255) - 1); sign = (n >> 255) & 1
+    x = _ed_xrecover(y)
+    if (x & 1) != sign: x = _ED_Q - x
+    P = (x, y)
+    if not _ed_oncurve(P): raise ValueError("point off curve")
+    return P
+def _ed25519_verify_pure(public, sig, message):
+    """Pure-Python Ed25519 verify (RFC 8032). True iff valid. Only used when 'cryptography' isn't installed."""
+    if len(sig) != 64 or len(public) != 32:
+        return False
+    try:
+        S = int.from_bytes(sig[32:], "little")
+        if S >= _ED_L:
+            return False
+        R = _ed_decpoint(sig[:32]); A = _ed_decpoint(public)
+        h = int.from_bytes(hashlib.sha512(sig[:32] + public + message).digest(), "little") % _ED_L
+        return _ed_mul(_ED_B, S) == _ed_add(R, _ed_mul(A, h))
+    except Exception:
+        return False
+def _verify_ed25519(pub_hex, sig_hex, message):
+    """True iff sig_hex is a valid Ed25519 signature of `message` under public key pub_hex. Prefers the
+    'cryptography' library if installed (fast); otherwise falls back to the pure-stdlib verifier above —
+    so Discord slash commands verify correctly on a plain Python install with no extra packages."""
+    try:
+        pub = bytes.fromhex(pub_hex or "")
+        sig = bytes.fromhex(sig_hex or "")
+    except (ValueError, TypeError):
+        return False
+    if len(pub) != 32 or len(sig) != 64:
+        return False
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        try:
+            Ed25519PublicKey.from_public_bytes(pub).verify(sig, message)
+            return True
+        except Exception:
+            return False
+    except ImportError:
+        return _ed25519_verify_pure(pub, sig, message)
+
+
 import draw as draw_mod
 import scoring as scoring_mod
 
@@ -2444,10 +2514,7 @@ class Handler(BaseHTTPRequestHandler):
         ts = self.headers.get("X-Signature-Timestamp", "")
         if not (pub and sig and ts):
             return self._send(401, "missing signature", "text/plain")
-        try:
-            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-            Ed25519PublicKey.from_public_bytes(bytes.fromhex(pub)).verify(bytes.fromhex(sig), ts.encode() + raw)
-        except Exception:
+        if not _verify_ed25519(pub, sig, ts.encode() + raw):
             return self._send(401, "bad signature", "text/plain")
         try:
             body = json.loads(raw or b"{}")
