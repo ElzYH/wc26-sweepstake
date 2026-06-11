@@ -119,7 +119,7 @@ if python3 qa_notify.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; p
 say "Match-clock QA (real kickoff/half-time tracking: anchors, excludes HT, ticks accurately, never guesses without a feed minute)"
 if python3 qa_clock.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_clock.py 2>&1 | tail -20; FAIL=1; fi
 
-say "Stats QA (over/under-performer never collapses; yellow/red card parsing, aggregation + cached/capped refresh)"
+say "Stats QA (over/under-performer never collapses onto one team; reads right on a chalk result; flips on an upset)"
 if python3 qa_stats.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_stats.py 2>&1 | tail -25; FAIL=1; fi
 
 say "Admin/IO QA (~51 checks: caps clamping, export/import round-trip + secret whitelist, hostile payloads)"
