@@ -800,9 +800,26 @@ function provResult(sel, hs, as_){
 }
 function provChip(r){
   if(r==='win')   return '<span style="color:#7ee787;font-weight:700">🟢 winning</span>';
-  if(r==='lose')  return '<span style="color:#ff7a7a;font-weight:700">🔴 behind</span>';
-  if(r==='level') return '<span style="color:#ffd97a;font-weight:700">🟡 level (no win yet)</span>';
+  if(r==='lose')  return '<span style="color:#ff7a7a;font-weight:700">🔴 losing</span>';
+  if(r==='level') return '<span style="color:#ffd97a;font-weight:700">🟡 level</span>';
   return '';
+}
+function accaLiveStatus(w, fixOf, live){
+  // overall provisional state of an accumulator from the live scores: 'win' only if every leg is currently
+  // winning/won, 'lose' if any leg has lost (settled or live), else 'level'. Null when nothing is live/lost yet.
+  if(!(w.legs&&w.legs.length)) return null;
+  let anyLive=false, anyLose=false, anyPending=false;
+  for(const l of w.legs){
+    if(l.result==='lost'){ anyLose=true; continue; }
+    if(l.result==='won'||l.result==='void') continue;            // this leg is already safe
+    if(live.has(l.matchId)){
+      anyLive=true;
+      const f=fixOf(l.matchId); const r=f?provResult(l.selection,f.homeScore,f.awayScore):null;
+      if(r==='lose') anyLose=true; else if(r!=='win') anyPending=true;
+    } else { anyPending=true; }                                  // a leg not yet kicked off -> not winning yet
+  }
+  if(!(anyLive||anyLose)) return null;
+  return anyLose?'lose':(anyPending?'level':'win');
 }
 function betCardHTML(w, opts){
   opts=opts||{}; const live=opts.live||new Set();
@@ -819,7 +836,8 @@ function betCardHTML(w, opts){
       let chip=''; if(isL && !l.result){ const f=fixOf(l.matchId); if(f) chip=' '+provChip(provResult(l.selection,f.homeScore,f.awayScore)); }
       return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0;color:var(--muted)"><span>'+lr+'<b style="color:var(--ink)">'+esc(pick)+'</b> <span style="opacity:.8">('+esc(l.home)+' v '+esc(l.away)+')</span>'+(isL?' <span style="color:#ff6b6b">🔴</span>'+chip:'')+'</span><span style="color:var(--gold);font-weight:600">'+l.frac+'</span></div>';
     }).join('');
-    body='<div style="font-weight:600;font-size:13.5px">'+who+'🎰 '+w.legs.length+'-fold accumulator · combined <span style="color:var(--gold)">~'+(Math.round(dec*100)/100)+'×</span></div><div style="margin-top:4px">'+rows+'</div>';
+    const ovr=(w.status==='pending')?accaLiveStatus(w,fixOf,live):null;
+    body='<div style="font-weight:600;font-size:13.5px">'+who+'🎰 '+w.legs.length+'-fold accumulator · combined <span style="color:var(--gold)">~'+(Math.round(dec*100)/100)+'×</span>'+(ovr?' · '+provChip(ovr):'')+'</div><div style="margin-top:4px">'+rows+'</div>';
   } else {
     const pick=w.selection==='HOME'?w.home:(w.selection==='AWAY'?w.away:'Draw'); const isL=live.has(w.matchId);
     let liveBit=''; if(isL){ const f=fixOf(w.matchId); if(f){ const sc=(f.homeScore!=null&&f.awayScore!=null)?(' '+f.homeScore+'–'+f.awayScore):''; liveBit=' · <span style="color:#ff6b6b">🔴 LIVE'+sc+'</span> · '+provChip(provResult(w.selection,f.homeScore,f.awayScore)); } else { liveBit=' · <span style="color:#ff6b6b">🔴 LIVE</span>'; } }

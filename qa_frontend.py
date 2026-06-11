@@ -54,7 +54,7 @@ def extract(name):
         k += 1
     return None
 
-funcs = {n: extract(n) for n in ("esc", "ownerOf", "koNote", "fmtTime", "mulberry32", "isDone", "liveClockText", "provResult")}
+funcs = {n: extract(n) for n in ("esc", "ownerOf", "koNote", "fmtTime", "mulberry32", "isDone", "liveClockText", "provResult", "accaLiveStatus")}
 missing = [n for n, v in funcs.items() if not v]
 ck("all pure helpers were found in the source", not missing, missing)
 
@@ -86,6 +86,20 @@ ck("DRAW 0-0 -> win",    provResult("DRAW", 0, 0) === "win");
 ck("DRAW not level -> lose", provResult("DRAW", 2, 1) === "lose");
 ck("provResult null when score missing", provResult("HOME", null, 1) === null);
 ck("provResult reads string scores", provResult("HOME", "2", "1") === "win");
+
+// ---- accaLiveStatus(): overall winning/level/losing for an accumulator ----
+{
+  const fx = new Map([["m1",{homeScore:1,awayScore:0}],["m2",{homeScore:0,awayScore:0}],["m3",{homeScore:0,awayScore:2}]]);
+  const fixOf = id => fx.get(id); const liveS = new Set(["m1","m2","m3"]);
+  const W = legs => ({legs});
+  ck("acca all live winning -> win", accaLiveStatus(W([{matchId:"m1",selection:"HOME"}]), fixOf, liveS) === "win");
+  ck("acca one leg level -> level", accaLiveStatus(W([{matchId:"m1",selection:"HOME"},{matchId:"m2",selection:"HOME"}]), fixOf, liveS) === "level");
+  ck("acca one leg losing -> lose", accaLiveStatus(W([{matchId:"m1",selection:"HOME"},{matchId:"m3",selection:"HOME"}]), fixOf, liveS) === "lose");
+  ck("acca with a settled-lost leg -> lose", accaLiveStatus(W([{matchId:"m1",selection:"HOME",result:"lost"},{matchId:"m1",selection:"HOME"}]), fixOf, liveS) === "lose");
+  ck("acca won leg + live winner -> win", accaLiveStatus(W([{matchId:"x",selection:"HOME",result:"won"},{matchId:"m1",selection:"HOME"}]), fixOf, liveS) === "win");
+  ck("acca with a not-yet-started leg -> level", accaLiveStatus(W([{matchId:"m1",selection:"HOME"},{matchId:"zzz",selection:"HOME"}]), fixOf, liveS) === "level");
+  ck("acca with nothing live/lost -> null", accaLiveStatus(W([{matchId:"zzz",selection:"HOME"}]), fixOf, liveS) === null);
+}
 
 // ---- esc(): XSS escaping ----
 ck("esc escapes <", esc("<b>") === "&lt;b&gt;");

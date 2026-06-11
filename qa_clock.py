@@ -107,6 +107,19 @@ td = scoring.compute(teams_path=os.path.join(t, "teams.json"), draw_path=os.path
 fx = td["fixtures"][0]
 ck("fixture carries liveSec ~52:00 (3120s)", abs(fx.get("liveSec", 0) - 3120) <= 2, fx.get("liveSec"))
 
+print("\n== live-bet 'winning/level/losing' data contract: a bet's matchId matches the live fixture + score ==")
+import wager
+_m = {"id": "m1", "home": "Spain", "away": "France", "stage": "GROUP_STAGE", "utcDate": "2026-06-11T18:00:00Z"}
+_bet_mid = wager.match_id(_m)                                  # the id a bet stores at placement
+ck("bet matchId == live fixture matchId", _bet_mid == fx.get("matchId"), (_bet_mid, fx.get("matchId")))
+ck("fixture carries the live score (home)", fx.get("homeScore") == 1, fx.get("homeScore"))
+ck("fixture carries the live score (away)", fx.get("awayScore") == 0, fx.get("awayScore"))
+ck("fixture is flagged live", fx.get("status") == "IN_PLAY", fx.get("status"))
+# so a HOME bet on this fixture resolves to 'winning' (1-0) on the frontend, an AWAY bet to 'losing', a DRAW to 'losing'
+_hs, _as = fx.get("homeScore"), fx.get("awayScore")
+ck("=> HOME bet would read winning", _hs > _as)
+ck("=> DRAW bet would read losing", not (_hs == _as))
+
 shutil.rmtree(t, ignore_errors=True)
 if FAILS:
     print("\nCLOCK QA FAILED (%d):" % len(FAILS))
