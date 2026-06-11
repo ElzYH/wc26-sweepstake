@@ -113,6 +113,9 @@ if python3 qa_integration.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAI
 say "Bet-race QA (~35 checks: kickoff/void flip rejects a bet — engine matrix + real-HTTP flip + concurrency around a flip)"
 if python3 qa_bet_race.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_bet_race.py 2>&1 | tail -30; FAIL=1; fi
 
+say "Notification QA (opening-day kickoff/goal/full-time alerts fire; pre-tournament stays silent; no live-shuffle leader spam)"
+if python3 qa_notify.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_notify.py 2>&1 | tail -20; FAIL=1; fi
+
 say "Admin/IO QA (~51 checks: caps clamping, export/import round-trip + secret whitelist, hostile payloads)"
 if python3 qa_admin_io.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_admin_io.py 2>&1 | tail -28; FAIL=1; fi
 
