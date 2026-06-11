@@ -48,6 +48,32 @@ ck("half-time (900s) banked into htp", abs(S._load_match_clocks()["m1"]["htp"] -
 ck("elapsed resumes at 45:00 (not 60:00) after HT", abs((elapsed("m1", 1000 + 3600) or 0) - 2700) < 1, elapsed("m1", 1000 + 3600))
 ck("elapsed = 90:00 at full real time", abs((elapsed("m1", 1000 + 2700 + 900 + 2700) or 0) - 5400) < 1, elapsed("m1", 1000 + 6300))
 
+print("\n== extra time: clock counts on through the ET breaks (90 -> 105 -> 120) ==")
+mid = "et1"
+S._update_match_clocks(match("IN_PLAY", 0, mid=mid), now=0)               # kickoff
+S._update_match_clocks(match("PAUSED", 45, mid=mid), now=2700)            # HT
+S._update_match_clocks(match("IN_PLAY", 46, mid=mid), now=3600)           # 2nd half (HT=900 banked)
+S._update_match_clocks(match("PAUSED", 90, mid=mid), now=6300)            # pre-ET break
+S._update_match_clocks(match("IN_PLAY", 91, mid=mid), now=6600)           # ET 1st half (break=300 banked)
+ck("ET kicks off at 90:00 (breaks excluded)", abs((elapsed(mid, 6600) or 0) - 5400) < 1, elapsed(mid, 6600))
+S._update_match_clocks(match("PAUSED", 105, mid=mid), now=7500)           # ET half-time
+S._update_match_clocks(match("IN_PLAY", 106, mid=mid), now=7560)          # ET 2nd half (ET-HT=60 banked)
+ck("ET 2nd half resumes at 105:00", abs((elapsed(mid, 7560) or 0) - 6300) < 1, elapsed(mid, 7560))
+ck("ET ends at 120:00", abs((elapsed(mid, 8460) or 0) - 7200) < 1, elapsed(mid, 8460))
+
+print("\n== drift guard: if a poll misses half-time, the clock re-locks to the feed minute ==")
+rs = "rs1"
+S._update_match_clocks(match("IN_PLAY", 0, mid=rs), now=0)                # kickoff; ko=0
+# 60 real minutes pass and we NEVER saw the PAUSED half-time; without correction the clock would read ~60:00.
+# The feed says it's the 46th minute (second half just underway) -> we should re-lock to ~46:00.
+S._update_match_clocks(match("IN_PLAY", 46, mid=rs), now=3600)
+_e = elapsed(rs, 3600)
+ck("clock re-locks to the feed minute after missing HT", _e is not None and abs(_e - 2760) < 5, _e)
+# and it stays smooth afterwards (no second jump when the feed advances normally)
+S._update_match_clocks(match("IN_PLAY", 47, mid=rs), now=3660)
+_e2 = elapsed(rs, 3660)
+ck("clock stays in sync the next poll", _e2 is not None and abs(_e2 - 2820) < 5, _e2)
+
 print("\n== mid-match first detection (e.g. just deployed): back-date by the feed minute ==")
 S._update_match_clocks(match("IN_PLAY", 52, mid="m2"), now=5000)
 ck("elapsed reads 52:00 immediately", abs((elapsed("m2", 5000) or 0) - 3120) < 1, elapsed("m2", 5000))

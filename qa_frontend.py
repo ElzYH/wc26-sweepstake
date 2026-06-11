@@ -54,13 +54,38 @@ def extract(name):
         k += 1
     return None
 
-funcs = {n: extract(n) for n in ("esc", "ownerOf", "koNote", "fmtTime", "mulberry32", "isDone")}
+funcs = {n: extract(n) for n in ("esc", "ownerOf", "koNote", "fmtTime", "mulberry32", "isDone", "liveClockText", "provResult")}
 missing = [n for n, v in funcs.items() if not v]
 ck("all pure helpers were found in the source", not missing, missing)
 
 test_js = "\n".join(v for v in funcs.values() if v) + r"""
 let fails = [];
 function ck(name, cond){ if(!cond){ fails.push(name); console.log("  FAIL "+name);} else { console.log("  PASS "+name);} }
+let FETCH_AT = Date.now();   // liveClockText ticks on from the server value relative to this
+
+// ---- liveClockText(): the live match clock ----
+ck("clock shows server seconds as MM:SS", liveClockText("IN_PLAY", null, 3120) === "52:00");
+ck("clock shows HT while paused", liveClockText("PAUSED", 45, 2700) === "HT");
+ck("clock shows PENS during a shootout", liveClockText("IN_PLAY", null, 7200, "1") === "PENS");
+ck("clock falls back to the feed minute", liveClockText("IN_PLAY", 52, null) === "52'");
+ck("clock falls back to LIVE with nothing", liveClockText("IN_PLAY", null, null) === "LIVE");
+ck("clock is blank when not live", liveClockText("FINISHED", 90, 5400) === "");
+ck("clock caps a runaway value at 130:00", liveClockText("IN_PLAY", null, 200*60) === "130:00");
+ck("clock counts into extra time (e.g. 105:00)", liveClockText("IN_PLAY", null, 105*60) === "105:00");
+ck("clock pads single-digit seconds", liveClockText("IN_PLAY", null, 61) === "1:01");
+
+// ---- provResult(): is a bet currently winning/level/losing? ----
+ck("HOME ahead -> win",  provResult("HOME", 1, 0) === "win");
+ck("HOME level -> level", provResult("HOME", 0, 0) === "level");
+ck("HOME behind -> lose", provResult("HOME", 0, 1) === "lose");
+ck("AWAY ahead -> win",  provResult("AWAY", 0, 1) === "win");
+ck("AWAY level -> level", provResult("AWAY", 2, 2) === "level");
+ck("AWAY behind -> lose", provResult("AWAY", 1, 0) === "lose");
+ck("DRAW level -> win",  provResult("DRAW", 1, 1) === "win");
+ck("DRAW 0-0 -> win",    provResult("DRAW", 0, 0) === "win");
+ck("DRAW not level -> lose", provResult("DRAW", 2, 1) === "lose");
+ck("provResult null when score missing", provResult("HOME", null, 1) === null);
+ck("provResult reads string scores", provResult("HOME", "2", "1") === "win");
 
 // ---- esc(): XSS escaping ----
 ck("esc escapes <", esc("<b>") === "&lt;b&gt;");

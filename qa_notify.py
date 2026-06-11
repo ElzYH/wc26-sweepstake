@@ -77,6 +77,45 @@ new = tracker(2, "FINISHED", 1, 0, hybrid=[{"name": "James"}, {"name": "Erol"}])
 transition(old, new)
 ck("a settled leader change DOES post 'New leader'", any("New leader" in x for x in DISC), DISC)
 
+print("\n== daily digest: live standings instead of 'hasn't kicked off', and no mirrored/duplicate fixtures ==")
+import time as _t
+_today = _t.strftime("%Y-%m-%d", _t.gmtime())
+def _digest_tracker(matches_played, fixtures):
+    return {"stats": {"matches_played": matches_played, "teams_remaining": 30, "goals": 3, "goals_per_match": 1.5},
+            "leaderboards": {"hybrid": [{"name": "James", "score": 6}, {"name": "Erol", "score": 4}],
+                             "points": [{"name": "James", "score": 6}], "survival": [{"name": "James", "score": 1}]},
+            "players": [{"name": "Erol", "teams": []}, {"name": "James", "teams": []}],
+            "fixtures": fixtures}
+
+# Bug A: nothing finished yet but a game is live -> must NOT say 'hasn't kicked off'
+live_fx = [{"utcDate": _today + "T19:00:00Z", "status": "IN_PLAY", "home": "Mexico", "away": "South Africa",
+            "homeOwner": "James", "awayOwner": "James", "homeScore": 1, "awayScore": 0, "stage": "GROUP_STAGE"}]
+json.dump(_digest_tracker(0, live_fx), open(os.path.join(t, "tracker_data.json"), "w"))
+_summary = "\n".join(S.build_summary())
+ck("digest doesn't claim 'hasn't kicked off' while a game is live", "hasn't kicked off" not in _summary, _summary[:80])
+ck("digest shows a live-standings line instead", "Games in progress" in _summary or "James" in _summary, _summary[:80])
+
+# Bug A inverse: genuinely pre-tournament (nothing live, nothing finished) -> DOES say 'hasn't kicked off'
+pre_fx = [{"utcDate": _today + "T19:00:00Z", "status": "TIMED", "home": "Mexico", "away": "South Africa",
+           "homeOwner": "James", "awayOwner": "James", "homeScore": None, "awayScore": None, "stage": "GROUP_STAGE"}]
+json.dump(_digest_tracker(0, pre_fx), open(os.path.join(t, "tracker_data.json"), "w"))
+ck("digest still says 'hasn't kicked off' before anything starts", "hasn't kicked off" in "\n".join(S.build_summary()))
+
+# Bug B: a player owning BOTH teams sees the fixture once, not mirrored twice
+json.dump(_digest_tracker(0, live_fx), open(os.path.join(t, "tracker_data.json"), "w"))
+_day = S._day_by_player(S._load_tracker())
+ck("owner of both teams gets the fixture exactly once", len(_day.get("James", [])) == 1, _day.get("James"))
+ck("the single entry isn't mirrored", _day.get("James", [""])[0].startswith("Mexico vs South Africa"), _day.get("James"))
+
+# Bug B: two different owners each get their own perspective (once each)
+two_fx = [{"utcDate": _today + "T19:00:00Z", "status": "TIMED", "home": "Mexico", "away": "Brazil",
+           "homeOwner": "James", "awayOwner": "Erol", "homeScore": None, "awayScore": None, "stage": "GROUP_STAGE"}]
+json.dump(_digest_tracker(0, two_fx), open(os.path.join(t, "tracker_data.json"), "w"))
+_day2 = S._day_by_player(S._load_tracker())
+ck("each distinct owner gets one perspective", len(_day2.get("James", [])) == 1 and len(_day2.get("Erol", [])) == 1, _day2)
+ck("James sees his team first", _day2.get("James", [""])[0].startswith("Mexico vs Brazil"), _day2.get("James"))
+ck("Erol sees his team first", _day2.get("Erol", [""])[0].startswith("Brazil vs Mexico"), _day2.get("Erol"))
+
 import shutil
 shutil.rmtree(t, ignore_errors=True)
 if FAILS:

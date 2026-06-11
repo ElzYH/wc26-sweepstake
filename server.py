@@ -20,6 +20,7 @@ import hashlib
 import shutil
 import threading
 import time
+import calendar
 import urllib.request
 import urllib.parse
 from collections import defaultdict
@@ -441,7 +442,8 @@ def discord_send(text):
         return
     site = (cfg.get("site_url") or "").strip()
     if site.startswith("https://"):
-        payload = {"embeds": [{"description": "%s\n[📊 Open the tracker](%s)" % (text[:1800], site), "color": 0x2ecc71}]}
+        link = site.rstrip("/") + "/tracker"          # site_url is the base (used for OAuth); the tracker lives at /tracker
+        payload = {"embeds": [{"description": "%s\n[📊 Open the tracker](%s)" % (text[:1800], link), "color": 0x2ecc71}]}
     else:
         payload = {"content": text[:1900]}
     try:
@@ -1158,6 +1160,14 @@ def _update_match_clocks(matches, now=None):
                             rec["htp"] = (rec.get("htp") or 0.0) + max(0.0, now - rec["ps"])  # bank the paused time
                             rec["ps"] = None
                             changed = True
+                        if playing and not rec.get("ps"):     # re-lock to the feed minute if we've drifted (e.g. a poll missed half-time)
+                            mn = m.get("minute")
+                            if isinstance(mn, (int, float)) and mn is not None and mn >= 0:
+                                target = float(mn) * 60.0
+                                computed = now - rec["ko"] - (rec.get("htp") or 0.0)
+                                if abs(computed - target) > 120:   # >2 min off the broadcast clock — correct it
+                                    rec["ko"] = now - (rec.get("htp") or 0.0) - target
+                                    changed = True
                 else:
                     if isinstance(rec, dict) and rec.get("ps"):   # match left live while paused: bank it (defensive)
                         rec["htp"] = (rec.get("htp") or 0.0) + max(0.0, now - rec["ps"])
@@ -1344,7 +1354,8 @@ def build_summary():
         return ["No data yet — set up the draw first."]
     stats = d.get("stats") or {}
     mp = stats.get("matches_played", 0) or 0
-    if not mp:
+    _live_now = any((m.get("status") in ("IN_PLAY", "PAUSED", "LIVE", "SUSPENDED")) for m in (d.get("fixtures") or []))
+    if not mp and not _live_now:
         return ["📊 WC26 Sweepstake", "Tournament hasn't kicked off yet — the summary fills in once games start (11 June)."]
     today = time.strftime("%a %d %b", time.gmtime())
     mode = (load_config().get("scoring_mode") or "hybrid")
@@ -1361,7 +1372,8 @@ def build_summary():
         lines.append("🔥 Top team: %s (%s) — %s goals" % (stats["top_team"], _owner_of(d, stats["top_team"]), stats.get("top_team_goals", 0)))
     if stats.get("top_scorer_player"):
         lines.append("⚽ Most goals: %s (%s)" % (stats["top_scorer_player"], stats.get("top_scorer_player_goals", 0)))
-    lines.append("📅 Played: %s · ⚽ %s goals (%s/game)" % (mp, stats.get("goals", 0), stats.get("goals_per_match", 0)))
+    lines.append("📅 Played: %s · ⚽ %s goals (%s/game)" % (mp, stats.get("goals", 0), stats.get("goals_per_match", 0))
+                 if mp else "🔴 Games in progress — live standings above")
     cd = d.get("champion_decided") or {}
     if cd.get("team"):
         lines.append("🏆 Champions: %s (%s)" % (cd["team"], cd.get("owner") or _owner_of(d, cd["team"])))
@@ -1380,17 +1392,30 @@ def _ord(n):
 
 
 def _day_by_player(d):
-    """{player: ["Team vs Opp (HH:MM)", ...]} for each player's teams playing today (UTC), not yet finished."""
+    """{player: ["Team vs Opp (HH:MM)", ...]} for each player's teams playing today (UTC), not yet finished.
+    A player who owns BOTH teams in a match sees it once (not mirrored), and exact duplicates are dropped."""
     today = time.strftime("%Y-%m-%d", time.gmtime())
     by = {}
+    def add(player, text):
+        if player and player not in ("—", "-"):
+            lst = by.setdefault(player, [])
+            if text not in lst:                        # never list the same fixture twice for one player
+                lst.append(text)
     for m in (d.get("fixtures") or []):
         if (m.get("utcDate") or "")[:10] != today or m.get("status") == "FINISHED":
             continue
         t = _hhmm(m.get("utcDate"))
-        for own_k, team_k, opp_k in (("homeOwner", "home", "away"), ("awayOwner", "away", "home")):
-            ow = m.get(own_k)
-            if ow and ow not in ("—", "-"):
-                by.setdefault(ow, []).append("%s vs %s%s" % (m.get(team_k), m.get(opp_k), (" (%s)" % t if t else "")))
+        suffix = (" (%s)" % t if t else "")
+        ho, ao = m.get("homeOwner"), m.get("awayOwner")
+        ho_ok = ho and ho not in ("—", "-")
+        ao_ok = ao and ao not in ("—", "-")
+        if ho_ok and ho == ao:                         # same player owns both teams: one line, not two mirrored ones
+            add(ho, "%s vs %s%s" % (m.get("home"), m.get("away"), suffix))
+        else:
+            if ho_ok:
+                add(ho, "%s vs %s%s" % (m.get("home"), m.get("away"), suffix))
+            if ao_ok:
+                add(ao, "%s vs %s%s" % (m.get("away"), m.get("home"), suffix))
     return by
 
 
@@ -2217,6 +2242,27 @@ def poller():
         except Exception as e:
             print("[poller] loop error (continuing):", e)       # the thread keeps running no matter what
             mins = 10
+        # Adaptive cadence: poll roughly every minute while a game is live or about to kick off (so goal/kickoff/
+        # half-time alerts arrive promptly even with nobody watching the tracker), and back off to poll_minutes when idle.
+        try:
+            fxs = (_load_tracker() or {}).get("fixtures") or []
+            now_ts = time.time()
+            busy = any((m.get("status") in ("IN_PLAY", "PAUSED", "LIVE", "SUSPENDED")) for m in fxs)
+            if not busy:
+                for m in fxs:
+                    if m.get("status") in ("TIMED", "SCHEDULED"):
+                        try:
+                            ko = calendar.timegm(time.strptime((m.get("utcDate") or "")[:19], "%Y-%m-%dT%H:%M:%S"))
+                        except Exception:
+                            continue
+                        if 0 <= (ko - now_ts) <= 15 * 60:     # kicks off within 15 minutes
+                            busy = True
+                            break
+            if busy:
+                time.sleep(60)
+                continue
+        except Exception:
+            pass
         time.sleep(max(60, (mins if isinstance(mins, (int, float)) else 10) * 60))
 
 

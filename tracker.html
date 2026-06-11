@@ -792,6 +792,7 @@ function refreshBetsLive(){
 }
 // ---- "is this bet currently winning?" — provisional result from the live score (display only; never settles anything) ----
 function provResult(sel, hs, as_){
+  if(hs==null||as_==null) return null;           // no score yet -> unknown (don't coerce null to 0)
   hs=Number(hs); as_=Number(as_); if(isNaN(hs)||isNaN(as_)) return null;
   if(sel==='HOME') return hs>as_?'win':(hs<as_?'lose':'level');
   if(sel==='AWAY') return as_>hs?'win':(as_<hs?'lose':'level');
@@ -961,25 +962,28 @@ let H2H_A=null, H2H_B=null;
 // Prefers the server's accurate elapsed seconds (liveSec, from real kickoff/half-time tracking) and ticks on
 // from there — re-anchored every refresh, with a hard cap so a backgrounded tab can't run the clock away.
 // Falls back to the feed minute (52'), then to 'LIVE' when the feed gives nothing. 'HT' while paused.
-function liveClockText(status, minute, liveSec){
+function liveClockText(status, minute, liveSec, pens){
+  if(pens==='1'||pens===true) return 'PENS';                          // shootout in progress/decided while still live
   if(status==='PAUSED') return 'HT';
   if(!(status==='IN_PLAY'||status==='LIVE'||status==='SUSPENDED')) return '';
   const ls=(liveSec===''||liveSec==null)?null:Number(liveSec);
   if(ls!=null&&!isNaN(ls)&&ls>=0){
-    const add=Math.min(150,Math.max(0,(Date.now()-FETCH_AT)/1000));   // tick on from the server value; capped
-    const sec=ls+add, mm=Math.floor(sec/60), ss=Math.floor(sec%60);
+    let sec=ls+Math.min(150,Math.max(0,(Date.now()-FETCH_AT)/1000));  // tick on from the server value; catch-up capped
+    if(sec>130*60) sec=130*60;                                        // never beyond ~130:00 (ET + stoppage ceiling)
+    const mm=Math.floor(sec/60), ss=Math.floor(sec%60);
     return mm+':'+(ss<10?'0':'')+ss;
   }
   const mn=(minute===''||minute==null)?null:Number(minute);
-  if(mn!=null&&!isNaN(mn)&&mn>=0) return mn+"'";
+  if(mn!=null&&!isNaN(mn)&&mn>=0) return (mn>130?130:mn)+"'";
   return 'LIVE';
 }
 function liveClock(m){
-  return '<span class="liveclock" data-st="'+esc(m.status||'')+'" data-mn="'+(m.minute==null?'':m.minute)+'" data-ls="'+(m.liveSec==null?'':m.liveSec)+'">'+liveClockText(m.status,m.minute,m.liveSec)+'</span>';
+  const pens=(m.shootout||m.penHome!=null||m.penAway!=null)?'1':'';
+  return '<span class="liveclock" data-st="'+esc(m.status||'')+'" data-mn="'+(m.minute==null?'':m.minute)+'" data-ls="'+(m.liveSec==null?'':m.liveSec)+'" data-pens="'+pens+'">'+liveClockText(m.status,m.minute,m.liveSec,pens)+'</span>';
 }
 function updateLiveClocks(){
   const els=document.querySelectorAll('.liveclock'); if(!els.length) return;
-  els.forEach(el=>{ const ls=el.dataset.ls===''?null:el.dataset.ls; el.textContent=liveClockText(el.dataset.st, el.dataset.mn, ls); });
+  els.forEach(el=>{ const ls=el.dataset.ls===''?null:el.dataset.ls; el.textContent=liveClockText(el.dataset.st, el.dataset.mn, ls, el.dataset.pens); });
 }
 setInterval(updateLiveClocks,1000);
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden) load(); });   // foregrounding re-syncs the clock

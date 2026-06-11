@@ -511,7 +511,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                         if rec.get("ps"):
                             el -= max(0.0, _now - rec["ps"])
                         if el >= 0:
-                            f["liveSec"] = int(el)
+                            f["liveSec"] = int(min(el, 135 * 60))   # cap (ET + stoppage ceiling); frontend caps display too
     except Exception:
         pass
     data["history"] = _build_history(finished, teams, owner, [p["name"] for p in draw["players"]])
