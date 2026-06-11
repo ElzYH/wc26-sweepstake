@@ -1525,6 +1525,9 @@ function buildHistory(d){
   const fin=(d.fixtures||[]).filter(m=>isDone(m.status)&&m.homeScore!=null&&m.awayScore!=null)
     .slice().sort((a,b)=>String(a.utcDate||'').localeCompare(String(b.utcDate||'')));
   const base={}, reached={}, hist=[];
+  // baseline: everyone on zero before a ball is kicked, so the line has a "start" anchor and the chart draws
+  // as soon as the very first match finishes (x-axis is labelled start -> now).
+  hist.push({m:0, p:Object.fromEntries(players.map(p=>[p,{pts:0,srv:0,hyb:0}]))});
   fin.forEach((m,i)=>{
     const side=m.winner||(m.homeScore>m.awayScore?'HOME':(m.awayScore>m.homeScore?'AWAY':'DRAW'));
     [[m.home,m.homeScore,m.awayScore,'HOME'],[m.away,m.awayScore,m.homeScore,'AWAY']].forEach(([tm,sc,co,which])=>{
