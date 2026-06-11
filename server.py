@@ -1148,8 +1148,10 @@ def notify_changes(old):
     new = _load_tracker()
     if not new or old is None:
         return                              # first compute / no data: nothing to compare
-    if (new.get("stats") or {}).get("matches_played", 0) == 0:
-        return
+    _mp = (new.get("stats") or {}).get("matches_played", 0)
+    _any_live = any((m.get("status") in LIVE_STATUSES) for m in (new.get("fixtures") or []))
+    if _mp == 0 and not _any_live:
+        return                              # truly nothing happening yet (pre-tournament): stay quiet
 
     def match_event(etype, recipients, group_line, ping=False):
         # recipients: list of (owner, title, body); one Discord line for the whole match event
@@ -1167,14 +1169,14 @@ def notify_changes(old):
     try:
         ol = (old["leaderboards"]["hybrid"][0] or {}).get("name")
         nl = (new["leaderboards"]["hybrid"][0] or {}).get("name")
-        if nl and ol and nl != ol:
+        if _mp > 0 and nl and ol and nl != ol:
             alert_all("leader", "New leader 📈", "%s now tops the table." % nl,
                       "📈 New leader: **%s** now tops the table." % nl)
     except Exception:
         pass
     # head-to-head overtakes (positions below 1st), in the active scoring mode
     try:
-        for x, y, pos in rivalry_alerts(old, new, _active_mode()):
+        for x, y, pos in (rivalry_alerts(old, new, _active_mode()) if _mp > 0 else []):
             alert_player(x, "rivalry", "Moved up 📊", "You overtook %s for %s." % (y, _ord(pos)),
                          "📊 **%s** overtakes **%s** for %s." % (x, y, _ord(pos)))
     except Exception:

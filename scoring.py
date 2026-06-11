@@ -95,6 +95,14 @@ def _build_history(finished, teams, owner, players):
     return hist
 
 
+def _mid(m):
+    """Stable match id, mirrors wager.match_id so fixtures and wagers agree (works even if wager is absent)."""
+    i = m.get("id")
+    if i not in (None, ""):
+        return str(i)
+    return "%s|%s|%s" % (m.get("home"), m.get("away"), (m.get("utcDate") or "")[:16])
+
+
 def compute(teams_path="teams.json", draw_path="draw_result.json",
             results_path="results.json", out="tracker_data.json", default_mode="hybrid", wagers=None):
     teams = {t["name"]: t for t in _load(teams_path)["teams"]}
@@ -328,10 +336,13 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
     # ---- fair (handicap): points scored above/below your expected share ----
     # expected share = your projected_points as a fraction of everyone's, applied to the
     # total points actually scored. Beating it (positive) = overperforming a weaker/clustered squad.
-    _tot_pts = sum(p["points"] for p in players_out)
+    # Uses SETTLED points only (excludes live, in-progress provisional points) so a match merely being
+    # live can't swing the handicap — fair stays 0 for everyone until games actually finish.
+    _tot_pts = sum((p["points"] - (p.get("live") or 0)) for p in players_out)
     _tot_proj = sum(p["projected_points"] for p in players_out) or 1.0
     for p in players_out:
-        p["fair"] = round(p["points"] - _tot_pts * p["projected_points"] / _tot_proj)
+        _settled = p["points"] - (p.get("live") or 0)
+        p["fair"] = round(_settled - _tot_pts * p["projected_points"] / _tot_proj)
     by_proj = sorted(players_out, key=lambda p: -p["projected_points"])
     champ_board = [{"name": p["name"], "odds": p["champion_odds"], "alive_teams": p["alive_teams"],
                     "total_teams": p["total_teams"]} for p in sorted(players_out, key=lambda p: -p["champion_odds"])]
@@ -450,6 +461,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                                   for r in s["table"] if isinstance(r, dict)]}
                        for s in results.get("standings", []) if isinstance(s, dict) and isinstance(s.get("table"), list)],
             "fixtures": [{"utcDate": m.get("utcDate"), "stage": m.get("stage"), "group": m.get("group"),
+                          "matchId": _mid(m),
                           "status": m.get("status"), "home": m.get("home"), "away": m.get("away"),
                           "homeOwner": owner.get(m.get("home"), "—"), "awayOwner": owner.get(m.get("away"), "—"),
                           "homeScore": m.get("homeScore"), "awayScore": m.get("awayScore"),

@@ -791,6 +791,7 @@ function refreshBetsLive(){
 }
 function betCardHTML(w, opts){
   opts=opts||{}; const live=opts.live||new Set();
+  if(!w||w.credit||w.status==='credit') return '';   // a free-points drop is not a bet — never a card
   const tg={pending:['#ffc83d','OPEN'],won:['#7ee787','WON'],lost:['#ff7a7a','LOST'],void:['#9aa','VOID']}[w.status]||['#9aa',(w.status||'').toUpperCase()];
   const isAcca=!!(w.legs&&w.legs.length);
   const who=opts.showPlayer?('<span style="color:var(--muted)">'+esc(w.player)+'</span> · '):'';
@@ -864,8 +865,8 @@ async function loadMyBets(){
     const ws=(j.wagers||[]);
     if(!ws.length){ box.innerHTML='<div class="empty">No bets yet — place one above.</div>'; return; }
     const live=new Set((DATA.fixtures||[]).filter(f=>f.status==='IN_PLAY'||f.status==='PAUSED').map(f=>f.matchId));
-    const open=ws.filter(w=>w.status==='pending').slice().reverse();          // newest first
-    const done=ws.filter(w=>w.status!=='pending').slice().reverse();
+    const open=ws.filter(w=>w.status==='pending'&&!w.credit).slice().reverse();          // newest first
+    const done=ws.filter(w=>w.status!=='pending'&&!w.credit).slice().reverse();           // credits are free-points drops, not bets — never render them as bet cards
     const won=done.filter(w=>w.status==='won'), lost=done.filter(w=>w.status==='lost');
     const net=Math.round((won.reduce((s,w)=>s+(w.return-w.stake),0)-lost.reduce((s,w)=>s+w.stake,0))*100)/100;
     const held=Math.round(open.reduce((s,w)=>s+w.stake,0)*100)/100;
