@@ -118,6 +118,7 @@
   .h2hteam{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0}
   .h2hteam.out{opacity:.5;text-decoration:line-through}
   .live{color:var(--live);font-weight:700;font-size:11px;letter-spacing:.08em}
+  .liveclock{font-variant-numeric:tabular-nums;font-feature-settings:'tnum'}
   .stagetag{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
   .empty{color:var(--muted);padding:30px;text-align:center}
   .lcgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr));gap:12px}
@@ -907,7 +908,7 @@ const STAGE_LABEL={GROUP_STAGE:"Group",LAST_32:"R32",LAST_16:"R16",QUARTER_FINAL
 const KO_STAGES=["LAST_32","LAST_16","QUARTER_FINALS","SEMI_FINALS","THIRD_PLACE","FINAL"];
 let KOROUND=null, KO_USER_SET=false;
 
-let DATA=SAMPLE;
+let DATA=SAMPLE, DATA_AT=Date.now();   // DATA_AT = when this DATA was fetched, so the live clock can tick on from the feed minute
 async function load(){
   let loginParam=null;
   try{ loginParam=new URLSearchParams(location.search).get('login');
@@ -915,7 +916,7 @@ async function load(){
                history.replaceState(null,'',location.pathname); } }catch(e){}
   let ok=false;
   try{ const r=await fetch('tracker_data.json?'+Date.now());
-       if(r.ok){ DATA=await r.json(); ok=!!(DATA&&DATA.players&&DATA.players.length); } }
+       if(r.ok){ DATA=await r.json(); DATA_AT=Date.now(); ok=!!(DATA&&DATA.players&&DATA.players.length); } }
   catch(e){ ok=false; }
   const gate=document.getElementById('gate'), tabs=document.querySelector('.tabs');
   const secs=['overview','live','lb','players','h2h','groups','bracket','fixtures','odds','bets'];
@@ -933,6 +934,26 @@ async function load(){
 }
 
 let H2H_A=null, H2H_B=null;
+// ---- live match clock: ticks MM:SS, anchored to the feed minute (re-anchors every refresh); 'HT' when paused ----
+function liveClockText(status, minute, utcDate){
+  if(status==='PAUSED') return 'HT';
+  if(!(status==='IN_PLAY'||status==='LIVE'||status==='SUSPENDED')) return '';
+  let base; const mn=(minute===''||minute==null)?null:Number(minute);
+  if(mn!=null&&!isNaN(mn)&&mn>0){ base=mn*60; }            // feed minute is authoritative (already accounts for half-time)
+  else { const ko=Date.parse(utcDate); if(isNaN(ko)) return 'LIVE'; base=Math.max(0,(Date.now()-ko)/1000); }  // fallback: time since kick-off
+  let sec=base+Math.max(0,(Date.now()-DATA_AT)/1000);
+  if(sec>130*60) sec=130*60;                               // sanity cap so a stalled poll can't run the clock away
+  const mm=Math.floor(sec/60), ss=Math.floor(sec%60);
+  return mm+':'+(ss<10?'0':'')+ss;
+}
+function liveClock(m){
+  return '<span class="liveclock" data-st="'+esc(m.status||'')+'" data-mn="'+(m.minute==null?'':m.minute)+'" data-ko="'+esc(m.utcDate||'')+'">'+liveClockText(m.status,m.minute,m.utcDate)+'</span>';
+}
+function updateLiveClocks(){
+  const els=document.querySelectorAll('.liveclock'); if(!els.length) return;
+  els.forEach(el=>{ el.textContent=liveClockText(el.dataset.st, el.dataset.mn, el.dataset.ko); });
+}
+setInterval(updateLiveClocks,1000);
 function renderLive(d){
   const body=document.getElementById('liveBody'); if(!body) return;
   const fx=d.fixtures||[];
@@ -946,7 +967,7 @@ function renderLive(d){
     h+='<div class="lcgrid">'+live.map(m=>{
       const stg=m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):(m.group?'Group '+m.group:'');
       return `<div class="lccard">
-        <div class="lchead"><span class="lcdot"></span>LIVE${m.minute?" "+m.minute+"'":""}${m.status==='PAUSED'?' · HT':''}${stg?' · '+stg:''}</div>
+        <div class="lchead"><span class="lcdot"></span>LIVE · ${liveClock(m)}${stg?' · '+stg:''}</div>
         <div class="lcrow"><span class="lcteam">${flag(m.home)}${esc(m.home)}${own(m.homeOwner)}</span><span class="lcscore">${m.homeScore??0}</span></div>
         <div class="lcrow"><span class="lcteam">${flag(m.away)}${esc(m.away)}${own(m.awayOwner)}</span><span class="lcscore">${m.awayScore??0}</span></div>
         ${(m.shootout||m.penHome!=null||m.penAway!=null)?`<div class="lcpens">🥅 Penalties <b>${m.penHome??0}–${m.penAway??0}</b></div>`:wpBar3(m,true)}
@@ -1100,7 +1121,7 @@ function bracketCard(m){
   const done=isDone(m.status), hw=m.winner==='HOME', aw=m.winner==='AWAY';
   const show=done||isLive;
   const sc=home=>show?((home?m.homeScore:m.awayScore)??0):'';
-  const foot=isLive?'<div class="blive"><span class="pd"></span>LIVE</div>':(done?'':`<div class="btime">${fmtTime(m.utcDate)}</div>`);
+  const foot=isLive?`<div class="blive"><span class="pd"></span>${liveClock(m)}</div>`:(done?'':`<div class="btime">${fmtTime(m.utcDate)}</div>`);
   const konote=koNote(m)?`<div class="bnote">${koNote(m)}</div>`:'';
   return `<div class="bcard">
     <div class="brow ${hw?'win':''} ${done&&aw?'lose':''}"><span class="bteam">${flag(m.home)}${m.home}<small>${m.homeOwner}</small></span><span class="bsc">${sc(true)}</span></div>
@@ -1135,7 +1156,7 @@ function matchRow(m){
   const score=(done||live)?`${m.homeScore??0}–${m.awayScore??0}`:'v';
   const kn=koNote(m);
   const knEl=kn?`<div class="konote">${kn}</div>`:'';
-  const mid=live?`<span class="live">● LIVE</span>`:(done?`<div class="sc">${score}</div>${knEl}`:`<div class="time">${fmtTime(m.utcDate)}</div>`);
+  const mid=live?`<span class="live">● ${liveClock(m)}</span>`:(done?`<div class="sc">${score}</div>${knEl}`:`<div class="time">${fmtTime(m.utcDate)}</div>`);
   const grp=(m.group||'').replace('GROUP_','').trim();
   const left=m.stage!=='GROUP_STAGE'?`${STAGE_LABEL[m.stage]||m.stage}`:(grp?`Group ${grp}`:'');
   return `<div>${left?`<div class="mstage">${left}</div>`:''}<div class="match">
