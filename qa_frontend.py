@@ -54,7 +54,7 @@ def extract(name):
         k += 1
     return None
 
-funcs = {n: extract(n) for n in ("esc", "ownerOf", "koNote", "fmtTime", "mulberry32", "isDone", "liveClockText", "provResult", "accaLiveStatus")}
+funcs = {n: extract(n) for n in ("esc", "ownerOf", "koNote", "fmtTime", "mulberry32", "isDone", "liveClockText", "provResult", "accaLiveStatus", "buildHistory")}
 missing = [n for n, v in funcs.items() if not v]
 ck("all pure helpers were found in the source", not missing, missing)
 
@@ -99,6 +99,39 @@ ck("provResult reads string scores", provResult("HOME", "2", "1") === "win");
   ck("acca won leg + live winner -> win", accaLiveStatus(W([{matchId:"x",selection:"HOME",result:"won"},{matchId:"m1",selection:"HOME"}]), fixOf, liveS) === "win");
   ck("acca with a not-yet-started leg -> level", accaLiveStatus(W([{matchId:"m1",selection:"HOME"},{matchId:"zzz",selection:"HOME"}]), fixOf, liveS) === "level");
   ck("acca with nothing live/lost -> null", accaLiveStatus(W([{matchId:"zzz",selection:"HOME"}]), fixOf, liveS) === null);
+}
+
+// ---- buildHistory(): points/position/survival time series ----
+{
+  const SCO = {points:{per_goal:1,win:3,draw:1,clean_sheet:1,stage_bonus:{LAST_16:5}}, survival:{LAST_16:26}};
+  const alvOf = dd => buildHistory(dd).map(s=>Object.fromEntries(Object.entries(s.p).map(([k,v])=>[k,v.alv])));
+  const ptsOf = dd => buildHistory(dd).map(s=>Object.fromEntries(Object.entries(s.p).map(([k,v])=>[k,v.pts])));
+
+  // a) a single finished match yields 2 points (baseline + match), so the chart can draw a line
+  const d1 = {players:[{name:"James",teams:[{name:"Mexico",status:"alive"},{name:"South Africa",status:"alive"}]},
+                       {name:"Reuben",teams:[{name:"Brazil",status:"alive"}]}], scoring:SCO,
+              fixtures:[{home:"Mexico",away:"South Africa",status:"FINISHED",homeScore:2,awayScore:0,winner:"HOME",stage:"GROUP_STAGE",utcDate:"2026-06-11T19:00:00Z"}]};
+  ck("history has a baseline + one point per finished match", buildHistory(d1).length === 2);
+  ck("history starts every player at zero points", ptsOf(d1)[0].James === 0 && ptsOf(d1)[0].Reuben === 0);
+  ck("history points accrue after the match", ptsOf(d1)[1].James === 6);
+
+  // b) survival = teams still in; stays full through the group stage (nobody eliminated yet)
+  ck("survival starts at full squad size", alvOf(d1)[0].James === 2 && alvOf(d1)[0].Reuben === 1);
+  ck("survival is flat through the group stage", JSON.stringify(alvOf(d1)[1]) === JSON.stringify(alvOf(d1)[0]));
+
+  // c) a knockout loser drops the owner's teams-in by one, exactly at that match
+  const d2 = {players:[{name:"James",teams:[{name:"Mexico",status:"alive"},{name:"South Africa",status:"out"}]},
+                       {name:"Reuben",teams:[{name:"Brazil",status:"alive"}]}], scoring:SCO,
+              fixtures:[{home:"Mexico",away:"South Africa",status:"FINISHED",homeScore:2,awayScore:0,winner:"HOME",stage:"GROUP_STAGE",utcDate:"2026-06-11T19:00:00Z"},
+                        {home:"Brazil",away:"South Africa",status:"FINISHED",homeScore:3,awayScore:0,winner:"HOME",stage:"LAST_16",utcDate:"2026-07-01T19:00:00Z"}]};
+  ck("survival steps down at the KO elimination", alvOf(d2).map(x=>x.James).join(",") === "2,2,1");
+  ck("survival untouched for a player with no eliminations", alvOf(d2).every(x=>x.Reuben === 1));
+
+  // d) a group-stage casualty drops when the knockout stage opens (the first KO match)
+  const d3 = {players:[{name:"Reuben",teams:[{name:"Brazil",status:"alive"},{name:"Spain",status:"out"}]}], scoring:SCO,
+              fixtures:[{home:"Mexico",away:"Spain",status:"FINISHED",homeScore:1,awayScore:0,winner:"HOME",stage:"GROUP_STAGE",utcDate:"2026-06-11T19:00:00Z"},
+                        {home:"Mexico",away:"Brazil",status:"FINISHED",homeScore:0,awayScore:1,winner:"AWAY",stage:"LAST_16",utcDate:"2026-07-01T19:00:00Z"}]};
+  ck("group casualty drops at the first knockout match", alvOf(d3).map(x=>x.Reuben).join(",") === "2,2,1");
 }
 
 // ---- esc(): XSS escaping ----

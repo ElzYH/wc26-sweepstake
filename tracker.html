@@ -1524,10 +1524,28 @@ function buildHistory(d){
   if(!players.length) return [];
   const fin=(d.fixtures||[]).filter(m=>isDone(m.status)&&m.homeScore!=null&&m.awayScore!=null)
     .slice().sort((a,b)=>String(a.utcDate||'').localeCompare(String(b.utcDate||'')));
+  // ---- "teams still in" over time (matches the Survival leaderboard's alive_teams) ----
+  // A team's status only ever goes alive -> out, so we pin that one transition to a snapshot index:
+  //  • a knockout loser drops at the KO match it lost; • a group-stage casualty drops when the KO stage
+  //  begins (the first KO match), exactly as the server flags it. Teams currently still alive never drop.
+  const curStatus={}; (d.players||[]).forEach(p=>(p.teams||[]).forEach(t=>{ curStatus[t.name]=t.status; }));
+  let firstKoSi=Infinity; const lostKoSi={};
+  fin.forEach((m,i)=>{ const si=i+1;
+    if(m.stage&&m.stage!=='GROUP_STAGE'){
+      if(si<firstKoSi) firstKoSi=si;
+      const sd=m.winner||(m.homeScore>m.awayScore?'HOME':(m.awayScore>m.homeScore?'AWAY':'DRAW'));
+      const loser=sd==='HOME'?m.away:(sd==='AWAY'?m.home:null);
+      if(loser&&(loser in owner)) lostKoSi[loser]=si;
+    }
+  });
+  const outIdx={}; for(const tm in owner){
+    outIdx[tm]=(curStatus[tm]!=='out')?Infinity:(tm in lostKoSi?lostKoSi[tm]:firstKoSi);
+  }
+  const aliveAt=si=>{ const A={}; players.forEach(p=>A[p]=0); for(const tm in owner){ if(outIdx[tm]>si) A[owner[tm]]++; } return A; };
   const base={}, reached={}, hist=[];
   // baseline: everyone on zero before a ball is kicked, so the line has a "start" anchor and the chart draws
-  // as soon as the very first match finishes (x-axis is labelled start -> now).
-  hist.push({m:0, p:Object.fromEntries(players.map(p=>[p,{pts:0,srv:0,hyb:0}]))});
+  // as soon as the very first match finishes (x-axis is labelled start -> now). Survival starts at full squad size.
+  { const a0=aliveAt(0); hist.push({m:0, p:Object.fromEntries(players.map(p=>[p,{pts:0,srv:0,hyb:0,alv:a0[p]}]))}); }
   fin.forEach((m,i)=>{
     const side=m.winner||(m.homeScore>m.awayScore?'HOME':(m.awayScore>m.homeScore?'AWAY':'DRAW'));
     [[m.home,m.homeScore,m.awayScore,'HOME'],[m.away,m.awayScore,m.homeScore,'AWAY']].forEach(([tm,sc,co,which])=>{
@@ -1545,17 +1563,18 @@ function buildHistory(d){
     for(const tm in owner){ let bonus=0,surv=0; const rs=reached[tm];
       if(rs) rs.forEach(s=>{ bonus=Math.max(bonus,SB[s]||0); surv=Math.max(surv,SV[s]||0); });
       P[owner[tm]]+=(base[tm]||0)+bonus; S[owner[tm]]+=surv; }
-    hist.push({m:i+1, p:Object.fromEntries(players.map(p=>[p,{pts:P[p],srv:S[p],hyb:P[p]+S[p]}]))});
+    const A=aliveAt(i+1);
+    hist.push({m:i+1, p:Object.fromEntries(players.map(p=>[p,{pts:P[p],srv:S[p],hyb:P[p]+S[p],alv:A[p]}]))});
   });
   return hist;
 }
 function renderChart(d){
   const el=document.getElementById('chartBody'); if(!el) return;
   const hist=buildHistory(d).filter(h=>h&&h.p);
-  if(hist.length<2){ el.innerHTML='<div class="empty">Fills in as matches are played — one point per match. Come back once the tournament is under way.</div>'; return; }
+  if(hist.length<2){ el.innerHTML='<div class="empty">Fills in as matches are played — points and survival per round. Come back once the tournament is under way.</div>'; return; }
   const names=Object.keys(hist[hist.length-1].p);
   const n=hist.length, pos=(CHARTVIEW==='pos');
-  const key = CHARTMETRIC==='both'?'hyb':(CHARTMETRIC==='surv'?'srv':'pts');
+  const key = CHARTMETRIC==='both'?'hyb':(CHARTMETRIC==='surv'?'alv':'pts');   // survival view tracks teams-still-in
   const series={}; names.forEach(nm=>series[nm]=[]);
   hist.forEach(h=>{
     if(pos){
