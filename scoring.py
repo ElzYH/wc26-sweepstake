@@ -106,7 +106,7 @@ def _mid(m):
 
 def compute(teams_path="teams.json", draw_path="draw_result.json",
             results_path="results.json", out="tracker_data.json", default_mode="hybrid", wagers=None,
-            clocks_path="match_clocks.json"):
+            clocks_path="match_clocks.json", cards_path="cards.json"):
     teams = {t["name"]: t for t in _load(teams_path)["teams"]}
     draw = _load(draw_path)
     results = _load(results_path)
@@ -382,15 +382,22 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
     pcs = {p["name"]: sum(cs[t["name"]] for t in p["teams"]) for p in players_out}
     over_t = under_t = best_def = over_p = under_p = top_sc = most_con = gl = most_cs = None
     if played:
-        bp = sorted(played, key=lambda n: -pts[n]); bs = sorted(played, key=lambda n: -teams[n]["composite"])
-        prk = {n: i for i, n in enumerate(bp)}; srk = {n: i for i, n in enumerate(bs)}
-        res = {n: srk[n] - prk[n] for n in played}                  # +ve = beating its rating
-        over_t, under_t = max(res, key=res.get), min(res, key=res.get)
+        # Over/under-performer = points earned vs a strength-weighted expectation (composite share of points
+        # scored so far). Continuous (not rank-based), so a chalk result no longer ties everyone to 0 and
+        # collapses both cards onto the same team. Only shown once there's a real spread between two teams.
+        _tot_comp = sum(max(0.0, teams[n].get("composite", 0) or 0) for n in played) or 1.0
+        _tot_pts = sum(pts[n] for n in played)
+        tres = {n: pts[n] - (max(0.0, teams[n].get("composite", 0) or 0) / _tot_comp) * _tot_pts for n in played}
+        _ord = sorted(played, key=lambda n: (tres[n], gf[n], n))   # ascending residual; tie-break: fewer goals, then name
+        if len(_ord) >= 2 and (tres[_ord[-1]] - tres[_ord[0]]) > 1e-9:
+            over_t, under_t = _ord[-1], _ord[0]
         best_def = max(played, key=lambda n: (cs[n], -ga[n]))   # most clean sheets (fewest conceded breaks ties)
         pp = sorted(players_out, key=lambda p: -p["points"]); psr = sorted(players_out, key=lambda p: -p["squad_strength"])
         prkp = {p["name"]: i for i, p in enumerate(pp)}; srkp = {p["name"]: i for i, p in enumerate(psr)}
         presid = {p["name"]: srkp[p["name"]] - prkp[p["name"]] for p in players_out}
-        over_p, under_p = max(presid, key=presid.get), min(presid, key=presid.get)
+        _po = sorted(presid, key=lambda n: (presid[n], n))
+        if len(_po) >= 2 and presid[_po[-1]] != presid[_po[0]]:    # only when players actually differ (no duplicate card)
+            over_p, under_p = _po[-1], _po[0]
         top_sc = max(pgf, key=pgf.get) if max(pgf.values(), default=0) > 0 else None
         most_con = max(pga, key=pga.get) if max(pga.values(), default=0) > 0 else None
         most_cs = max(pcs, key=pcs.get) if max(pcs.values(), default=0) > 0 else None
@@ -407,6 +414,32 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
         gl = max(leaders, key=leaders.get) if leaders else None
     fin_goals = sum((m["homeScore"] or 0) + (m["awayScore"] or 0)
                     for m in finished if m.get("homeScore") is not None)
+    # discipline: yellow/red cards per team + per player (owner), from the optional cards cache (best-effort).
+    ty = defaultdict(int); tr = defaultdict(int)
+    try:
+        _cards = {}
+        try:
+            with open(cards_path) as _cf:
+                _cards = json.load(_cf)
+        except Exception:
+            _cards = {}
+        if isinstance(_cards, dict):
+            for _rec in _cards.values():
+                if not isinstance(_rec, dict) or "home_yellow" not in _rec:
+                    continue
+                _ht, _at = _rec.get("home_team"), _rec.get("away_team")
+                if _ht:
+                    ty[_ht] += _rec.get("home_yellow", 0) or 0; tr[_ht] += _rec.get("home_red", 0) or 0
+                if _at:
+                    ty[_at] += _rec.get("away_yellow", 0) or 0; tr[_at] += _rec.get("away_red", 0) or 0
+    except Exception:
+        ty, tr = defaultdict(int), defaultdict(int)
+    py = {p["name"]: sum(ty[t["name"]] for t in p["teams"]) for p in players_out}
+    pr = {p["name"]: sum(tr[t["name"]] for t in p["teams"]) for p in players_out}
+    yt = max(ty, key=ty.get) if ty and max(ty.values(), default=0) > 0 else None
+    rt = max(tr, key=tr.get) if tr and max(tr.values(), default=0) > 0 else None
+    yp = max(py, key=py.get) if py and max(py.values(), default=0) > 0 else None
+    rp = max(pr, key=pr.get) if pr and max(pr.values(), default=0) > 0 else None
     stats = {"goals": fin_goals, "matches_played": len(finished),
              "favourite_team": fav, "favourite_owner": (owner.get(fav, "-") if fav else "-"),
              "favourite_odds": (round(100 * alive_prob[fav] / tot_alive, 1) if fav else 0),
@@ -433,6 +466,10 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
              "best_defence_team": best_def, "best_defence_conceded": (ga[best_def] if best_def else 0),
              "best_defence_cs": (cs[best_def] if best_def else 0),
              "group_leaders_player": gl,
+             "yellow_team": yt, "yellow_team_count": (ty[yt] if yt else 0),
+             "red_team": rt, "red_team_count": (tr[rt] if rt else 0),
+             "yellow_player": yp, "yellow_player_count": (py[yp] if yp else 0),
+             "red_player": rp, "red_player_count": (pr[rp] if rp else 0),
              "proj_points_player": (by_proj[0]["name"] if by_proj else None),
              "proj_points_value": (by_proj[0]["projected_points"] if by_proj else 0)}
     strength_board = [{"name": p["name"], "strength": p["squad_strength"], "favourites": p["favourites"]}

@@ -144,6 +144,47 @@ def fetch(out="results.json", token=None):
     return data
 
 
+def fetch_match_cards(match_id, token=None):
+    """Fetch one finished match's bookings (yellow/red per side) from the per-match detail endpoint.
+    football-data only exposes cards here (not on the bulk /matches list), so this is called once per match
+    and cached by the server. Returns {'home_yellow','home_red','away_yellow','away_red'} or None on any problem
+    (network error, or a tier/endpoint that doesn't include a 'bookings' array)."""
+    token = token or os.environ.get("FOOTBALL_DATA_TOKEN")
+    if not token:
+        return None
+    try:
+        m = _get(f"/matches/{match_id}", token)
+    except Exception:
+        return None
+    if not isinstance(m, dict):
+        return None
+    bookings = m.get("bookings")
+    if not isinstance(bookings, list):
+        return None                       # no card data available for this match/tier
+    home = (m.get("homeTeam") or {})
+    away = (m.get("awayTeam") or {})
+    hid, hname = home.get("id"), home.get("name")
+    aid, aname = away.get("id"), away.get("name")
+    c = {"home_yellow": 0, "home_red": 0, "away_yellow": 0, "away_red": 0}
+    for b in bookings:
+        if not isinstance(b, dict):
+            continue
+        card = str(b.get("card") or "").upper()
+        team = b.get("team") or {}
+        tid, tname = team.get("id"), team.get("name")
+        if tid == hid or (hname and tname == hname):
+            side = "home"
+        elif tid == aid or (aname and tname == aname):
+            side = "away"
+        else:
+            continue
+        if "RED" in card:                 # RED or YELLOW_RED (second-yellow sending-off) -> a red card
+            c[side + "_red"] += 1
+        elif "YELLOW" in card:
+            c[side + "_yellow"] += 1
+    return c
+
+
 if __name__ == "__main__":
     if "--check" in sys.argv:
         audit()

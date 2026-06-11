@@ -1109,6 +1109,71 @@ def _load_tracker():
 
 
 MATCH_CLOCKS_FILE = "match_clocks.json"   # per-match real-time clock state: {matchId: {ko, htp, ps}}
+CARDS_FILE = "cards.json"                 # per-match yellow/red cards (fetched once each from match detail)
+
+
+def _load_cards():
+    try:
+        with open(CARDS_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _refresh_match_cards(cfg, max_per_cycle=3):
+    """Fetch yellow/red cards for newly-finished matches, once each and capped per cycle so it can't burn the
+    API quota. Cards live only on football-data's per-match detail endpoint. Best-effort + fully defensive:
+    card stats are a nice-to-have and must never affect results, settlement or the main fetch. A match that
+    keeps coming back without a 'bookings' array (e.g. a tier that doesn't include cards) is given up on after
+    a few tries so we don't hammer it."""
+    try:
+        token = cfg.get("token")
+        if not token:
+            return
+        cache = _load_cards()
+        if not isinstance(cache, dict):
+            cache = {}
+        try:
+            matches = json.load(open("results.json")).get("matches", [])
+        except Exception:
+            return
+        import update_results
+        update_results.COMPETITION = cfg.get("competition", "WC")
+        done = 0
+        changed = False
+        for m in matches:
+            if done >= max_per_cycle:
+                break
+            if not isinstance(m, dict) or m.get("status") not in ("FINISHED", "AWARDED"):
+                continue
+            mid = str(m.get("id") or "")
+            if not mid:
+                continue
+            rec = cache.get(mid)
+            if isinstance(rec, dict) and "home_yellow" in rec:
+                continue                                   # already have this match's cards
+            tries = rec.get("_tries", 0) if isinstance(rec, dict) else 0
+            if tries >= 3:
+                continue                                   # gave up (tier likely has no bookings)
+            got = update_results.fetch_match_cards(mid, token)
+            done += 1
+            changed = True
+            if got is not None:
+                got["home_team"] = m.get("home")
+                got["away_team"] = m.get("away")
+                cache[mid] = got
+            else:
+                cache[mid] = {"_tries": tries + 1}
+        if changed:
+            try:
+                tmp = CARDS_FILE + ".tmp"
+                with open(tmp, "w") as f:
+                    json.dump(cache, f)
+                os.replace(tmp, CARDS_FILE)
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 def _load_match_clocks():
@@ -2235,6 +2300,10 @@ def poller():
                 _maybe_announce_free_drop(load_config())
             except Exception as e:
                 print("[freebet] error:", e)
+            try:
+                _refresh_match_cards(load_config())      # yellow/red cards for finished matches (best-effort)
+            except Exception as e:
+                print("[cards] error:", e)
             try:
                 backup_snapshot()                 # timestamped rollback history, ~every 6h
             except Exception as e:
