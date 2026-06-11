@@ -118,6 +118,7 @@
   .h2hteam{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0}
   .h2hteam.out{opacity:.5;text-decoration:line-through}
   .live{color:var(--live);font-weight:700;font-size:11px;letter-spacing:.08em}
+  .liveclock{font-variant-numeric:tabular-nums;font-feature-settings:'tnum'}
   .stagetag{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
   .empty{color:var(--muted);padding:30px;text-align:center}
   .lcgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr));gap:12px}
@@ -789,8 +790,22 @@ function refreshBetsLive(){
     const head=Math.max(0,Math.round((caps.max_stake-Math.max(0,me.wager_held||0))*100)/100);
     av.textContent=Math.min(avail,head); }
 }
+// ---- "is this bet currently winning?" — provisional result from the live score (display only; never settles anything) ----
+function provResult(sel, hs, as_){
+  hs=Number(hs); as_=Number(as_); if(isNaN(hs)||isNaN(as_)) return null;
+  if(sel==='HOME') return hs>as_?'win':(hs<as_?'lose':'level');
+  if(sel==='AWAY') return as_>hs?'win':(as_<hs?'lose':'level');
+  return hs===as_?'win':'lose';   // DRAW selection
+}
+function provChip(r){
+  if(r==='win')   return '<span style="color:#7ee787;font-weight:700">🟢 winning</span>';
+  if(r==='lose')  return '<span style="color:#ff7a7a;font-weight:700">🔴 behind</span>';
+  if(r==='level') return '<span style="color:#ffd97a;font-weight:700">🟡 level (no win yet)</span>';
+  return '';
+}
 function betCardHTML(w, opts){
   opts=opts||{}; const live=opts.live||new Set();
+  const fb=opts.fixById; const fixOf=id=>fb?(fb.get?fb.get(id):fb[id]):null;
   if(!w||w.credit||w.status==='credit') return '';   // a free-points drop is not a bet — never a card
   const tg={pending:['#ffc83d','OPEN'],won:['#7ee787','WON'],lost:['#ff7a7a','LOST'],void:['#9aa','VOID']}[w.status]||['#9aa',(w.status||'').toUpperCase()];
   const isAcca=!!(w.legs&&w.legs.length);
@@ -800,12 +815,14 @@ function betCardHTML(w, opts){
     let dec=1; w.legs.forEach(l=>{const p=l.frac.split('/').map(Number); dec*=(1+p[0]/p[1]);});
     const rows=w.legs.map(l=>{ const pick=l.selection==='HOME'?l.home:(l.selection==='AWAY'?l.away:'Draw');
       const lr=l.result==='won'?'✅ ':(l.result==='lost'?'❌ ':(l.result==='void'?'➖ ':'')); const isL=live.has(l.matchId);
-      return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0;color:var(--muted)"><span>'+lr+'<b style="color:var(--ink)">'+esc(pick)+'</b> <span style="opacity:.8">('+esc(l.home)+' v '+esc(l.away)+')</span>'+(isL?' <span style="color:#ff6b6b">🔴</span>':'')+'</span><span style="color:var(--gold);font-weight:600">'+l.frac+'</span></div>';
+      let chip=''; if(isL && !l.result){ const f=fixOf(l.matchId); if(f) chip=' '+provChip(provResult(l.selection,f.homeScore,f.awayScore)); }
+      return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0;color:var(--muted)"><span>'+lr+'<b style="color:var(--ink)">'+esc(pick)+'</b> <span style="opacity:.8">('+esc(l.home)+' v '+esc(l.away)+')</span>'+(isL?' <span style="color:#ff6b6b">🔴</span>'+chip:'')+'</span><span style="color:var(--gold);font-weight:600">'+l.frac+'</span></div>';
     }).join('');
     body='<div style="font-weight:600;font-size:13.5px">'+who+'🎰 '+w.legs.length+'-fold accumulator · combined <span style="color:var(--gold)">~'+(Math.round(dec*100)/100)+'×</span></div><div style="margin-top:4px">'+rows+'</div>';
   } else {
     const pick=w.selection==='HOME'?w.home:(w.selection==='AWAY'?w.away:'Draw'); const isL=live.has(w.matchId);
-    body='<div style="font-weight:600;font-size:13.5px">'+who+esc(pick)+' <span style="color:var(--gold)">'+w.frac+'</span></div><div style="color:var(--muted);font-size:12px">'+esc(w.home)+' v '+esc(w.away)+(isL?' · <span style="color:#ff6b6b">🔴 LIVE</span>':'')+'</div>';
+    let liveBit=''; if(isL){ const f=fixOf(w.matchId); if(f){ const sc=(f.homeScore!=null&&f.awayScore!=null)?(' '+f.homeScore+'–'+f.awayScore):''; liveBit=' · <span style="color:#ff6b6b">🔴 LIVE'+sc+'</span> · '+provChip(provResult(w.selection,f.homeScore,f.awayScore)); } else { liveBit=' · <span style="color:#ff6b6b">🔴 LIVE</span>'; } }
+    body='<div style="font-weight:600;font-size:13.5px">'+who+esc(pick)+' <span style="color:var(--gold)">'+w.frac+'</span></div><div style="color:var(--muted);font-size:12px">'+esc(w.home)+' v '+esc(w.away)+liveBit+'</div>';
   }
   const outcome=w.status==='won'?('+'+Math.round((w.return-w.stake)*100)/100+' pts'):(w.status==='lost'?('−'+w.stake+' pts'):(w.status==='void'?'refunded':'→ '+w.return+' if it wins'));
   return '<div style="border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:6px"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'
@@ -819,9 +836,10 @@ async function loadAllBets(){
     const j=await fetch('/api/wagers').then(r=>r.json());
     const open=(j.wagers||[]).filter(w=>w.status==='pending');
     const live=new Set((DATA.fixtures||[]).filter(f=>f.status==='IN_PLAY'||f.status==='PAUSED').map(f=>f.matchId));
+    const fixById=new Map((DATA.fixtures||[]).map(f=>[f.matchId,f]));
     if(!open.length){ box.innerHTML='<div class="empty">No open bets right now.</div>'; return; }
     open.sort((a,b)=>(b.placed_at||0)-(a.placed_at||0));
-    box.innerHTML=open.map(w=>betCardHTML(w,{showPlayer:true,live:live})).join('');
+    box.innerHTML=open.map(w=>betCardHTML(w,{showPlayer:true,live:live,fixById:fixById})).join('');
   }catch(e){ box.innerHTML='<div class="empty">Could not load bets.</div>'; }
 }
 async function claimFreePoints(){
@@ -865,6 +883,7 @@ async function loadMyBets(){
     const ws=(j.wagers||[]);
     if(!ws.length){ box.innerHTML='<div class="empty">No bets yet — place one above.</div>'; return; }
     const live=new Set((DATA.fixtures||[]).filter(f=>f.status==='IN_PLAY'||f.status==='PAUSED').map(f=>f.matchId));
+    const fixById=new Map((DATA.fixtures||[]).map(f=>[f.matchId,f]));
     const open=ws.filter(w=>w.status==='pending'&&!w.credit).slice().reverse();          // newest first
     const done=ws.filter(w=>w.status!=='pending'&&!w.credit).slice().reverse();           // credits are free-points drops, not bets — never render them as bet cards
     const won=done.filter(w=>w.status==='won'), lost=done.filter(w=>w.status==='lost');
@@ -874,8 +893,8 @@ async function loadMyBets(){
       +'<span style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px 10px">Record <b style="color:#7ee787">'+won.length+'W</b> · <b style="color:#ff7a7a">'+lost.length+'L</b></span>'
       +'<span style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px 10px">Net <b style="color:'+(net>0?'#7ee787':(net<0?'#ff7a7a':'var(--ink)'))+'">'+(net>0?'+':'')+net+'</b> pts</span></div>';
     html+='<div style="font-size:11.5px;color:var(--muted);font-weight:700;letter-spacing:.06em;margin:2px 0 6px">CURRENT (OPEN) BETS'+(open.length?' — '+held+' pts riding':'')+'</div>';
-    html+=open.length?open.map(w=>betCardHTML(w,{live:live})).join(''):'<div class="empty" style="margin-bottom:6px">None open right now.</div>';
-    if(done.length){ html+='<div style="font-size:11.5px;color:var(--muted);font-weight:700;letter-spacing:.06em;margin:14px 0 6px">SETTLED</div>'+done.map(w=>betCardHTML(w,{live:live})).join(''); }
+    html+=open.length?open.map(w=>betCardHTML(w,{live:live,fixById:fixById})).join(''):'<div class="empty" style="margin-bottom:6px">None open right now.</div>';
+    if(done.length){ html+='<div style="font-size:11.5px;color:var(--muted);font-weight:700;letter-spacing:.06em;margin:14px 0 6px">SETTLED</div>'+done.map(w=>betCardHTML(w,{live:live,fixById:fixById})).join(''); }
     box.innerHTML=html;
   }catch(e){ box.innerHTML='<div class="empty">Could not load your bets.</div>'; }
 }
@@ -907,7 +926,7 @@ const STAGE_LABEL={GROUP_STAGE:"Group",LAST_32:"R32",LAST_16:"R16",QUARTER_FINAL
 const KO_STAGES=["LAST_32","LAST_16","QUARTER_FINALS","SEMI_FINALS","THIRD_PLACE","FINAL"];
 let KOROUND=null, KO_USER_SET=false;
 
-let DATA=SAMPLE;
+let DATA=SAMPLE, FETCH_AT=Date.now();   // FETCH_AT = when DATA arrived, so the live clock ticks on accurately from the server's seconds
 async function load(){
   let loginParam=null;
   try{ loginParam=new URLSearchParams(location.search).get('login');
@@ -915,7 +934,7 @@ async function load(){
                history.replaceState(null,'',location.pathname); } }catch(e){}
   let ok=false;
   try{ const r=await fetch('tracker_data.json?'+Date.now());
-       if(r.ok){ DATA=await r.json(); ok=!!(DATA&&DATA.players&&DATA.players.length); } }
+       if(r.ok){ DATA=await r.json(); FETCH_AT=Date.now(); ok=!!(DATA&&DATA.players&&DATA.players.length); } }
   catch(e){ ok=false; }
   const gate=document.getElementById('gate'), tabs=document.querySelector('.tabs');
   const secs=['overview','live','lb','players','h2h','groups','bracket','fixtures','odds','bets'];
@@ -938,13 +957,32 @@ let H2H_A=null, H2H_B=null;
 //      The feed reports the minute, NOT seconds, so we never extrapolate a ticking MM:SS — that drifts badly
 //      (counting through half-time and stoppage) and showed wildly wrong times. Minute is shown only when the
 //      feed actually broadcasts it; otherwise the row just reads LIVE. ----
-function liveClockText(status, minute){
+// ---- live match clock ----
+// Prefers the server's accurate elapsed seconds (liveSec, from real kickoff/half-time tracking) and ticks on
+// from there — re-anchored every refresh, with a hard cap so a backgrounded tab can't run the clock away.
+// Falls back to the feed minute (52'), then to 'LIVE' when the feed gives nothing. 'HT' while paused.
+function liveClockText(status, minute, liveSec){
   if(status==='PAUSED') return 'HT';
   if(!(status==='IN_PLAY'||status==='LIVE'||status==='SUSPENDED')) return '';
+  const ls=(liveSec===''||liveSec==null)?null:Number(liveSec);
+  if(ls!=null&&!isNaN(ls)&&ls>=0){
+    const add=Math.min(150,Math.max(0,(Date.now()-FETCH_AT)/1000));   // tick on from the server value; capped
+    const sec=ls+add, mm=Math.floor(sec/60), ss=Math.floor(sec%60);
+    return mm+':'+(ss<10?'0':'')+ss;
+  }
   const mn=(minute===''||minute==null)?null:Number(minute);
-  if(mn==null||isNaN(mn)||mn<0) return '';          // feed didn't broadcast a minute — caller falls back to 'LIVE'
-  return mn+"'";
+  if(mn!=null&&!isNaN(mn)&&mn>=0) return mn+"'";
+  return 'LIVE';
 }
+function liveClock(m){
+  return '<span class="liveclock" data-st="'+esc(m.status||'')+'" data-mn="'+(m.minute==null?'':m.minute)+'" data-ls="'+(m.liveSec==null?'':m.liveSec)+'">'+liveClockText(m.status,m.minute,m.liveSec)+'</span>';
+}
+function updateLiveClocks(){
+  const els=document.querySelectorAll('.liveclock'); if(!els.length) return;
+  els.forEach(el=>{ const ls=el.dataset.ls===''?null:el.dataset.ls; el.textContent=liveClockText(el.dataset.st, el.dataset.mn, ls); });
+}
+setInterval(updateLiveClocks,1000);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) load(); });   // foregrounding re-syncs the clock
 function renderLive(d){
   const body=document.getElementById('liveBody'); if(!body) return;
   const fx=d.fixtures||[];
@@ -957,9 +995,8 @@ function renderLive(d){
   if(live.length){
     h+='<div class="lcgrid">'+live.map(m=>{
       const stg=m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):(m.group?'Group '+m.group:'');
-      const t=liveClockText(m.status,m.minute);
       return `<div class="lccard">
-        <div class="lchead"><span class="lcdot"></span>LIVE${t?' · '+t:''}${stg?' · '+stg:''}</div>
+        <div class="lchead"><span class="lcdot"></span>${liveClock(m)}${stg?' · '+stg:''}</div>
         <div class="lcrow"><span class="lcteam">${flag(m.home)}${esc(m.home)}${own(m.homeOwner)}</span><span class="lcscore">${m.homeScore??0}</span></div>
         <div class="lcrow"><span class="lcteam">${flag(m.away)}${esc(m.away)}${own(m.awayOwner)}</span><span class="lcscore">${m.awayScore??0}</span></div>
         ${(m.shootout||m.penHome!=null||m.penAway!=null)?`<div class="lcpens">🥅 Penalties <b>${m.penHome??0}–${m.penAway??0}</b></div>`:wpBar3(m,true)}
@@ -1113,7 +1150,7 @@ function bracketCard(m){
   const done=isDone(m.status), hw=m.winner==='HOME', aw=m.winner==='AWAY';
   const show=done||isLive;
   const sc=home=>show?((home?m.homeScore:m.awayScore)??0):'';
-  const foot=isLive?`<div class="blive"><span class="pd"></span>${liveClockText(m.status,m.minute)||'LIVE'}</div>`:(done?'':`<div class="btime">${fmtTime(m.utcDate)}</div>`);
+  const foot=isLive?`<div class="blive"><span class="pd"></span>${liveClock(m)}</div>`:(done?'':`<div class="btime">${fmtTime(m.utcDate)}</div>`);
   const konote=koNote(m)?`<div class="bnote">${koNote(m)}</div>`:'';
   return `<div class="bcard">
     <div class="brow ${hw?'win':''} ${done&&aw?'lose':''}"><span class="bteam">${flag(m.home)}${m.home}<small>${m.homeOwner}</small></span><span class="bsc">${sc(true)}</span></div>
@@ -1148,7 +1185,7 @@ function matchRow(m){
   const score=(done||live)?`${m.homeScore??0}–${m.awayScore??0}`:'v';
   const kn=koNote(m);
   const knEl=kn?`<div class="konote">${kn}</div>`:'';
-  const mid=live?`<span class="live">● ${liveClockText(m.status,m.minute)||'LIVE'}</span>`:(done?`<div class="sc">${score}</div>${knEl}`:`<div class="time">${fmtTime(m.utcDate)}</div>`);
+  const mid=live?`<span class="live">● ${liveClock(m)}</span>`:(done?`<div class="sc">${score}</div>${knEl}`:`<div class="time">${fmtTime(m.utcDate)}</div>`);
   const grp=(m.group||'').replace('GROUP_','').trim();
   const left=m.stage!=='GROUP_STAGE'?`${STAGE_LABEL[m.stage]||m.stage}`:(grp?`Group ${grp}`:'');
   return `<div>${left?`<div class="mstage">${left}</div>`:''}<div class="match">

@@ -1106,6 +1106,77 @@ def _load_tracker():
         return None
 
 
+MATCH_CLOCKS_FILE = "match_clocks.json"   # per-match real-time clock state: {matchId: {ko, htp, ps}}
+
+
+def _load_match_clocks():
+    try:
+        with open(MATCH_CLOCKS_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _update_match_clocks(matches, now=None):
+    """Track real kick-off time + accumulated half-time per match, so the tracker can show an accurate ticking
+    match clock (seconds), not just the feed's minute. Per matchId we store:
+        ko  = epoch the match clock is anchored to (back-dated by the feed minute the first time we can anchor)
+        htp = total paused (half-time) seconds banked so far
+        ps  = epoch the current pause began, or None
+    elapsed-while-playing = now - ko - htp. We only anchor when the feed gives us a minute (so we never guess),
+    which means a game with no broadcast minute simply shows 'LIVE'. Fully defensive: never raises, because the
+    live clock must never be able to affect scoring, settlement or alerts."""
+    try:
+        now = time.time() if now is None else now
+        clocks = _load_match_clocks()
+        if not isinstance(clocks, dict):
+            clocks = {}
+        changed = False
+        PLAYING_ST = ("IN_PLAY", "LIVE", "SUSPENDED")
+        for m in (matches or []):
+            try:
+                if not isinstance(m, dict):
+                    continue
+                mid = wager_mod.match_id(m) if wager_mod else str(m.get("id") or "")
+                if not mid:
+                    continue
+                st = m.get("status")
+                playing = st in PLAYING_ST
+                paused = st == "PAUSED"
+                rec = clocks.get(mid)
+                if playing or paused:
+                    if not isinstance(rec, dict):
+                        mn = m.get("minute")
+                        if isinstance(mn, (int, float)) and mn is not None and mn >= 0:  # only anchor with a real minute
+                            clocks[mid] = {"ko": now - float(mn) * 60.0, "htp": 0.0, "ps": (now if paused else None)}
+                            changed = True
+                    else:
+                        if paused and not rec.get("ps"):
+                            rec["ps"] = now           # a pause (half-time) just began
+                            changed = True
+                        elif playing and rec.get("ps"):
+                            rec["htp"] = (rec.get("htp") or 0.0) + max(0.0, now - rec["ps"])  # bank the paused time
+                            rec["ps"] = None
+                            changed = True
+                else:
+                    if isinstance(rec, dict) and rec.get("ps"):   # match left live while paused: bank it (defensive)
+                        rec["htp"] = (rec.get("htp") or 0.0) + max(0.0, now - rec["ps"])
+                        rec["ps"] = None
+                        changed = True
+            except Exception:
+                continue
+        if changed:
+            try:
+                tmp = MATCH_CLOCKS_FILE + ".tmp"
+                with open(tmp, "w") as f:
+                    json.dump(clocks, f)
+                os.replace(tmp, MATCH_CLOCKS_FILE)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 def _alive_owners(td):
     """{team_name: (alive_bool, owner)} from a tracker_data snapshot."""
     out = {}
@@ -2065,6 +2136,10 @@ def update_now(cfg):
                     _announce_wins(newly_won)        # one grouped post per finishing batch; accas only once fully won
                 except Exception as e:
                     log("win announce failed:", e)
+        try:                                     # track real kickoff/half-time so the tracker clock is accurate (never fatal)
+            _update_match_clocks(json.load(open("results.json")).get("matches", []))
+        except Exception:
+            pass
         scoring_mod.compute(out="tracker_data.json", default_mode=cfg.get("scoring_mode", "hybrid"), wagers=wlist)
         cfg["last_update"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         save_config(cfg)

@@ -116,6 +116,9 @@ if python3 qa_bet_race.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL";
 say "Notification QA (opening-day kickoff/goal/full-time alerts fire; pre-tournament stays silent; no live-shuffle leader spam)"
 if python3 qa_notify.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_notify.py 2>&1 | tail -20; FAIL=1; fi
 
+say "Match-clock QA (real kickoff/half-time tracking: anchors, excludes HT, ticks accurately, never guesses without a feed minute)"
+if python3 qa_clock.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_clock.py 2>&1 | tail -20; FAIL=1; fi
+
 say "Admin/IO QA (~51 checks: caps clamping, export/import round-trip + secret whitelist, hostile payloads)"
 if python3 qa_admin_io.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_admin_io.py 2>&1 | tail -28; FAIL=1; fi
 

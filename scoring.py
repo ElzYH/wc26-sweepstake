@@ -11,6 +11,7 @@ counts as a WIN for the advancing team (the loser takes the loss).
 """
 import json
 import os
+import time
 from collections import defaultdict
 from datetime import datetime, timezone
 try:
@@ -104,7 +105,8 @@ def _mid(m):
 
 
 def compute(teams_path="teams.json", draw_path="draw_result.json",
-            results_path="results.json", out="tracker_data.json", default_mode="hybrid", wagers=None):
+            results_path="results.json", out="tracker_data.json", default_mode="hybrid", wagers=None,
+            clocks_path="match_clocks.json"):
     teams = {t["name"]: t for t in _load(teams_path)["teams"]}
     draw = _load(draw_path)
     results = _load(results_path)
@@ -486,6 +488,32 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
             data["betting_locked"] = wager.betting_locked(data)
         except Exception:
             pass
+    # live match clock: attach accurate ticking seconds from the server's real kickoff/half-time tracking.
+    # liveSec = match seconds elapsed (the frontend ticks on from here); liveHT = currently at half-time.
+    # Optional + fully defensive: missing/old clocks file just means the frontend shows the feed minute instead.
+    try:
+        _clocks = {}
+        try:
+            with open(clocks_path) as _cf:
+                _clocks = json.load(_cf)
+        except Exception:
+            _clocks = {}
+        if isinstance(_clocks, dict) and _clocks:
+            _now = time.time()
+            for f in data["fixtures"]:
+                st = f.get("status")
+                if st == "PAUSED":
+                    f["liveHT"] = True
+                elif st in ("IN_PLAY", "LIVE", "SUSPENDED"):
+                    rec = _clocks.get(f.get("matchId"))
+                    if isinstance(rec, dict) and rec.get("ko") is not None:
+                        el = _now - rec["ko"] - (rec.get("htp") or 0.0)
+                        if rec.get("ps"):
+                            el -= max(0.0, _now - rec["ps"])
+                        if el >= 0:
+                            f["liveSec"] = int(el)
+    except Exception:
+        pass
     data["history"] = _build_history(finished, teams, owner, [p["name"] for p in draw["players"]])
     if out:
         tmp = out + ".tmp"                      # write-then-rename: a crash can't leave a half-written tracker
