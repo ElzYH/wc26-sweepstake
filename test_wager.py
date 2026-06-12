@@ -1,6 +1,5 @@
 """Tests for the wagering engine: odds, payout maths, caps, pre-kickoff lock, settlement, balances."""
 import sys
-import time
 import wager
 
 FAILS = []

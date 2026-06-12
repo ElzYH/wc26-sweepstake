@@ -70,7 +70,7 @@ finally:
 ck("blocked refused even when the gate is OFF", S._guild_claim_check("u1", {"discord_blocklist": ["u1"]}) == "blocked", "")
 
 print("\n=== HTTP: the new admin controls exist, are gated, and behave ===")
-import urllib.request, urllib.error, threading, subprocess, socket, time as _t
+import urllib.request, urllib.error, subprocess, socket, time as _t
 def _free_port():
     s = socket.socket(); s.bind(("127.0.0.1", 0)); p = s.getsockname()[1]; s.close(); return p
 PORT = _free_port(); BASE = "http://127.0.0.1:%d" % PORT; KEY = "QA_ADMIN_KEY_1234567"

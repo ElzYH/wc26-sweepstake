@@ -4,7 +4,7 @@ by extracting them and running them under node — especially esc() (the XSS-esc
 (team->owner lookup used all over the UI), koNote() (extra-time/penalty caption), and the 2-dp money
 rounding used for stakes/returns/balances. DOM-bound functions can't run headless, so we test the logic
 that does the actual work."""
-import os, sys, re, json, subprocess, shutil
+import os, sys, re, subprocess, shutil
 
 REPO = os.path.dirname(os.path.abspath(__file__))
 FAILS = []

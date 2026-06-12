@@ -62,7 +62,6 @@ snaps = sorted(os.listdir("backups/snapshots"))
 ck("a snapshot directory was created", len(snaps) >= 1, snaps)
 ck("snapshot contains wagers.json", os.path.exists(os.path.join("backups/snapshots", snaps[-1], "wagers.json")), "")
 # force several more and confirm rotation keeps only `keep`
-import time as _t
 for i in range(6):
     S._LAST_SNAPSHOT[0] = 0.0
     os.makedirs("backups/snapshots/old-%02d" % i, exist_ok=True)  # seed extra dirs to rotate out

@@ -41,7 +41,7 @@ def build_name_map(teams_path="teams.json"):
 
 
 def normalize_matches(api_matches, resolve):
-    out, unmatched = [], set()
+    out = []
     for m in api_matches:
         h = resolve(m["homeTeam"]["name"] or "")
         a = resolve(m["awayTeam"]["name"] or "")

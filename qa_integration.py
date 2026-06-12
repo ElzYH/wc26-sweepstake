@@ -43,16 +43,31 @@ class Server:
                "wager_pins": {"Erol": "ABCD", "James": "WXYZ"}, "scoring_mode": "hybrid"}
         cfg.update(extra_cfg or {})
         json.dump(cfg, open(os.path.join(self.tmp, "config.json"), "w"))
-        env = dict(os.environ, WC26_DATA=self.tmp, WC26_CONFIG=os.path.join(self.tmp, "config.json"),
-                   PORT=str(self.port), HOST="127.0.0.1", ADMIN_KEY=KEY)
-        self.proc = subprocess.Popen([sys.executable, os.path.join(REPO, "server.py")], env=env,
-                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for _ in range(80):
-            try:
-                if self.req("GET", "/api/status")[0] == 200:
+        last_err = None
+        for _attempt in range(4):                      # retry the whole launch if the port got stolen / server can't come up
+            env = dict(os.environ, WC26_DATA=self.tmp, WC26_CONFIG=os.path.join(self.tmp, "config.json"),
+                       PORT=str(self.port), HOST="127.0.0.1", ADMIN_KEY=KEY)
+            self.proc = subprocess.Popen([sys.executable, os.path.join(REPO, "server.py")], env=env,
+                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            ready = False
+            for _ in range(150):                       # up to ~15s — server.py is import-heavy under the full gate's load
+                if self.proc.poll() is not None:       # server exited (e.g. the port got taken first) -> relaunch
+                    last_err = "server exited during startup"
                     break
-            except Exception:
-                time.sleep(0.1)
+                try:
+                    if self.req("GET", "/api/status")[0] == 200:
+                        ready = True
+                        break
+                except Exception as _e:
+                    last_err = _e
+                time.sleep(0.1)                          # sleep EVERY iteration, not only on a refused connection
+            if ready:
+                break
+            try: self.proc.terminate()
+            except Exception: pass
+            self.port = free_port(); self.base = "http://127.0.0.1:%d" % self.port   # fresh port for the retry
+        else:
+            raise RuntimeError("integration test server never became ready: %r" % (last_err,))
     def req(self, method, path, body=None):
         data = json.dumps(body).encode() if body is not None else None
         r = urllib.request.Request(self.base + path, data=data, method=method,
@@ -64,6 +79,19 @@ class Server:
             return e.code, e.read().decode("utf-8", "replace")
     def jget(self, path):
         return json.loads(self.req("GET", path)[1])
+    def wait(self, cond, timeout=8.0):
+        """Poll until cond() is true — load-independent replacement for a fixed sleep.
+        The /api/poll handler settles + recomputes in the background, so we wait for the
+        expected on-disk state rather than guessing a duration."""
+        end = time.time() + timeout
+        while time.time() < end:
+            try:
+                if cond():
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.05)
+        return False
     def set_results(self, results):
         json.dump({"matches": results}, open(os.path.join(self.tmp, "results.json"), "w"))
     def wagers(self):
@@ -109,10 +137,11 @@ try:
     # now the match finishes: HOME wins 2-0
     S.set_results([match("g1", HOME, AWAY, "FINISHED", hs=2, as_=0, winner="HOME")])
     st, b = S.req("POST", "/api/poll")          # triggers update_now -> fetch fails (dummy token) -> keeps our results -> settles + recomputes
-    time.sleep(0.5)
+    S.wait(lambda: [x for x in S.wagers() if x.get("player") == "Erol"][0].get("status") != "open")
     w = [x for x in S.wagers() if x.get("player") == "Erol"][0]
     ck("the bet settled to WON after the match finished", w["status"] == "won", w["status"])
     ck("the won bet kept the odds it was struck at (return unchanged)", w["return"] == ret, (w["return"], ret))
+    S.wait(lambda: next(t for t in S.player("Erol")["teams"] if t["name"] == HOME)["points"] == 6)
     erol = S.player("Erol")
     # scoring: HOME team scored 2, won, clean sheet -> 2+3+1 = 6 base points for that team
     home_team = next(t for t in erol["teams"] if t["name"] == HOME)
@@ -128,7 +157,8 @@ S = Server([match("g1", HOME, AWAY, "TIMED", utc=UP)])
 try:
     S.req("POST", "/api/place_wager", {"player": "Erol", "matchId": "g1", "selection": "HOME", "stake": 5, "pin": "ABCD"})
     S.set_results([match("g1", HOME, AWAY, "CANCELLED", winner=None)])
-    S.req("POST", "/api/poll"); time.sleep(0.5)
+    S.req("POST", "/api/poll")
+    S.wait(lambda: [x for x in S.wagers() if x.get("player") == "Erol"][0].get("status") != "open")
     w = [x for x in S.wagers() if x.get("player") == "Erol"][0]
     ck("a cancelled match voids the bet", w["status"] == "void", w["status"])
     erol = S.player("Erol")

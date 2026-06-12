@@ -92,6 +92,18 @@ res["matches"] = matches
 json.dump(res, open("results.json", "w"))
 fails += run_all("mid-tournament")
 
+# /myteams must actually LIST a player's teams — regression guard for the handler that was unreachable
+# (registered command, but its body was stranded after the /scores return, so it returned "Unknown command").
+_mt = server.discord_command("myteams", {"player": PLAYERS[0]})
+if "teams" not in _mt.lower() or "Unknown command" in _mt or PLAYERS[0] not in _mt:
+    fails.append(("myteams", "did not list the player's teams: %r" % _mt[:80]))
+else:
+    print("[mid-tournament] /myteams lists the player's teams OK")
+if "No player" not in server.discord_command("myteams", {"player": "definitely-nobody"}):
+    fails.append(("myteams", "unknown-player path not handled"))
+else:
+    print("[mid-tournament] /myteams handles an unknown player OK")
+
 # spot-check the live minute reached /fixtures
 fx = server.discord_command("fixtures", {})
 if "67'" not in fx:

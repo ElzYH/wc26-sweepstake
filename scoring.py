@@ -358,13 +358,10 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
     for n, tt in teams.items():
         gc[tt.get("group")] += tt.get("composite", 0)
     god = max(gc, key=gc.get) if gc else None                               # group of death (strongest)
-    bw = None
-    for m in finished:
-        if m.get("homeScore") is None or m.get("awayScore") is None:
-            continue
-        marg = abs(m["homeScore"] - m["awayScore"])
-        if bw is None or marg > bw[0]:
-            bw = (marg, f'{m["home"]} {m["homeScore"]}-{m["awayScore"]} {m["away"]}')
+    _bw = [(abs(m["homeScore"] - m["awayScore"]),
+            f'{m["home"]} {m["homeScore"]}-{m["awayScore"]} {m["away"]}')
+           for m in finished if m.get("homeScore") is not None and m.get("awayScore") is not None]
+    bw = max(_bw, key=lambda c: c[0]) if _bw else None          # biggest winning margin (first one on a tie)
     topt = max(gf, key=gf.get) if gf and max(gf.values()) > 0 else None
     by_strength = sorted(players_out, key=lambda p: -p["squad_strength"])
     pair_counts = defaultdict(int)                                   # how often two players' teams meet

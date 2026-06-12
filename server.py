@@ -2052,6 +2052,7 @@ def discord_command(name, opts, uid=None, interaction_id=None):
                 out.append("%s %s–%s %s%s" % (m.get("home"), m.get("homeScore", 0),
                                               m.get("awayScore", 0), m.get("away"), pk))
         return "\n".join(out) if out else "No scores yet — the tournament hasn't kicked off."
+    if name == "myteams":
         who = str(opts.get("player", "")).strip().lower()
         pl = next((p for p in (d.get("players") or []) if (p.get("name", "").lower() == who)), None)
         if not pl:
@@ -2362,7 +2363,6 @@ def compute_assignment(mode, players, t1_cap=None, leftover="pool", seed=None):
     teams = json.load(open("teams.json"))["teams"]
     n = len(players)
     per_player = len(teams) // n
-    in_play_n = per_player * n
     rng = random.Random(seed)
     if mode == "fair":
         # Round 1 is strict — everyone is guaranteed a favourite. After that the draw is loose (better teams

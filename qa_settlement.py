@@ -3,7 +3,7 @@
 abandoned/postponed, and glitchy knockout data. Covers singles and accumulators.
 Mirrors how the live feed labels games (winner already reflects the shootout; homeScore/awayScore
 are on-field goals only)."""
-import time, copy, sys
+import time, sys
 import wager as W
 
 FAILS = []
