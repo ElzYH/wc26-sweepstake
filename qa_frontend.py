@@ -28,6 +28,23 @@ ck("the embedded JS parses with no syntax error", r.returncode == 0, r.stderr[:2
 # ---- 2. CSS braces balanced (a stray brace breaks rendering) ----
 ck("CSS braces are balanced", HTML.count("{") == HTML.count("}"), (HTML.count("{"), HTML.count("}")))
 
+# ---- sticky bet-confirmation bar (.betcta): floats then docks; must stay correct + tab-scoped ----
+print("\n== sticky bet-confirmation bar ==")
+ck("a .betcta sticky rule exists", ".betcta{position:sticky" in HTML.replace(" ", ""), None)
+ck("it sticks to the BOTTOM (floats up, then docks)", re.search(r"\.betcta\{position:sticky;bottom:", HTML.replace(" ", "")) is not None, None)
+ck("it is safe-area aware (above the iOS home indicator)", "env(safe-area-inset-bottom" in HTML, None)
+ck("the class is applied to both bet bars (single + acca)", HTML.count('class="betcta"') == 2, HTML.count('class="betcta"'))
+# the sticky wrapper must contain the Place-bet button AND the 'final' notice, so the whole CTA travels together
+_bars = HTML.split('class="betcta"')
+_acca_bar = _bars[1] if len(_bars) > 1 else ""        # bounded: ends at the single-bet betcta
+_single_bar = _bars[2][:1300] if len(_bars) > 2 else ""
+ck("the acca sticky bar contains its Place-acca button", 'id="accaPlace"' in _acca_bar, None)
+ck("the single-bet sticky bar contains its Place-bet button", 'id="betPlace"' in _single_bar, None)
+ck("the 'this bet is final' notice rides inside the single-bet sticky bar", "this bet is final" in _single_bar, None)
+# tab-scoped: the bar is built inside renderBets() (#bets section), which is display:none on other tabs
+ck("the bar lives in the betting tab only (rendered in renderBets/#betsBody)", "function renderBets(" in JS and 'id="betsBody"' in HTML, None)
+ck("sections are display:none when inactive (so the bar can't show on other tabs)", re.search(r"section\{[^}]*display:none", HTML.replace(" ", "")) is not None, None)
+
 # ---- 3. no forbidden patterns ----
 print("\n== 2. Safety patterns ==")
 ck("no eval( in the client", "eval(" not in JS, "eval present")

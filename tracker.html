@@ -232,6 +232,11 @@
   .betodd{flex:1;min-width:80px;background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:7px 8px;font-size:12.5px;cursor:pointer;font-family:'Sora',sans-serif}
   .betodd b{color:var(--gold)}
   .betodd.on{border-color:var(--gold);background:#13301c}
+  /* Bet confirmation bar: floats pinned just above the bottom of the screen while its real slot is below the
+     fold, then docks into place once you scroll down to it. Lives inside #bets (which is display:none on other
+     tabs) so it can never appear on another page. No JS — pure CSS sticky, safe on iOS Safari / iPad. */
+  .betcta{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:25;
+    box-shadow:0 8px 30px rgba(0,0,0,.55),0 -2px 12px rgba(0,0,0,.30)}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
   .lmatch{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin-top:8px;
     color:var(--ink);font-weight:600;font-size:14px;letter-spacing:0}
@@ -625,7 +630,7 @@ function renderBets(){
   if(ACCAMODE && ACCA.length){
     let dec=1; ACCA.forEach(l=>{const [n,d2]=l.frac.split('/').map(Number); dec*=(1+n/d2);});
     const accaCap=Math.min(headroom, Math.min.apply(null,ACCA.map(l=>{const f=fx.find(m=>m.matchId===l.matchId); return f&&f.maxStake?f.maxStake:caps.max_stake;})));
-    h+='<div style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
+    h+='<div class="betcta" style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
       +'<div style="font-weight:600;margin-bottom:8px">🎰 '+ACCA.length+'-fold accumulator <span style="color:var(--muted);font-weight:400">· max stake '+accaCap+'</span></div>'
       +ACCA.map((l,i)=>{const fxp=fx.find(m=>m.matchId===l.matchId); const who=l.sel==='HOME'?(fxp?fxp.home:'home'):(l.sel==='AWAY'?(fxp?fxp.away:'away'):'Draw');
         return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>'+esc(who)+' <span style="color:var(--gold)">'+l.frac+'</span></span><button class="accarm" data-i="'+i+'" style="background:none;border:none;color:#ff7a7a;cursor:pointer">✕</button></div>';}).join('')
@@ -636,7 +641,7 @@ function renderBets(){
   if(!ACCAMODE && BETPICK){
     const fxp=fx.find(m=>m.matchId===BETPICK.matchId);
     if(fxp){ const o=fxp.odds[BETPICK.sel], who=BETPICK.sel==='HOME'?fxp.home:(BETPICK.sel==='AWAY'?fxp.away:'Draw'); const smax=Math.min(fxp.maxStake||caps.max_stake, headroom);
-      h+='<div style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
+      h+='<div class="betcta" style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
         +'<div style="font-size:13.5px;margin-bottom:8px">Bet on <b>'+esc(who)+'</b> @ <b style="color:var(--gold)">'+o.frac+'</b> <span style="color:var(--muted)">· max '+smax+'</span></div>'
         +(smax<=0?'<div style="color:#ffb86b;font-size:13px">You\'ve hit the open-bet limit — wait for a bet to settle.</div>':('<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="betStake" type="number" min="'+caps.min_stake+'" max="'+Math.min(smax,avail)+'" step="0.01" placeholder="stake (pts)" style="width:120px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px">'
         +'<span id="betReturn" style="color:var(--muted);font-size:13px"></span>'
