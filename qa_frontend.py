@@ -45,6 +45,50 @@ ck("the 'this bet is final' notice rides inside the single-bet sticky bar", "thi
 ck("the bar lives in the betting tab only (rendered in renderBets/#betsBody)", "function renderBets(" in JS and 'id="betsBody"' in HTML, None)
 ck("sections are display:none when inactive (so the bar can't show on other tabs)", re.search(r"section\{[^}]*display:none", HTML.replace(" ", "")) is not None, None)
 
+# ---- bet-slip selection model: tap=select, re-tap=remove, 2nd game=auto-acca, down-to-1=single ----
+print("\n== bet-slip selection model (.betodd click) ==")
+_s = HTML.index("querySelectorAll('.betodd').forEach(b=>b.onclick=()=>{")
+_i = HTML.index("{", _s); _d = 0; _j = _i
+while _j < len(HTML):
+    if HTML[_j] == "{": _d += 1
+    elif HTML[_j] == "}":
+        _d -= 1
+        if _d == 0: break
+    _j += 1
+_BODY = HTML[_i + 1:_j]
+_slip = """
+let ACCA=[], BETPICK=null, ACCAMODE=false, BETMSG='';
+let maxLegs=3, accasOn=true;
+function renderBets(){}
+function click(mid,sel,frac){ const b={dataset:{mid,sel,frac}}; (()=>{%s})(); }
+function st(){ return ACCAMODE ? ('ACCA['+ACCA.map(l=>l.matchId+'-'+l.sel).join(',')+']') : (BETPICK?('SINGLE '+BETPICK.matchId+'-'+BETPICK.sel):'EMPTY'); }
+let out=[];
+function eq(n,g,w){ out.push((g===w?'PASS ':'FAIL ')+n+(g===w?'':'  got '+JSON.stringify(g))); }
+click('A','HOME','2/1'); eq('first tap selects a single', st(), 'SINGLE A-HOME');
+click('A','HOME','2/1'); eq('re-tapping the same single removes it', st(), 'EMPTY');
+click('A','HOME','2/1'); click('A','AWAY','3/1'); eq('same game, other outcome switches the single', st(), 'SINGLE A-AWAY');
+BETPICK=null;ACCA=[];ACCAMODE=false;
+click('A','HOME','2/1'); click('B','HOME','1/1'); eq('a second game auto-builds an acca', st(), 'ACCA[A-HOME,B-HOME]');
+click('B','HOME','1/1'); eq('removing a leg back to one reverts to a single', st(), 'SINGLE A-HOME');
+BETPICK=null;ACCA=[];ACCAMODE=false;
+click('A','HOME','2/1'); click('B','HOME','1/1'); click('C','HOME','1/1'); eq('a third leg is added', st(), 'ACCA[A-HOME,B-HOME,C-HOME]');
+click('D','HOME','1/1'); eq('a leg beyond the cap is rejected', st(), 'ACCA[A-HOME,B-HOME,C-HOME]');
+eq('the cap rejection sets a message', BETMSG.indexOf('at most 3')>=0, true);
+click('A','AWAY','5/2'); eq('tapping the other outcome switches that leg', st(), 'ACCA[A-AWAY,B-HOME,C-HOME]');
+BETPICK=null;ACCA=[];ACCAMODE=false; accasOn=false;
+click('A','HOME','2/1'); click('B','HOME','1/1'); eq('with accas off, a second game just switches the single', st(), 'SINGLE B-HOME');
+console.log(out.join('\\n'));
+""" % _BODY
+open("/tmp/_slip.js", "w").write(_slip)
+_r = subprocess.run(["node", "/tmp/_slip.js"], capture_output=True, text=True)
+if _r.returncode != 0:
+    ck("the bet-slip handler runs", False, _r.stderr[:160])
+else:
+    for _ln in _r.stdout.splitlines():
+        _ln = _ln.strip()
+        if _ln.startswith(("PASS ", "FAIL ")):
+            ck(_ln[5:], _ln.startswith("PASS "), None)
+
 # ---- 3. no forbidden patterns ----
 print("\n== 2. Safety patterns ==")
 ck("no eval( in the client", "eval(" not in JS, "eval present")

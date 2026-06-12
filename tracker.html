@@ -554,6 +554,7 @@ function renderBets(){
   if(!STATUS.wagering_enabled){ el.innerHTML='<div class="empty">Betting isn\'t switched on for this sweepstake.</div>'; return; }
   const caps=STATUS.wager_caps||{min_stake:1,max_stake:30,max_return:null,max_acca_legs:3};
   const maxLegs=caps.max_acca_legs||3;
+  const accasOn=(maxLegs>=2)&&(caps.max_active_accas!==0);   // auto-acca only when accumulators are actually allowed
   const retCap=(typeof caps.max_return==='number'&&caps.max_return>0)?caps.max_return:null;   // null = no winnings limit
   const players=(DATA.players||[]).map(p=>p.name);
   if(!players.length){ el.innerHTML='<div class="empty">Bets open once the draw is done.</div>'; return; }
@@ -612,7 +613,7 @@ function renderBets(){
   } else if(fbet.open && fbMine){
     h+='<div style="margin:0 0 12px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;color:var(--muted)">🎁 You\'ve claimed today\'s free points — they\'re in your balance above. Bet them on any game. The next drop is another day.</div>';
   }
-  h+='<div style="display:flex;gap:6px;margin:0 0 10px;flex-wrap:wrap"><button class="mini'+(!ACCAMODE?' cta':'')+'" id="modeSingle">Single bet</button><button class="mini'+(ACCAMODE?' cta':'')+'" id="modeAcca">🎰 Accumulator (up to '+maxLegs+')</button></div>';
+  h+='<div style="color:var(--muted);font-size:12px;margin:0 0 10px">Tap a game to bet · tap it again to remove'+(accasOn?' · tap a second game to build a 🎰 accumulator':'')+'.</div>';
   if(ACCAMODE) h+='<div style="color:var(--muted);font-size:12.5px;margin:0 0 10px">Pick up to '+maxLegs+' upcoming games — the odds multiply and <b>all</b> must win (one loss = the whole acca pays nothing). Tap an odds button to add a leg. You can have up to <b>'+((caps.max_active_accas)||2)+'</b> accumulators running at once (single bets are unlimited).'+(retCap?(' Max return on any bet is <b>'+retCap+'</b> points.'):'')+' '+(maxLegs!==3?'(The organiser set the leg limit to '+maxLegs+'.)':'')+'</div>';
   if(!fx.length) h+='<div class="empty">No upcoming games to bet on right now — check back before kick-off.</div>';
   else h+='<div class="mdgrid">'+fx.map(m=>{
@@ -653,7 +654,7 @@ function renderBets(){
   h+='<div class="ovsec"><div class="ovh">Your bets</div><div id="myBets"><div class="empty">Loading…</div></div></div>';
   h+='<div class="ovsec"><div class="ovh">Everyone\'s open bets</div><div id="allBets"><div class="empty">Loading…</div></div></div>';
   el.innerHTML=h;
-  const ws=document.getElementById('betWho'); if(ws) ws.onchange=()=>{ BETPLAYER=ws.value; BETPICK=null; BETMSG=''; BETPIN_DRAFT=null; renderBets(); loadMyBets(); };
+  const ws=document.getElementById('betWho'); if(ws) ws.onchange=()=>{ BETPLAYER=ws.value; BETPICK=null; ACCA=[]; ACCAMODE=false; BETMSG=''; BETPIN_DRAFT=null; renderBets(); loadMyBets(); };
   const dlb=document.getElementById('discordLoginBtn'); if(dlb) dlb.onclick=()=>{ location.href='/api/discord_login'; };
   const lob=document.getElementById('logoutBtn'); if(lob) lob.onclick=async()=>{ try{ await fetch('/api/logout',{method:'POST'}); }catch(e){} SESSION={oauth:STATUS.discord_oauth}; BETMSG='Logged out.'; await refreshStatus(); renderBets(); };
   const clb=document.getElementById('claimPlayerBtn'); if(clb) clb.onclick=async()=>{
@@ -726,18 +727,35 @@ function renderBets(){
     }catch(e){ box.textContent='Could not reach the server.'; }
   };
   el.querySelectorAll('.betodd').forEach(b=>b.onclick=()=>{
+    const mid=b.dataset.mid, sel=b.dataset.sel, frac=b.dataset.frac;
     if(ACCAMODE){
-      const mid=b.dataset.mid, sel=b.dataset.sel, frac=b.dataset.frac;
       const ix=ACCA.findIndex(l=>l.matchId===mid);
-      if(ix>=0){ if(ACCA[ix].sel===sel) ACCA.splice(ix,1); else ACCA[ix]={matchId:mid,sel:sel,frac:frac}; }   // toggle/replace per game
-      else { if(ACCA.length>=maxLegs){ BETMSG='An accumulator can have at most '+maxLegs+' legs.'; renderBets(); return; } ACCA.push({matchId:mid,sel:sel,frac:frac}); }
+      if(ix>=0){
+        if(ACCA[ix].sel===sel) ACCA.splice(ix,1);                 // re-tap a leg -> remove it
+        else ACCA[ix]={matchId:mid,sel:sel,frac:frac};            // same game, other outcome -> switch that leg
+      } else {
+        if(ACCA.length>=maxLegs){ BETMSG='An accumulator can have at most '+maxLegs+' legs.'; renderBets(); return; }
+        ACCA.push({matchId:mid,sel:sel,frac:frac});               // a new game -> add a leg
+      }
+      if(ACCA.length===1){ BETPICK=ACCA[0]; ACCA=[]; ACCAMODE=false; }   // down to one -> it's just a single again
+      else if(ACCA.length===0){ ACCAMODE=false; }                 // emptied -> nothing selected
       BETMSG=''; renderBets();
-    } else { BETPICK={matchId:b.dataset.mid,sel:b.dataset.sel,frac:b.dataset.frac}; BETMSG=''; renderBets(); }
+    } else {
+      if(BETPICK && BETPICK.matchId===mid && BETPICK.sel===sel){
+        BETPICK=null;                                             // re-tap the single -> remove it
+      } else if(BETPICK && BETPICK.matchId===mid){
+        BETPICK={matchId:mid,sel:sel,frac:frac};                  // same game, other outcome -> switch
+      } else if(BETPICK && accasOn){
+        ACCA=[BETPICK,{matchId:mid,sel:sel,frac:frac}];           // a second game -> auto-accumulator
+        ACCAMODE=true; BETPICK=null;
+      } else {
+        BETPICK={matchId:mid,sel:sel,frac:frac};                  // first pick (or accas off -> just switch)
+      }
+      BETMSG=''; renderBets();
+    }
   });
-  const msng=document.getElementById('modeSingle'); if(msng) msng.onclick=()=>{ ACCAMODE=false; BETMSG=''; renderBets(); };
-  const macc=document.getElementById('modeAcca'); if(macc) macc.onclick=()=>{ ACCAMODE=true; BETPICK=null; BETMSG=''; renderBets(); };
   const cfb=document.getElementById('claimFreeBtn'); if(cfb) cfb.onclick=claimFreePoints;
-  el.querySelectorAll('.accarm').forEach(b=>b.onclick=()=>{ ACCA.splice(+b.dataset.i,1); renderBets(); });
+  el.querySelectorAll('.accarm').forEach(b=>b.onclick=()=>{ ACCA.splice(+b.dataset.i,1); if(ACCA.length===1){ BETPICK=ACCA[0]; ACCA=[]; ACCAMODE=false; } else if(ACCA.length===0){ ACCAMODE=false; } renderBets(); });
   const ap=document.getElementById('accaPlace'); if(ap) ap.onclick=placeAcca;
   // live validation for the ACCA stake: warn on 0 / negative / over-max, disable Place
   const ast=document.getElementById('accaStake'), art=document.getElementById('accaReturn');
