@@ -54,7 +54,7 @@ def extract(name):
         k += 1
     return None
 
-funcs = {n: extract(n) for n in ("esc", "ownerOf", "koNote", "fmtTime", "mulberry32", "isDone", "liveClockText", "provResult", "accaLiveStatus", "buildHistory")}
+funcs = {n: extract(n) for n in ("esc", "ownerOf", "koNote", "fmtTime", "mulberry32", "isDone", "liveClockText", "provResult", "accaLiveStatus", "buildHistory", "simWinOdds")}
 missing = [n for n, v in funcs.items() if not v]
 ck("all pure helpers were found in the source", not missing, missing)
 
@@ -140,6 +140,26 @@ ck("provResult reads string scores", provResult("HOME", "2", "1") === "win");
               leaderboards:{points:[{name:"James",score:6},{name:"Erol",score:0.2}], hybrid:[{name:"James",score:6},{name:"Erol",score:0.2}]}};
   ck("chart now-point includes betting (Erol 0 -> 0.2)", ptsOf(d4).map(x=>x.Erol).join(",") === "0,0.2");
   ck("chart baseline stays at zero (betting not back-dated)", ptsOf(d4)[0].Erol === 0);
+}
+
+// ---- simWinOdds(): the forecast must carry betting on points/both, but leave survival bet-free ----
+{
+  const groups=[], pt={P1:[],P2:[]}; let ti=0;
+  "ABCDEFGHIJKL".split("").forEach(g=>{ const table=[];
+    for(let k=0;k<4;k++){ const name="T"+(ti++), owner=(ti%2)?"P1":"P2", comp=50+k*5;
+      table.push({team:name,owner,composite:comp,points:k,goalDifference:0,goalsFor:k,group:g});
+      pt[owner].push({name,points:k,status:"alive",stage:"GROUP_STAGE"}); }
+    groups.push({group:g,table}); });
+  const sco={points:{per_goal:1,win:3,draw:1,clean_sheet:1,stage_bonus:{LAST_32:2,LAST_16:4,QUARTER_FINALS:6,SEMI_FINALS:9,FINAL:12,WINNER:16}},
+             survival:{LAST_32:18,LAST_16:26,QUARTER_FINALS:34,SEMI_FINALS:44,FINAL:55,WINNER:70}};
+  const mkD=bet=>{ const f1=pt.P1.reduce((s,t)=>s+t.points,0), f2=pt.P2.reduce((s,t)=>s+t.points,0);
+    return {groups,fixtures:[],scoring:sco,players:[{name:"P1",teams:pt.P1,points:f1+bet},{name:"P2",teams:pt.P2,points:f2}]}; };
+  const get=(r,who)=>r.find(x=>x.name===who);
+  const base=simWinOdds(mkD(0),3000), bet=simWinOdds(mkD(500),3000);
+  ck("forecast runs on a full bracket", Array.isArray(base) && base.length===2);
+  ck("a big betting lead lifts the points-win forecast", get(bet,"P1").pts > get(base,"P1").pts + 30, [get(base,"P1").pts, get(bet,"P1").pts]);
+  ck("projected points rise by exactly the betting net", Math.abs(get(bet,"P1").proj - (get(base,"P1").proj + 500)) < 1, [get(base,"P1").proj, get(bet,"P1").proj]);
+  ck("survival forecast is bet-free (unchanged)", Math.abs(get(bet,"P1").surv - get(base,"P1").surv) < 6, [get(base,"P1").surv, get(bet,"P1").surv]);
 }
 
 // ---- esc(): XSS escaping ----

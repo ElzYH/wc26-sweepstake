@@ -1633,6 +1633,10 @@ function simWinOdds(d,N){
   const SC=(d.scoring&&d.scoring.points)||{}, SV=(d.scoring&&d.scoring.survival)||{};
   const pg=SC.per_goal||1, pw=SC.win||3, pdr=SC.draw||1, pc=SC.clean_sheet||1, SB=SC.stage_bonus||{};
   const players=[...new Set(teamArr.map(t=>t.owner))].filter(o=>o&&o!=='—'&&o!=='-');
+  // current betting net per player (their leaderboard total minus their teams' match points) — the bit the
+  // forecast was missing. The sweepstake is won on the leaderboard, which includes settled bets, so we carry
+  // each player's locked-in betting result into the simulation. Future bets can't be known, so this is fixed.
+  const bnet={}; (d.players||[]).forEach(p=>{ const fb=(p.teams||[]).reduce((s,t)=>s+(t.points||0),0); bnet[p.name]=(p.points||0)-fb; });
   if(!players.length) return null;
   const wS={},wP={},wB={},sumPts={}; players.forEach(p=>{wS[p]=0;wP[p]=0;wB[p]=0;sumPts[p]=0;});
   // deterministic seed from the actual state, so identical data always gives identical odds
@@ -1704,6 +1708,7 @@ function simWinOdds(d,N){
     const svp=n=>SV[by[n].out?by[n].outStage:stageReached[n]]||0;
     const P={},PT={},AL={}; players.forEach(p=>{P[p]=0;PT[p]=0;AL[p]=0;});
     teamArr.forEach(t=>{const o=t.owner; if(PT[o]===undefined)return; PT[o]+=pts[t.name]; P[o]+=svp(t.name); if(alive[t.name])AL[o]++;});
+    players.forEach(p=>{ PT[p]+=(bnet[p]||0); });   // points/both carry betting; survival (wS) stays bet-free
     players.forEach(p=>sumPts[p]+=PT[p]);
     wP[players.slice().sort((a,b)=>PT[b]-PT[a])[0]]++;
     wS[players.slice().sort((a,b)=>AL[b]-AL[a]||P[b]-P[a])[0]]++;
