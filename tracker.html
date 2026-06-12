@@ -2091,13 +2091,13 @@ function renderDiscord(){
   const b=document.getElementById('discordBody'); if(!b) return;
   let h='';
   if(STATUS.invite){
-    h+='<p style="margin:0 0 12px;font-size:13px;color:var(--ink);opacity:.85">Join the group server to get every kickoff, goal, half-time, full-time, knockout and lead change in the channel — plus the round-by-round draw and the daily summary. Type <code>/notifyme &lt;your name&gt;</code> in the server and the bot will <b>@you</b> on your own teams&#39; events.</p>';
+    h+='<p style="margin:0 0 12px;font-size:13px;color:var(--ink);opacity:.85">Join the group server to get every kickoff, goal, half-time, full-time, knockout and lead change in the channel — plus the round-by-round draw and the daily summary. Type <code>/notifyme &lt;your name&gt;</code> in the server and the bot will <b>DM you</b> on your own teams&#39; events — or <code>/notifyme all</code> to be DMed every game.</p>';
     h+='<a class="mini cta" href="'+esc(STATUS.invite)+'" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;padding:10px 16px;font-size:14px">💬 Join the group chat</a>';
   } else {
     h+='<p style="margin:0 0 12px;font-size:13px;color:var(--muted)">No Discord invite link has been added yet'+(STATUS.discord?' — alerts are posting to a channel, but there\'s no public join link.':'.')+'</p>';
   }
   h+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">';
-  h+='<div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:8px"><b style="color:var(--ink)">What posts here:</b> kickoffs, goals, half-time, full-time (with extra time &amp; penalties), knockouts, lead changes &amp; rivalries, the draw (round-by-round + final squads), the end-of-tournament wrap-up, and an optional daily summary. With <code>/notifyme</code> you also get personally @-pinged on your teams&#39; events.</div>';
+  h+='<div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:8px"><b style="color:var(--ink)">What posts here:</b> kickoffs, goals, half-time, full-time (with extra time &amp; penalties), knockouts, lead changes &amp; rivalries, the draw (round-by-round + final squads), the end-of-tournament wrap-up, and an optional daily summary. With <code>/notifyme</code> the bot also <b>DMs you</b> on your teams&#39; events (<code>/notifyme all</code> for every game); if your DMs are closed it falls back to an @-ping here.</div>';
   h+='<button class="mini" id="discordSetupBtn">⚙ Discord setup — webhook, invite &amp; bot</button>';
   h+='</div>';
   b.innerHTML=h;

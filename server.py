@@ -473,12 +473,10 @@ def _discord_subs():
     return s if isinstance(s, dict) else {}
 
 
-def discord_mention(player, text):
-    """Ping the Discord users who subscribed to this player. No-op if nobody subscribed / no webhook."""
+def _mention_uids(uids, text):
+    """@mention specific Discord user-ids in the channel. Shared by discord_mention and the DM fallback."""
     try:
-        if not player or player in ("—", "-"):
-            return
-        uids = [u for u, pl in _discord_subs().items() if pl == player][:25]
+        uids = [str(u) for u in uids][:25]
         if not uids:
             return
         url = (load_config().get("discord_webhook") or "").strip()
@@ -492,6 +490,52 @@ def discord_mention(player, text):
         urllib.request.urlopen(req, timeout=8)
     except Exception as e:
         log("discord mention failed:", e)
+
+
+def discord_mention(player, text):
+    """Ping the Discord users who subscribed to this player. No-op if nobody subscribed / no webhook."""
+    if not player or player in ("—", "-"):
+        return
+    _mention_uids([u for u, pl in _discord_subs().items() if pl == player], text)
+
+
+def _bot_dm_player(player, text):
+    """DM every Discord account linked to this player — their own private feed. If a DM can't be delivered
+    (no bot token, or the user has DMs closed), fall back to a channel @mention for those users so a personal
+    alert is never silently lost. Returns how many were DM'd. Best-effort; never raises."""
+    try:
+        if not player or player in ("—", "-"):
+            return 0
+        uids = [u for u, pl in _discord_subs().items() if pl == player][:25]
+        if not uids:
+            return 0
+        sent, failed = 0, []
+        for u in uids:
+            ok, _ = _bot_dm(u, text)
+            if ok:
+                sent += 1
+            else:
+                failed.append(u)
+        if failed:
+            _mention_uids(failed, text)         # couldn't DM -> @mention instead (e.g. DMs closed / no token)
+        return sent
+    except Exception as e:
+        log("bot dm player failed:", e)
+        return 0
+
+
+def _dm_all_games_uids():
+    s = load_config().get("discord_dm_all")
+    return [str(u) for u in s] if isinstance(s, list) else []
+
+
+def _dm_all_games(text):
+    """DM the all-games match feed to everyone who opted in with `/notifyme all`. Best-effort; never raises."""
+    try:
+        for u in _dm_all_games_uids()[:50]:
+            _bot_dm(u, text)
+    except Exception as e:
+        log("dm all-games failed:", e)
 
 
 # ---------------- Web Push (Path A) — needs pywebpush; guarded so missing lib is harmless ----------------
@@ -1240,8 +1284,9 @@ def notify_changes(old):
             if ow and ow not in ("—", "-"):
                 push_player(ow, etype, ti, bo)
                 if ping:
-                    discord_mention(ow, "%s — %s" % (ti, bo))
-        discord_send(group_line)
+                    _bot_dm_player(ow, "%s — %s" % (ti, bo))   # personal -> DM (falls back to @mention)
+        discord_send(group_line)            # communal feed stays in the channel
+        _dm_all_games(group_line)           # ...and DMs anyone who opted into the all-games feed
 
     def own(o):
         return o if (o and o not in ("—", "-")) else "—"
@@ -1260,6 +1305,7 @@ def notify_changes(old):
         for x, y, pos in (rivalry_alerts(old, new, _active_mode()) if _mp > 0 else []):
             alert_player(x, "rivalry", "Moved up 📊", "You overtook %s for %s." % (y, _ord(pos)),
                          "📊 **%s** overtakes **%s** for %s." % (x, y, _ord(pos)))
+            _bot_dm_player(x, "📊 You overtook **%s** for %s." % (y, _ord(pos)))   # personal -> DM
     except Exception:
         pass
     # per-match transitions: kickoff, half-time, second half, goals
@@ -1302,10 +1348,12 @@ def notify_changes(old):
                     score = "%s %d–%d %s" % (h, nhs, nas, a)
                     if nhs > ohs and ho_ok:
                         alert_player(ho, "goal", "%s scored! ⚽" % h, score, "⚽ **%s** (%s) scored — %s" % (h, ho, score))
-                        discord_mention(ho, "⚽ **%s** scored — %s" % (h, score))
+                        _bot_dm_player(ho, "⚽ **%s** scored — %s" % (h, score))     # personal -> DM
+                        _dm_all_games("⚽ **%s** (%s) scored — %s" % (h, ho, score))
                     if nas > oas and ao_ok:
                         alert_player(ao, "goal", "%s scored! ⚽" % a, score, "⚽ **%s** (%s) scored — %s" % (a, ao, score))
-                        discord_mention(ao, "⚽ **%s** scored — %s" % (a, score))
+                        _bot_dm_player(ao, "⚽ **%s** scored — %s" % (a, score))     # personal -> DM
+                        _dm_all_games("⚽ **%s** (%s) scored — %s" % (a, ao, score))
     except Exception:
         pass
     # a player's team is knocked out
@@ -1316,7 +1364,7 @@ def notify_changes(old):
                 owner = na[t][1]
                 alert_player(owner, "knockout", "%s is out ❌" % t, "Check the leaderboard to see where you stand.",
                              "❌ **%s** (%s) is out." % (t, own(owner)))
-                discord_mention(owner, "❌ **%s** is out." % t)
+                _bot_dm_player(owner, "❌ **%s** is out." % t)     # personal -> DM
     except Exception:
         pass
     # champion decided -> everyone, with the winner's standing in the active scoring mode
@@ -1612,19 +1660,38 @@ def discord_command(name, opts, uid=None, interaction_id=None):
         if not uid:
             return "Couldn't read your Discord account — run this from inside the server."
         who = str(opts.get("player", "")).strip()
+        if who.lower() in ("all", "everything", "every game", "everyone"):
+            cfg = load_config(); allg = cfg.get("discord_dm_all"); allg = allg if isinstance(allg, list) else []
+            if str(uid) not in [str(x) for x in allg]:
+                allg.append(str(uid))
+            cfg["discord_dm_all"] = allg; save_config(cfg)
+            ok, _ = _bot_dm(uid, "🌍 You're set up for **all-games** alerts — I'll DM you every kickoff, goal, "
+                                 "half-time and full-time across the tournament. `/stopnotify` turns it back off.")
+            return ("🌍 Done — I'll **DM** you every game's kickoffs, goals and results." if ok else
+                    "🌍 You're on the all-games list, but I couldn't DM you — open your DMs (Privacy Settings → "
+                    "allow DMs from server members) and I'll start sending them.")
         pl = next((p for p in (d.get("players") or []) if p.get("name", "").lower() == who.lower()), None)
         if not pl:
             names = ", ".join(p.get("name", "") for p in (d.get("players") or []))
-            return "No player called **%s**. Players: %s\nTry `/notifyme <player>`." % (who or "?", names or "-")
+            return ("No player called **%s**. Players: %s\nTry `/notifyme <player>` for your own teams, "
+                    "or `/notifyme all` for every game." % (who or "?", names or "-"))
         cfg = load_config(); subs = cfg.get("discord_subs"); subs = subs if isinstance(subs, dict) else {}
         subs[str(uid)] = pl["name"]; cfg["discord_subs"] = subs; save_config(cfg)
-        return ("🔔 You'll be pinged here when **%s**'s teams kick off, score, reach full-time or go out. "
-                "Use `/stopnotify` to turn it off." % pl["name"])
+        ok, _ = _bot_dm(uid, "🔔 You're linked to **%s**. I'll DM you here whenever your teams kick off, score, "
+                             "reach full-time or go out. Want every game too? Run `/notifyme all`. "
+                             "`/stopnotify` turns alerts off." % pl["name"])
+        return ("🔔 Done — I'll **DM** you when **%s**'s teams kick off, score, reach full-time or go out. "
+                "(`/notifyme all` for every game.)" % pl["name"] if ok else
+                "🔔 You'll be pinged in the channel on **%s**'s events. To get them as **DMs** instead, open your "
+                "DMs (Privacy Settings → allow DMs from server members) and run `/notifyme %s` again." % (pl["name"], pl["name"]))
     if name == "stopnotify":
         cfg = load_config(); subs = cfg.get("discord_subs"); subs = subs if isinstance(subs, dict) else {}
+        allg = cfg.get("discord_dm_all"); allg = allg if isinstance(allg, list) else []
         had = subs.pop(str(uid), None) if uid else None
-        cfg["discord_subs"] = subs; save_config(cfg)
-        return "🔕 Personal pings turned off." if had else "You weren't subscribed to personal pings."
+        had_all = str(uid) in [str(x) for x in allg]
+        allg = [x for x in allg if str(x) != str(uid)]
+        cfg["discord_subs"] = subs; cfg["discord_dm_all"] = allg; save_config(cfg)
+        return "🔕 Alerts turned off." if (had or had_all) else "You weren't subscribed to any alerts."
     if name == "linkdiscord":
         if not uid:
             return "Couldn't read your Discord account — run this from inside the server."
@@ -1645,6 +1712,10 @@ def discord_command(name, opts, uid=None, interaction_id=None):
         codes.pop(code, None)                         # single use
         cfg["wager_links"] = lk; cfg["discord_subs"] = subs; cfg["wager_link_codes"] = codes
         save_config(cfg)
+        _bot_dm(uid, "👋 Welcome — your Discord is now linked to **%s**. I'll DM you when your teams kick off, "
+                     "score, reach full-time or go out, and you can bet here with `/games` then `/bet` (no passcode "
+                     "needed). Want every game's alerts too? Run `/notifyme all`. Turn alerts off any time with "
+                     "`/stopnotify`." % player)
         return ("✅ Linked — this Discord is now **%s** for betting. Use `/games` then `/bet` (no passcode needed here). "
                 "You'll also get %s's match pings." % (player, player))
     if name == "mypin":
@@ -1922,8 +1993,9 @@ def discord_command(name, opts, uid=None, interaction_id=None):
                 "/myteams <player> - that player's teams\n"
                 "/players - everyone's team counts\n"
                 "/team <name> - look up one team (owner, group, points)\n"
-                "/notifyme <player> - ping you here on your teams' events\n"
-                "/stopnotify - turn your pings off\n"
+                "/notifyme <player> - DM you on that player's teams' events\n"
+                "/notifyme all - DM you every game's kickoffs, goals & results\n"
+                "/stopnotify - turn your alerts off\n"
                 "/help - this list")
     if name == "summary":
         return "\n".join(build_summary())
@@ -2070,9 +2142,9 @@ def register_discord_commands():
         {"name": "players", "description": "Every player and how many teams are still in", "type": 1},
         {"name": "team", "description": "Look up a team's owner, group and points", "type": 1,
          "options": [{"name": "name", "description": "Team name, e.g. Brazil", "type": 3, "required": True}]},
-        {"name": "notifyme", "description": "Get pinged here when a player's teams play, score or go out", "type": 1,
-         "options": [{"name": "player", "description": "Your player name in the sweepstake", "type": 3, "required": True}]},
-        {"name": "stopnotify", "description": "Turn off your personal pings", "type": 1},
+        {"name": "notifyme", "description": "DM you when your teams play/score/go out — or 'all' for every game", "type": 1,
+         "options": [{"name": "player", "description": "Your player name, or 'all' for every game", "type": 3, "required": True}]},
+        {"name": "stopnotify", "description": "Turn off your DM alerts", "type": 1},
         {"name": "games", "description": "Upcoming games and their betting odds", "type": 1},
         {"name": "bet", "description": "Bet your points on a match (shows the payout; add confirm to place)", "type": 1,
          "options": [

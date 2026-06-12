@@ -24,13 +24,15 @@ json.dump({"configured": True, "discord_webhook": "https://example/webhook", "si
           open(os.environ["WC26_CONFIG"], "w"))
 import server as S
 
-DISC, PUSH, MENT = [], [], []
+DISC, PUSH, MENT, DM, DMALL = [], [], [], [], []
 S.discord_send = lambda text: DISC.append(text)
 S.push_player = lambda player, etype, title, body: PUSH.append((player, etype, title))
 S.discord_mention = lambda who, msg: MENT.append((who, msg))
+S._bot_dm_player = lambda player, text: (DM.append((player, text)) or 1)   # personal DM path
+S._dm_all_games = lambda text: DMALL.append(text)                          # all-games opt-in feed
 
 def reset():
-    DISC.clear(); PUSH.clear(); MENT.clear()
+    DISC.clear(); PUSH.clear(); MENT.clear(); DM.clear(); DMALL.clear()
 
 def tracker(matches_played, status, hs, as_, leader="Erol", hybrid=None):
     return {"stats": {"matches_played": matches_played},
@@ -52,9 +54,13 @@ print("== opening day (matches_played == 0): live alerts must STILL fire ==")
 transition(tracker(0, "TIMED", None, None), tracker(0, "IN_PLAY", 0, 0))
 ck("kickoff posts to the webhook on opening day", any("Kicked off" in x for x in DISC), DISC)
 ck("kickoff pushes to both owners", {p[0] for p in PUSH} == {"Erol", "James"}, PUSH)
+ck("kickoff DMs both owners personally", {p[0] for p in DM} == {"Erol", "James"}, DM)
+ck("kickoff feeds the all-games subscribers", any("Kicked off" in x for x in DMALL), DMALL)
 
 transition(tracker(0, "IN_PLAY", 0, 0), tracker(0, "IN_PLAY", 1, 0))
-ck("a goal pings the scoring team's owner on opening day", any("scored" in m[1] for m in MENT), MENT)
+ck("a goal DMs the scoring team's owner (not an @mention)", any("scored" in m[1] for m in DM), DM)
+ck("a goal no longer @mentions in the channel", not any("scored" in m[1] for m in MENT), MENT)
+ck("a goal feeds the all-games subscribers", any("scored" in x for x in DMALL), DMALL)
 ck("a goal pushes the owner", any(p[1] == "goal" for p in PUSH), PUSH)
 
 transition(tracker(0, "IN_PLAY", 1, 0), tracker(1, "FINISHED", 1, 0))
@@ -115,6 +121,27 @@ _day2 = S._day_by_player(S._load_tracker())
 ck("each distinct owner gets one perspective", len(_day2.get("James", [])) == 1 and len(_day2.get("Erol", [])) == 1, _day2)
 ck("James sees his team first", _day2.get("James", [""])[0].startswith("Mexico vs Brazil"), _day2.get("James"))
 ck("Erol sees his team first", _day2.get("Erol", [""])[0].startswith("Brazil vs Mexico"), _day2.get("Erol"))
+
+print("\n== /notifyme routing: personal vs all-games, welcome DM, stopnotify clears both ==")
+DMRAW = []
+S._bot_dm = lambda uid, text: (DMRAW.append((str(uid), text)) or (True, None))
+json.dump({"players": [{"name": "Erol", "teams": []}, {"name": "James", "teams": []}],
+           "stats": {}, "leaderboards": {}, "fixtures": []},
+          open(os.path.join(t, "tracker_data.json"), "w"))
+S.discord_command("notifyme", {"player": "Erol"}, uid="111")
+_cfg = S.load_config()
+ck("/notifyme <player> stores a personal sub", _cfg.get("discord_subs", {}).get("111") == "Erol", _cfg.get("discord_subs"))
+ck("/notifyme <player> sends a welcome DM", any(u == "111" for u, _m in DMRAW), DMRAW)
+DMRAW.clear()
+S.discord_command("notifyme", {"player": "all"}, uid="222")
+_cfg = S.load_config()
+ck("/notifyme all opts into the all-games list", "222" in [str(x) for x in _cfg.get("discord_dm_all", [])], _cfg.get("discord_dm_all"))
+ck("/notifyme all sends a welcome DM", any(u == "222" for u, _m in DMRAW), DMRAW)
+S.discord_command("notifyme", {"player": "all"}, uid="111")        # 111 now has personal + all-games
+S.discord_command("stopnotify", {}, uid="111")
+_cfg = S.load_config()
+ck("/stopnotify clears the personal sub", "111" not in _cfg.get("discord_subs", {}), _cfg.get("discord_subs"))
+ck("/stopnotify clears the all-games opt-in", "111" not in [str(x) for x in _cfg.get("discord_dm_all", [])], _cfg.get("discord_dm_all"))
 
 import shutil
 shutil.rmtree(t, ignore_errors=True)
