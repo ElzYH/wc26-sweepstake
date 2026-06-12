@@ -320,10 +320,27 @@ def grant_free_points(wagers, player, drop_id, amount=None, now=None):
     return True, rec
 
 
-def applied_points(base_points, player, wagers):
-    """A player's displayed points once wagers are applied: base + leaderboard net (free-cushioned) - open stakes, floored at 0."""
+def leaderboard_held(player, wagers, bonus=None):
+    """How much of a player's OPEN-bet stakes should come OFF their leaderboard total. Open stakes are covered by
+    the free bonus first — the same bonus that cushions losses — so stakes funded by free points never drag a
+    player's real standing down (free points were never on the leaderboard to begin with). Only stakes riding on
+    genuinely earned points (those beyond the free cushion) are held off the board. This keeps the leaderboard
+    consistent with available_points and with 'losing your free points costs you nothing'."""
     d = player_deltas(wagers).get(player, {})
-    return max(0.0, round(base_points + leaderboard_net(player, wagers) - d.get("pending_stake", 0.0), 2))
+    pend = d.get("pending_stake", 0.0)
+    if pend <= 0:
+        return 0.0
+    b = free_bonus(player, wagers) if bonus is None else float(bonus)
+    net = d.get("settled_net", 0.0)
+    free_left = max(0.0, b - max(0.0, -net))          # free bonus left after cushioning any settled losses
+    return round(max(0.0, pend - free_left), 2)
+
+
+def applied_points(base_points, player, wagers):
+    """A player's displayed points once wagers are applied: base + leaderboard net (free-cushioned) - the real
+    (free-cushioned) held stake, floored at 0. Free-bonus-funded open bets don't pull the leaderboard down, so a
+    settled win still shows even while other stakes are riding."""
+    return max(0.0, round(base_points + leaderboard_net(player, wagers) - leaderboard_held(player, wagers), 2))
 
 
 def place(wagers, player, match, selection, stake, settled_points, comp_home, comp_away, now=None, group_mid_ts=None):

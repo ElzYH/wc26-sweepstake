@@ -144,12 +144,29 @@ def run():
     ck("pens win settles the advancing side as won", ko[0]["status"] == "won", ko[0])
 
     # --- applied points never go below zero, and reflect held stakes + settled net ---
+    # Stake 10 against 10 earned + a 5 free bonus: the bonus covers 5 of the stake, so only 5 of *real* points are
+    # held off the board (free-funded stake never drags the leaderboard down — mirrors how losses are cushioned).
     held = []
-    wager.place(held, "Erol", fx(mid="H"), "HOME", 5, settled_points=10, comp_home=80, comp_away=40)
-    ck("open stake is held (applied points drop)", wager.applied_points(10, "Erol", held) == 5.0,
+    wager.place(held, "Erol", fx(mid="H"), "HOME", 10, settled_points=10, comp_home=80, comp_away=40)
+    ck("real (beyond-bonus) open stake is held (applied points drop)", wager.applied_points(10, "Erol", held) == 5.0,
        wager.applied_points(10, "Erol", held))
     ck("applied points floored at 0", wager.applied_points(2, "Erol", held) == 0.0,
        wager.applied_points(2, "Erol", held))
+
+    # --- a settled win still shows on the leaderboard even while free-funded stakes are riding (the live bug) ---
+    # 0 earned points, a claimed free-points drop (free bonus = 10), one settled WIN (+1.2) and one settled LOSS
+    # (-1.0) => +0.2 net, plus 8 points riding on open bets — all of it funded by the free bonus. The +0.2 must
+    # reach the board (free-funded opens don't hold real points), not be buried to 0 by the held stake.
+    erol = [{"player": "Erol", "credit": True, "amount": 5, "status": "credit"},
+            {"player": "Erol", "status": "won", "stake": 1, "return": 2.2},
+            {"player": "Erol", "status": "lost", "stake": 1, "return": 0},
+            {"player": "Erol", "status": "pending", "stake": 5},
+            {"player": "Erol", "status": "pending", "stake": 1},
+            {"player": "Erol", "status": "pending", "stake": 2}]
+    ck("settled win shows despite free-funded open stakes", wager.applied_points(0.0, "Erol", erol) == 0.2,
+       wager.applied_points(0.0, "Erol", erol))
+    ck("no real points are held when opens are free-funded", wager.leaderboard_held("Erol", erol) == 0.0,
+       wager.leaderboard_held("Erol", erol))
 
     # --- stats + leaders: most wagered / won / lost ---
     sw = []
@@ -204,11 +221,12 @@ def run():
        (_scores(dE), _scores(d0)))
     bets = []
     ok, _ = wager.place(bets, "Erol", dict(base_m, id=2, home="Spain", away="Japan", status="TIMED",
-                                           utcDate="2099-06-15T18:00:00Z"), "HOME", 5,
+                                           utcDate="2099-06-15T18:00:00Z"), "HOME", 10,
                         settled_points=e0["points"], comp_home=80, comp_away=55)
     d1 = comp(bets)
     e1 = next(p for p in d1["players"] if p["name"] == "Erol")
-    ck("placing holds the stake in points (and hybrid)", e1["points"] == e0["points"] - 5
+    # stake 10 with a 5 free bonus: the bonus covers 5, so 5 of Erol's real points are held off the board
+    ck("placing holds the (beyond-bonus) stake in points (and hybrid)", e1["points"] == e0["points"] - 5
        and e1["hybrid"] == e0["hybrid"] - 5, (e0["points"], e1["points"], e0["hybrid"], e1["hybrid"]))
     ck("survival untouched by a bet", e1["survival"] == e0["survival"], (e0["survival"], e1["survival"]))
     pts_row = next(r for r in d1["leaderboards"]["points"] if r["name"] == "Erol")
@@ -220,7 +238,7 @@ def run():
     wager.settle_all(bets, ms)
     d2 = comp(bets)
     e2 = next(p for p in d2["players"] if p["name"] == "Erol")
-    profit = round(bets[0]["return"] - 5, 1)
+    profit = round(bets[0]["return"] - 10, 1)
     ck("winning bet adds profit to points + hybrid", e2["points"] == round(e0["points"] + profit, 1)
        and e2["hybrid"] == round(e0["hybrid"] + profit, 1), (e0["points"], e2["points"], profit))
 

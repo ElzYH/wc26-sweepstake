@@ -278,7 +278,7 @@ de = W.player_deltas(w)
 ck("Erol settled_net is his profit (>0), no pending", de["Erol"]["settled_net"] > 0 and de["Erol"]["pending_stake"] == 0, de["Erol"])
 ck("James settled_net is -8 (his lost stake), no pending", de["James"]["settled_net"] == -8 and de["James"]["pending_stake"] == 0, de["James"])
 ck("available floors at 0 (never negative) after big loss", W.available_points("Zed", 0, [{"player": "Zed", "status": "lost", "stake": 999}]) == 0.0, W.available_points("Zed", 0, [{"player": "Zed", "status": "lost", "stake": 999}]))
-ck("applied_points reflects held stake (drops while a bet is open)", W.applied_points(50, "Erol", [{"player": "Erol", "status": "pending", "stake": 10}]) == 40.0, W.applied_points(50, "Erol", [{"player": "Erol", "status": "pending", "stake": 10}]))
+ck("applied_points holds only the beyond-bonus part of an open stake", W.applied_points(50, "Erol", [{"player": "Erol", "status": "pending", "stake": 10}]) == 45.0, W.applied_points(50, "Erol", [{"player": "Erol", "status": "pending", "stake": 10}]))  # 5 free bonus covers 5 of the 10 stake; 5 real points held -> 50-5
 
 # ============================================================== SEQUENCING / LIFECYCLE
 print("\n== SEQUENCING & LIFECYCLE ==")

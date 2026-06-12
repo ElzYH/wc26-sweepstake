@@ -267,14 +267,15 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
             for p in players_out:
                 p["points_settled"] = round(p["points"] - p.get("live", 0), 1)   # finished-game points, before bets — the bettable balance
                 d = pdel.get(p["name"], {})
-                lnet = wager.leaderboard_net(p["name"], wagers)   # bonus-cushioned: only winnings (and losses beyond the free 5) move the leaderboard
-                held = round(d.get("pending_stake", 0.0), 1)
+                lnet = wager.leaderboard_net(p["name"], wagers)   # bonus-cushioned: only winnings (and losses beyond the free bonus) move the leaderboard
+                held_disp = round(d.get("pending_stake", 0.0), 1)        # full open stake — for the "N riding" display
+                held_lb = wager.leaderboard_held(p["name"], wagers)      # only stakes beyond the free cushion come off the board
                 p["wager_net"] = lnet
-                p["wager_held"] = held
+                p["wager_held"] = held_disp
                 p["bets_open"] = d.get("pending_count", 0)
                 p["bettable"] = wager.available_points(p["name"], p["points_settled"], wagers)  # earned + free bonus + winnings - held
-                if lnet or held:
-                    newp = max(0.0, round(p["points"] + lnet - held, 1))
+                if lnet or held_lb:
+                    newp = max(0.0, round(p["points"] + lnet - held_lb, 1))
                     p["points"] = newp
                     p["hybrid"] = round(newp + p["survival"], 1)
         except Exception:
