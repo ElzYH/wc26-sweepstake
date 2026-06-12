@@ -1107,9 +1107,10 @@ function render(d){
     : 'Level on '+unit.toLowerCase()+'? Most teams still in breaks the tie.';
   document.getElementById('lbBody').innerHTML=board.map((p,i)=>{
     const tied=lbm!=='survival' && ((i>0&&board[i-1].score===p.score)||(i<board.length-1&&board[i+1].score===p.score));
+    const rank=1+board.filter(q=>q.score>p.score).length;   // joint ranking: tied players share a number (1,1,3,...)
     return `
-    <div class="row ${i===0&&p.score>0?'lead':''}">
-      <div class="rank">${i+1}</div>
+    <div class="row ${rank===1&&p.score>0?'lead':''}">
+      <div class="rank">${rank}</div>
       <div><div class="pname">${p.name}${tied?' <span class="tiebadge">tied</span>':''}</div><div class="palive">${p.alive_teams}/${p.total_teams} teams still in</div></div>
       <div class="pscore">${disp(p.score)}<span> ${unit}</span>${(p.live>0 && (lbm==='points'||lbm==='hybrid'))?`<span class="livedelta" title="points from games in play right now">+${p.live} live</span>`:''}</div>
     </div>`;}).join('')
@@ -1566,6 +1567,16 @@ function buildHistory(d){
     const A=aliveAt(i+1);
     hist.push({m:i+1, p:Object.fromEntries(players.map(p=>[p,{pts:P[p],srv:S[p],hyb:P[p]+S[p],alv:A[p]}]))});
   });
+  // Snap the "now" point to the authoritative leaderboard totals so the chart's latest value matches the headline
+  // standings, which include betting (a settled bet win/loss the match replay can't see). Earlier points stay
+  // match-only — per-bet settle history isn't available client-side — so betting reads as the adjustment it is at
+  // the current moment rather than being back-dated onto games it had nothing to do with.
+  if(hist.length>=2){
+    const lbP=new Map((((d.leaderboards||{}).points)||[]).map(r=>[r.name,r.score]));
+    const lbH=new Map((((d.leaderboards||{}).hybrid)||[]).map(r=>[r.name,r.score]));
+    const last=hist[hist.length-1].p;
+    players.forEach(p=>{ if(last[p]){ if(lbP.has(p)) last[p].pts=lbP.get(p); if(lbH.has(p)) last[p].hyb=lbH.get(p); } });
+  }
   return hist;
 }
 function renderChart(d){

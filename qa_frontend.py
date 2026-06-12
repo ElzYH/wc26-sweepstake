@@ -132,6 +132,14 @@ ck("provResult reads string scores", provResult("HOME", "2", "1") === "win");
               fixtures:[{home:"Mexico",away:"Spain",status:"FINISHED",homeScore:1,awayScore:0,winner:"HOME",stage:"GROUP_STAGE",utcDate:"2026-06-11T19:00:00Z"},
                         {home:"Mexico",away:"Brazil",status:"FINISHED",homeScore:0,awayScore:1,winner:"AWAY",stage:"LAST_16",utcDate:"2026-07-01T19:00:00Z"}]};
   ck("group casualty drops at the first knockout match", alvOf(d3).map(x=>x.Reuben).join(",") === "2,2,1");
+
+  // e) the "now" point snaps to the leaderboard totals so betting shows (match replay gives Erol 0 football, but
+  //    the leaderboard has him on 0.2 from a settled bet) — earlier points stay match-only
+  const d4 = {players:[{name:"James",teams:[{name:"Mexico",status:"alive"}]},{name:"Erol",teams:[{name:"Brazil",status:"alive"}]}], scoring:SCO,
+              fixtures:[{home:"Mexico",away:"South Africa",status:"FINISHED",homeScore:2,awayScore:0,winner:"HOME",stage:"GROUP_STAGE",utcDate:"2026-06-11T19:00:00Z"}],
+              leaderboards:{points:[{name:"James",score:6},{name:"Erol",score:0.2}], hybrid:[{name:"James",score:6},{name:"Erol",score:0.2}]}};
+  ck("chart now-point includes betting (Erol 0 -> 0.2)", ptsOf(d4).map(x=>x.Erol).join(",") === "0,0.2");
+  ck("chart baseline stays at zero (betting not back-dated)", ptsOf(d4)[0].Erol === 0);
 }
 
 // ---- esc(): XSS escaping ----
