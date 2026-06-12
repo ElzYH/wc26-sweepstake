@@ -57,6 +57,9 @@ def extract(name):
 funcs = {n: extract(n) for n in ("esc", "ownerOf", "koNote", "fmtTime", "mulberry32", "isDone", "liveClockText", "provResult", "accaLiveStatus", "buildHistory", "simWinOdds")}
 missing = [n for n, v in funcs.items() if not v]
 ck("all pure helpers were found in the source", not missing, missing)
+_am = re.search(r"const award=\(wins,cmp\)=>\{.*?\};", JS, re.S)
+AWARD_SRC = _am.group(0) if _am else "const award=function(){};"
+ck("forecast award() tie-splitter found in simWinOdds", _am is not None)
 
 test_js = "\n".join(v for v in funcs.values() if v) + r"""
 let fails = [];
@@ -162,6 +165,19 @@ ck("provResult reads string scores", provResult("HOME", "2", "1") === "win");
   ck("survival forecast is bet-free (unchanged)", Math.abs(get(bet,"P1").surv - get(base,"P1").surv) < 6, [get(base,"P1").surv, get(bet,"P1").surv]);
 }
 
+// ---- forecast tie-break: a points/both tie goes to most-teams-in; a genuine dead-heat is split ----
+{
+  const players=["P1","P2","P3"];
+  /*__AWARD__*/
+  const ez=x=>Math.abs(x)<1e-9?0:x;
+  const run=(PT,AL)=>{ const w={P1:0,P2:0,P3:0}; award(w,(a,b)=>ez(PT[b]-PT[a])||(AL[b]-AL[a])); return w; };
+  let r;
+  r=run({P1:10,P2:10,P3:5},{P1:2,P2:2,P3:1}); ck("dead-heat (same pts & teams-in) splits 50/50", r.P1===0.5&&r.P2===0.5&&r.P3===0);
+  r=run({P1:10,P2:10,P3:5},{P1:3,P2:2,P3:1}); ck("a points tie is broken by most teams still in", r.P1===1&&r.P2===0);
+  r=run({P1:9,P2:11,P3:5},{P1:5,P2:1,P3:1});  ck("higher points wins regardless of teams-in", r.P2===1&&r.P1===0);
+  r=run({P1:8,P2:8,P3:8},{P1:2,P2:2,P3:2});   ck("three-way dead-heat splits into thirds", Math.abs(r.P1-1/3)<1e-9&&Math.abs(r.P3-1/3)<1e-9);
+}
+
 // ---- esc(): XSS escaping ----
 ck("esc escapes <", esc("<b>") === "&lt;b&gt;");
 ck("esc escapes ampersand", esc("a & b") === "a &amp; b");
@@ -205,7 +221,7 @@ ck("rounding leaves whole numbers whole", round2(15) === 15);
 if(fails.length){ console.log("\nFRONTEND-JS FAILED: "+fails.join(", ")); process.exit(1); }
 console.log("\nfront-js ok");
 """
-open("/tmp/_front_test.js", "w").write(test_js)
+open("/tmp/_front_test.js", "w").write(test_js.replace("/*__AWARD__*/", AWARD_SRC))
 print("\n== 3. Pure-function behaviour (under node) ==")
 r = subprocess.run(["node", "/tmp/_front_test.js"], capture_output=True, text=True)
 for line in r.stdout.splitlines():

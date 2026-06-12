@@ -1106,8 +1106,11 @@ function render(d){
     ? 'Level on teams still in? The higher total survival value ranks first.'
     : 'Level on '+unit.toLowerCase()+'? Most teams still in breaks the tie.';
   document.getElementById('lbBody').innerHTML=board.map((p,i)=>{
-    const tied=lbm!=='survival' && ((i>0&&board[i-1].score===p.score)||(i<board.length-1&&board[i+1].score===p.score));
-    const rank=1+board.filter(q=>q.score>p.score).length;   // joint ranking: tied players share a number (1,1,3,...)
+    const isSurv=lbm==='survival', al=p.alive_teams||0;
+    // Match the stated rule (and the backend + forecast): level on points/both is split by teams still in.
+    // Only a genuine dead-heat — same score AND same teams-in — is shown as joint/"tied".
+    const rank=1+board.filter(q=> q.score>p.score || (!isSurv && q.score===p.score && (q.alive_teams||0)>al)).length;
+    const tied=!isSurv && board.some((q,j)=> j!==i && q.score===p.score && (q.alive_teams||0)===al);
     return `
     <div class="row ${rank===1&&p.score>0?'lead':''}">
       <div class="rank">${rank}</div>
@@ -1639,6 +1642,10 @@ function simWinOdds(d,N){
   const bnet={}; (d.players||[]).forEach(p=>{ const fb=(p.teams||[]).reduce((s,t)=>s+(t.points||0),0); bnet[p.name]=(p.points||0)-fb; });
   if(!players.length) return null;
   const wS={},wP={},wB={},sumPts={}; players.forEach(p=>{wS[p]=0;wP[p]=0;wB[p]=0;sumPts[p]=0;});
+  // Credit a simulation win using the SAME tie-break as the leaderboard (most teams still in), and split a
+  // genuine dead-heat (identical score AND identical teams-in) equally — so ties never bias to array order.
+  const award=(wins,cmp)=>{ const ranked=players.slice().sort(cmp), top=ranked[0];
+    const lead=ranked.filter(p=>cmp(p,top)===0), share=1/lead.length; lead.forEach(p=>wins[p]+=share); };
   // deterministic seed from the actual state, so identical data always gives identical odds
   // (no run-to-run wobble) and the forecast only moves once a real result changes the state.
   let seed=(((d.stats&&d.stats.matches_played)||0)*100003 + teamArr.length)>>>0;
@@ -1710,9 +1717,10 @@ function simWinOdds(d,N){
     teamArr.forEach(t=>{const o=t.owner; if(PT[o]===undefined)return; PT[o]+=pts[t.name]; P[o]+=svp(t.name); if(alive[t.name])AL[o]++;});
     players.forEach(p=>{ PT[p]+=(bnet[p]||0); });   // points/both carry betting; survival (wS) stays bet-free
     players.forEach(p=>sumPts[p]+=PT[p]);
-    wP[players.slice().sort((a,b)=>PT[b]-PT[a])[0]]++;
-    wS[players.slice().sort((a,b)=>AL[b]-AL[a]||P[b]-P[a])[0]]++;
-    wB[players.slice().sort((a,b)=>(PT[b]+P[b])-(PT[a]+P[a]))[0]]++;
+    const ez=x=>Math.abs(x)<1e-9?0:x;
+    award(wP, (a,b)=> ez(PT[b]-PT[a]) || (AL[b]-AL[a]));                 // points: teams-in breaks the tie
+    award(wS, (a,b)=> (AL[b]-AL[a]) || ez(P[b]-P[a]));                   // survival: teams-in, then survival pts
+    award(wB, (a,b)=> ez((PT[b]+P[b])-(PT[a]+P[a])) || (AL[b]-AL[a]));   // both: teams-in breaks the tie
   }
   return players.map(p=>({name:p,surv:100*wS[p]/N,pts:100*wP[p]/N,both:100*wB[p]/N,proj:sumPts[p]/N})).sort((a,b)=>b.both-a.both);
 }
