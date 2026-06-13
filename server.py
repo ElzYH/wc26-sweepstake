@@ -499,14 +499,47 @@ def discord_mention(player, text):
     _mention_uids([u for u, pl in _discord_subs().items() if pl == player], text)
 
 
-def _bot_dm_player(player, text):
-    """DM every Discord account linked to this player — their own private feed. If a DM can't be delivered
-    (no bot token, or the user has DMs closed), fall back to a channel @mention for those users so a personal
-    alert is never silently lost. Returns how many were DM'd. Best-effort; never raises."""
+def _dm_optout():
+    """Discord accounts that turned personal DMs OFF (overrides default-on). Set of uid strings."""
+    s = load_config().get("discord_dm_off")
+    return set(str(u) for u in s) if isinstance(s, list) else set()
+
+
+def _dm_mutes():
+    """Per-game DM mutes: {uid: [matchId, ...]} — games this account doesn't want pinged about."""
+    m = load_config().get("discord_mutes")
+    return m if isinstance(m, dict) else {}
+
+
+def _uids_for_player(player):
+    """Every Discord account known to be this player — linked for betting (Connect Discord) OR opted into
+    alerts (/notifyme). Personal alerts are DEFAULT-ON for all of these; opting out is explicit."""
+    cfg = load_config()
+    links = cfg.get("wager_links") if isinstance(cfg.get("wager_links"), dict) else {}
+    subs = cfg.get("discord_subs") if isinstance(cfg.get("discord_subs"), dict) else {}
+    seen, out = set(), []
+    for u in [u for u, pl in links.items() if pl == player] + [u for u, pl in subs.items() if pl == player]:
+        u = str(u)
+        if u not in seen:
+            seen.add(u)
+            out.append(u)
+    return out
+
+
+def _bot_dm_player(player, text, match_id=None):
+    """DM every Discord account known to be this player (default-on: betting-linked or /notifyme'd), unless they
+    turned DMs off or muted this specific game. If a DM can't be delivered AND the user explicitly opted in via
+    /notifyme, fall back to a channel @mention so an opt-in alert is never silently lost (betting-link-only users
+    are skipped silently, so the channel never gets noisier just because more people connected). Best-effort."""
     try:
         if not player or player in ("—", "-"):
             return 0
-        uids = [u for u, pl in _discord_subs().items() if pl == player][:25]
+        optout, mutes = _dm_optout(), _dm_mutes()
+        cfg = load_config()
+        subs = cfg.get("discord_subs") if isinstance(cfg.get("discord_subs"), dict) else {}
+        sub_uids = set(str(u) for u, pl in subs.items() if pl == player)   # explicit /notifyme accounts
+        uids = [u for u in _uids_for_player(player)[:25]
+                if u not in optout and not (match_id and match_id in (mutes.get(u) or []))]
         if not uids:
             return 0
         sent, failed = 0, []
@@ -514,14 +547,31 @@ def _bot_dm_player(player, text):
             ok, _ = _bot_dm(u, text)
             if ok:
                 sent += 1
-            else:
-                failed.append(u)
+            elif u in sub_uids:
+                failed.append(u)        # only opt-in users get the @mention fallback
         if failed:
-            _mention_uids(failed, text)         # couldn't DM -> @mention instead (e.g. DMs closed / no token)
+            _mention_uids(failed, text)
         return sent
     except Exception as e:
         log("bot dm player failed:", e)
         return 0
+
+
+def _bettors_on_match(match_id):
+    """Players holding an OPEN bet (single or any acca leg) on this match — for default-on bet reminders."""
+    if not match_id:
+        return set()
+    out = set()
+    try:
+        for w in load_wagers():
+            if w.get("status") != "pending":
+                continue
+            if w.get("matchId") == match_id or any(lg.get("matchId") == match_id for lg in (w.get("legs") or [])):
+                if w.get("player"):
+                    out.add(w["player"])
+    except Exception as e:
+        log("bettors-on-match failed:", e)
+    return out
 
 
 def _dm_all_games_uids():
@@ -1324,7 +1374,7 @@ def notify_changes(old):
     if _mp == 0 and not _any_live:
         return                              # truly nothing happening yet (pre-tournament): stay quiet
 
-    def match_event(etype, recipients, group_line, ping=False, important=False):
+    def match_event(etype, recipients, group_line, ping=False, important=False, match_id=None):
         # recipients: list of (owner, title, body). Personal alerts always go to the owner (push + DM).
         # The communal CHANNEL line only fires for "important" games — two players head-to-head, or a
         # knockout tie — so the channel stays signal, not spam. Everything else is DM-only.
@@ -1334,7 +1384,7 @@ def notify_changes(old):
         for ow, ti, bo in recipients:
             if ow and ow not in ("—", "-"):
                 push_player(ow, etype, ti, bo)
-                _bot_dm_player(ow, "%s — %s" % (ti, bo))   # personal -> always DM (falls back to @mention)
+                _bot_dm_player(ow, "%s — %s" % (ti, bo), match_id=match_id)   # personal -> always DM (falls back to @mention for opt-ins)
         if send_channel:
             discord_send(group_line)        # communal feed: important games only
         _dm_all_games(group_line)           # ...and DMs anyone who opted into the all-games feed
@@ -1375,17 +1425,21 @@ def notify_changes(old):
             ho_ok = ho and ho not in ("—", "-")
             ao_ok = ao and ao not in ("—", "-")
             mm0 = nmatch.get(key) or {}
+            mid = mm0.get("matchId")
             _ko = str(mm0.get("stage") or "").upper() not in ("", "GROUP_STAGE", "GROUP")  # knockout = always important
             if st in LIVE_STATUSES and was not in LIVE_STATUSES:                      # kickoff
                 match_event("kickoff",
                             [(ho, "%s vs %s" % (h, a), "Kicked off — your team %s is playing!" % h),
                              (ao, "%s vs %s" % (h, a), "Kicked off — your team %s is playing!" % a)],
-                            "🔵 Kicked off — **%s** (%s) vs **%s** (%s)" % (h, own(ho), a, own(ao)), ping=True, important=_ko)
+                            "🔵 Kicked off — **%s** (%s) vs **%s** (%s)" % (h, own(ho), a, own(ao)), ping=True, important=_ko, match_id=mid)
+                for _pl in _bettors_on_match(mid):                                    # bet on this game -> DM (default-on)
+                    if _pl not in (ho, ao):
+                        _bot_dm_player(_pl, "🎲 Your bet is live — **%s** v **%s** has kicked off. Good luck!" % (h, a), match_id=mid)
             elif st == "PAUSED" and was in PLAYING:                                   # half-time
                 sc = "%s %s–%s %s" % (h, nhs, nas, a) if None not in (nhs, nas) else "%s vs %s" % (h, a)
                 match_event("flow",
                             [(ho, "Half-time ⏸️", sc), (ao, "Half-time ⏸️", sc)],
-                            "⏸️ Half-time — %s" % sc, important=_ko)
+                            "⏸️ Half-time — %s" % sc, important=_ko, match_id=mid)
             elif st in FT_STATUSES and was in LIVE_STATUSES:                          # full-time (incl. a.e.t. / pens)
                 mm = nmatch.get(key) or {}
                 sc = "%s %s–%s %s" % (h, nhs, nas, a) if None not in (nhs, nas) else "%s vs %s" % (h, a)
@@ -1397,7 +1451,10 @@ def notify_changes(old):
                     extra = " — after extra time"
                 match_event("flow",
                             [(ho, "Full-time ⏱️", sc + extra), (ao, "Full-time ⏱️", sc + extra)],
-                            "⏱️ Full-time — %s%s" % (sc, extra), ping=True, important=_ko)
+                            "⏱️ Full-time — %s%s" % (sc, extra), ping=True, important=_ko, match_id=mid)
+                for _pl in _bettors_on_match(mid):                                    # bet on this game -> FT DM (default-on)
+                    if _pl not in (ho, ao):
+                        _bot_dm_player(_pl, "🎲 Full-time on a game you bet — **%s%s**. Any winnings are settled automatically." % (sc, extra), match_id=mid)
             if ov is not None:                                                        # goals (any time score rises)
                 ohs, oas = ov[3], ov[4]
                 if None not in (nhs, nas, ohs, oas):
@@ -1406,13 +1463,13 @@ def notify_changes(old):
                     _goal_chan = _both or _ko
                     if nhs > ohs and ho_ok:
                         push_player(ho, "goal", "%s scored! ⚽" % h, score)
-                        _bot_dm_player(ho, "⚽ **%s** scored — %s" % (h, score))     # personal -> DM
+                        _bot_dm_player(ho, "⚽ **%s** scored — %s" % (h, score), match_id=mid)     # personal -> DM
                         if _goal_chan:
                             discord_send("⚽ **%s** (%s) scored — %s" % (h, ho, score))
                         _dm_all_games("⚽ **%s** (%s) scored — %s" % (h, ho, score))
                     if nas > oas and ao_ok:
                         push_player(ao, "goal", "%s scored! ⚽" % a, score)
-                        _bot_dm_player(ao, "⚽ **%s** scored — %s" % (a, score))     # personal -> DM
+                        _bot_dm_player(ao, "⚽ **%s** scored — %s" % (a, score), match_id=mid)     # personal -> DM
                         if _goal_chan:
                             discord_send("⚽ **%s** (%s) scored — %s" % (a, ao, score))
                         _dm_all_games("⚽ **%s** (%s) scored — %s" % (a, ao, score))
@@ -1726,7 +1783,9 @@ def discord_command(name, opts, uid=None, interaction_id=None):
             cfg = load_config(); allg = cfg.get("discord_dm_all"); allg = allg if isinstance(allg, list) else []
             if str(uid) not in [str(x) for x in allg]:
                 allg.append(str(uid))
-            cfg["discord_dm_all"] = allg; save_config(cfg)
+            cfg["discord_dm_all"] = allg
+            cfg["discord_dm_off"] = [str(x) for x in (cfg.get("discord_dm_off") or []) if str(x) != str(uid)]   # re-enable DMs
+            save_config(cfg)
             ok, _ = _bot_dm(uid, "🌍 You're set up for **all-games** alerts — I'll DM you every kickoff, goal, "
                                  "half-time and full-time across the tournament. `/stopnotify` turns it back off.")
             return ("🌍 Done — I'll **DM** you every game's kickoffs, goals and results." if ok else
@@ -1738,7 +1797,9 @@ def discord_command(name, opts, uid=None, interaction_id=None):
             return ("No player called **%s**. Players: %s\nTry `/notifyme <player>` for your own teams, "
                     "or `/notifyme all` for every game." % (who or "?", names or "-"))
         cfg = load_config(); subs = cfg.get("discord_subs"); subs = subs if isinstance(subs, dict) else {}
-        subs[str(uid)] = pl["name"]; cfg["discord_subs"] = subs; save_config(cfg)
+        subs[str(uid)] = pl["name"]; cfg["discord_subs"] = subs
+        cfg["discord_dm_off"] = [str(x) for x in (cfg.get("discord_dm_off") or []) if str(x) != str(uid)]   # re-enable DMs
+        save_config(cfg)
         ok, _ = _bot_dm(uid, "🔔 You're linked to **%s**. I'll DM you here whenever your teams kick off, score, "
                              "reach full-time or go out. Want every game too? Run `/notifyme all`. "
                              "`/stopnotify` turns alerts off." % pl["name"])
@@ -1747,13 +1808,54 @@ def discord_command(name, opts, uid=None, interaction_id=None):
                 "🔔 You'll be pinged in the channel on **%s**'s events. To get them as **DMs** instead, open your "
                 "DMs (Privacy Settings → allow DMs from server members) and run `/notifyme %s` again." % (pl["name"], pl["name"]))
     if name == "stopnotify":
+        if not uid:
+            return "Couldn't read your Discord account — run this from inside the server."
         cfg = load_config(); subs = cfg.get("discord_subs"); subs = subs if isinstance(subs, dict) else {}
         allg = cfg.get("discord_dm_all"); allg = allg if isinstance(allg, list) else []
-        had = subs.pop(str(uid), None) if uid else None
-        had_all = str(uid) in [str(x) for x in allg]
+        off = [str(x) for x in (cfg.get("discord_dm_off") or [])] if isinstance(cfg.get("discord_dm_off"), list) else []
+        subs.pop(str(uid), None)
         allg = [x for x in allg if str(x) != str(uid)]
-        cfg["discord_subs"] = subs; cfg["discord_dm_all"] = allg; save_config(cfg)
-        return "🔕 Alerts turned off." if (had or had_all) else "You weren't subscribed to any alerts."
+        if str(uid) not in off:
+            off.append(str(uid))
+        cfg["discord_subs"] = subs; cfg["discord_dm_all"] = allg; cfg["discord_dm_off"] = off; save_config(cfg)
+        return ("🔕 Personal DMs are off — I won't DM you about your teams or your bets. "
+                "Use `/notifyme <your name>` to switch them back on, or `/mute` to silence just one game.")
+    if name in ("mute", "unmute"):
+        if not uid:
+            return "Couldn't read your Discord account — run this from inside the server."
+        match_val = str(opts.get("match", "")).strip()
+        fxall = [m for m in (d.get("fixtures") or []) if m.get("matchId")]
+        m = next((x for x in fxall if str(x.get("matchId")) == match_val), None)
+        if not m:
+            mv = match_val.lower()
+            m = next((x for x in fxall if mv and (mv in x.get("home", "").lower() or mv in x.get("away", "").lower()
+                                                  or mv in ("%s v %s" % (x.get("home", ""), x.get("away", ""))).lower())), None)
+        if not m:
+            return "Couldn't find that game — start typing a team and pick it from the list. `/games` shows what's on."
+        mid = str(m["matchId"])
+        cfg = load_config(); mutes = cfg.get("discord_mutes"); mutes = mutes if isinstance(mutes, dict) else {}
+        mine = [str(x) for x in (mutes.get(str(uid)) or [])]
+        if name == "mute":
+            if mid not in mine:
+                mine.append(mid)
+            mutes[str(uid)] = mine; cfg["discord_mutes"] = mutes; save_config(cfg)
+            return "🔕 Muted — no DMs about **%s v %s** (kickoff, goals, full-time). `/unmute` to undo." % (m["home"], m["away"])
+        mine = [x for x in mine if x != mid]
+        mutes[str(uid)] = mine; cfg["discord_mutes"] = mutes; save_config(cfg)
+        return "🔔 Unmuted — you'll get DMs about **%s v %s** again." % (m["home"], m["away"])
+    if name == "mutes":
+        if not uid:
+            return "Couldn't read your Discord account — run this from inside the server."
+        mutes = load_config().get("discord_mutes") or {}
+        mids = [str(x) for x in (mutes.get(str(uid)) or [])]
+        if not mids:
+            return "You haven't muted any games. Use `/mute` to silence DMs for one specific game."
+        byid = {str(m.get("matchId")): m for m in (d.get("fixtures") or [])}
+        lines = []
+        for mid in mids:
+            mm = byid.get(mid)
+            lines.append(("• %s v %s" % (mm["home"], mm["away"])) if mm else "• (a finished/unknown game)")
+        return "🔕 You've muted DMs for:\n" + "\n".join(lines) + "\n`/unmute` to turn one back on."
     if name == "linkdiscord":
         if not uid:
             return "Couldn't read your Discord account — run this from inside the server."
@@ -2129,7 +2231,8 @@ def discord_command(name, opts, uid=None, interaction_id=None):
                 "/team <name> - look up one team (owner, group, points)\n"
                 "/notifyme <player> - DM you on that player's teams' events\n"
                 "/notifyme all - DM you every game's kickoffs, goals & results\n"
-                "/stopnotify - turn your alerts off\n"
+                "/mute <game> - stop DMs about one specific game (kickoff, goals, full-time); /unmute to undo; /mutes to list\n"
+                "/stopnotify - turn all your personal DMs off\n"
                 "/help - this list")
     if name == "summary":
         return "\n".join(build_summary())
@@ -2280,6 +2383,11 @@ def register_discord_commands():
         {"name": "notifyme", "description": "DM you when your teams play/score/go out — or 'all' for every game", "type": 1,
          "options": [{"name": "player", "description": "Your player name, or 'all' for every game", "type": 3, "required": True}]},
         {"name": "stopnotify", "description": "Turn off your DM alerts", "type": 1},
+        {"name": "mute", "description": "Stop DMs about ONE specific game (kickoff, goals, full-time)", "type": 1,
+         "options": [{"name": "match", "description": "Start typing a team — pick the game to mute", "type": 3, "required": True, "autocomplete": True}]},
+        {"name": "unmute", "description": "Get DMs about a game you muted again", "type": 1,
+         "options": [{"name": "match", "description": "Start typing a team — pick the game to unmute", "type": 3, "required": True, "autocomplete": True}]},
+        {"name": "mutes", "description": "List the games you've muted DMs for", "type": 1},
         {"name": "games", "description": "Upcoming games and their betting odds", "type": 1},
         {"name": "bet", "description": "Bet your points on a match (shows the payout; add confirm to place)", "type": 1,
          "options": [
@@ -2287,10 +2395,10 @@ def register_discord_commands():
              {"name": "result", "description": "win / draw / lose a team — or over / under for total goals", "type": 3, "required": True,
               "choices": [{"name": "win", "value": "win"}, {"name": "draw", "value": "draw"}, {"name": "lose", "value": "lose"},
                           {"name": "over (goals)", "value": "over"}, {"name": "under (goals)", "value": "under"}]},
+             {"name": "stake", "description": "Points to stake", "type": 10, "required": True},
              {"name": "team", "description": "Which team you're backing (for win/draw/lose) — leave blank for over/under", "type": 3, "required": False},
              {"name": "goals", "description": "Goals line for over/under, e.g. 2.5", "type": 10, "required": False,
               "choices": [{"name": str(L), "value": L} for L in (0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5)]},
-             {"name": "stake", "description": "Points to stake", "type": 10, "required": True},
              {"name": "confirm", "description": "Set true to actually place the bet", "type": 5, "required": False}]},
         {"name": "claim", "description": "Claim today's FREE 5 betting points (when a drop is on) — bet them on any game", "type": 1},
         {"name": "mybets", "description": "Your open and settled bets", "type": 1},
@@ -2885,7 +2993,7 @@ class Handler(BaseHTTPRequestHandler):
                     focused = o.get("value") or ""
                     focused_name = o.get("name") or ""
                     break
-            choices = _bet_match_choices(focused) if (data.get("name") == "bet" and focused_name == "match") else []
+            choices = _bet_match_choices(focused) if (data.get("name") in ("bet", "mute", "unmute") and focused_name == "match") else []
             return self._send(200, json.dumps({"type": 8, "data": {"choices": choices[:25]}}))
         return self._send(200, json.dumps({"type": 4, "data": {"content": "Unsupported interaction."}}))
 

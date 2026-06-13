@@ -28,7 +28,7 @@ DISC, PUSH, MENT, DM, DMALL = [], [], [], [], []
 S.discord_send = lambda text: DISC.append(text)
 S.push_player = lambda player, etype, title, body: PUSH.append((player, etype, title))
 S.discord_mention = lambda who, msg: MENT.append((who, msg))
-S._bot_dm_player = lambda player, text: (DM.append((player, text)) or 1)   # personal DM path
+S._bot_dm_player = lambda player, text, match_id=None: (DM.append((player, text)) or 1)   # personal DM path
 S._dm_all_games = lambda text: DMALL.append(text)                          # all-games opt-in feed
 
 def reset():

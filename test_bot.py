@@ -243,7 +243,7 @@ else:
 _sent.clear()
 _dms = []
 _orig_dm = server._bot_dm_player
-server._bot_dm_player = lambda player, text: (_dms.append((player, text)) or 1)
+server._bot_dm_player = lambda player, text, match_id=None: (_dms.append((player, text)) or 1)
 _lo = {"hybrid": [{"name": "A", "score": 50, "alive_teams": 3, "total_teams": 9},
                   {"name": "B", "score": 40, "alive_teams": 3, "total_teams": 9},
                   {"name": "C", "score": 30, "alive_teams": 3, "total_teams": 9}], "points": [], "survival": []}
@@ -527,6 +527,88 @@ if "link" not in server.discord_command("bet", {"match": _t1, "team": _t1, "resu
 if not [f for f in fails if "/bet" in f[0] or "/games" in f[0] or "/mybets" in f[0] or "/linkdiscord" in f[0]
         or "/points" in f[0] or "/allbets" in f[0] or "/scores" in f[0] or "/unlink" in f[0]]:
     print("[wager] Discord betting + /scores /points /allbets /unlink OK")
+
+# ===== slash-command schema is valid (required options must precede optional — Discord rejects otherwise) =====
+import urllib.request as _ur  # noqa: E402
+_orig_urlopen = _ur.urlopen
+_ur.urlopen = lambda *a, **k: type("R", (), {"read": lambda s: b"{}", "__enter__": lambda s: s, "__exit__": lambda s, *e: False})()
+_cfgs = server.load_config(); _cfgs["discord_app_id"] = "111"; _cfgs["discord_bot_token"] = "tok"; _cfgs.pop("discord_guild_id", None); server.save_config(_cfgs)
+_rok, _rerr = server.register_discord_commands()
+_ur.urlopen = _orig_urlopen
+if _rerr and "required option" in _rerr:
+    fails.append(("slash-schema", _rerr))
+elif not _rok:
+    fails.append(("slash-schema", "register failed for another reason: %r" % _rerr))
+else:
+    print("[schema] every slash command lists required options before optional ones OK")
+
+# ===== notifications: default-on for connected accounts, opt-out, per-game mute, bet reminders =====
+_dms = []
+_orig_botdm = server._bot_dm
+server._bot_dm = lambda uid, text: (_dms.append((str(uid), text)) or (True, None))
+_cfgn = server.load_config()
+_cfgn["wager_links"] = {"900": "Erol"}; _cfgn["discord_subs"] = {"901": "James"}
+_cfgn.pop("discord_dm_off", None); _cfgn.pop("discord_mutes", None); server.save_config(_cfgn)
+# default-on: a betting-linked account (never ran /notifyme) is still a DM recipient
+if set(server._uids_for_player("Erol")) != {"900"}:
+    fails.append(("uids", "Erol's known accounts wrong: %r" % server._uids_for_player("Erol")))
+_dms.clear(); server._bot_dm_player("Erol", "ping")
+if ("900", "ping") not in _dms:
+    fails.append(("default-dm", "betting-linked user not DM'd by default: %r" % _dms))
+# opt-out (/stopnotify) silences default-on DMs
+_so = server.discord_command("stopnotify", {}, uid="900")
+_dms.clear(); server._bot_dm_player("Erol", "ping")
+if _dms or "off" not in _so.lower():
+    fails.append(("optout", "opted-out user still DM'd: %r / %r" % (_dms, _so)))
+# /notifyme re-enables
+server.discord_command("notifyme", {"player": "Erol"}, uid="900")
+_dms.clear(); server._bot_dm_player("Erol", "ping")
+if ("900", "ping") not in _dms:
+    fails.append(("reenable", "/notifyme didn't re-enable DMs: %r" % _dms))
+# per-game mute: the muted game is skipped; other games still DM
+_cfgn = server.load_config(); _cfgn["discord_mutes"] = {"900": ["MID1"]}; server.save_config(_cfgn)
+_dms.clear(); server._bot_dm_player("Erol", "ping", match_id="MID1")
+if _dms:
+    fails.append(("mute", "muted game still DM'd: %r" % _dms))
+_dms.clear(); server._bot_dm_player("Erol", "ping", match_id="MID2")
+if ("900", "ping") not in _dms:
+    fails.append(("mute-other", "a non-muted game was not DM'd: %r" % _dms))
+# the /mute + /unmute commands resolve a game and store/remove it
+_cfgn = server.load_config(); _cfgn.pop("discord_mutes", None); server.save_config(_cfgn)
+_td = json.load(open("tracker_data.json"))
+_td.setdefault("fixtures", []).append({"matchId": "MUTEME", "home": "Brazil", "away": "Serbia", "status": "TIMED", "odds": {"HOME": {"frac": "1/2"}}})
+json.dump(_td, open("tracker_data.json", "w"))
+_mz = server.discord_command("mute", {"match": "Brazil"}, uid="900")
+if "Muted" not in _mz or "MUTEME" not in (server.load_config().get("discord_mutes", {}).get("900") or []):
+    fails.append(("/mute", "mute command didn't store: %r" % _mz))
+_uz = server.discord_command("unmute", {"match": "Brazil"}, uid="900")
+if "Unmuted" not in _uz or "MUTEME" in (server.load_config().get("discord_mutes", {}).get("900") or []):
+    fails.append(("/unmute", "unmute command didn't remove: %r" % _uz))
+# bettors-on-match: a player with an open bet on a game (even with no team in it) is found for reminders
+server.save_wagers([{"player": "Louis", "matchId": "BMID", "status": "pending", "selection": "HOME", "stake": 2, "frac": "1/2", "return": 3}])
+if "Louis" not in server._bettors_on_match("BMID") or server._bettors_on_match("NOPE"):
+    fails.append(("bettors", "bettors-on-match wrong: %r" % server._bettors_on_match("BMID")))
+if not [f for f in fails if f[0] in ("uids", "default-dm", "optout", "reenable", "mute", "mute-other", "/mute", "/unmute", "bettors")]:
+    print("[notify] default-on DMs + opt-out + per-game mute + bet reminders OK")
+
+# ===== overtake + leader-change post to the channel (the head-to-head 'global' messages) =====
+_sent.clear()
+json.dump({"leaderboards": {"hybrid": [{"name": "Erol"}, {"name": "Louis"}, {"name": "James"}]},
+           "stats": {"matches_played": 6}, "fixtures": []}, open("tracker_data.json", "w"))
+server.notify_changes({"leaderboards": {"hybrid": [{"name": "Erol"}, {"name": "James"}, {"name": "Louis"}]},
+                       "stats": {"matches_played": 5}, "fixtures": []})
+if not any("overtakes" in s and "Louis" in s and "James" in s for s in _sent):
+    fails.append(("rivalry-channel", "overtake channel message missing: %r" % _sent))
+_sent.clear()
+json.dump({"leaderboards": {"hybrid": [{"name": "James"}, {"name": "Erol"}]},
+           "stats": {"matches_played": 7}, "fixtures": []}, open("tracker_data.json", "w"))
+server.notify_changes({"leaderboards": {"hybrid": [{"name": "Erol"}, {"name": "James"}]},
+                       "stats": {"matches_played": 6}, "fixtures": []})
+if not any("New leader" in s and "James" in s for s in _sent):
+    fails.append(("leader-channel", "leader-change channel message missing: %r" % _sent))
+if not [f for f in fails if f[0] in ("rivalry-channel", "leader-channel")]:
+    print("[notify] overtake + leader-change channel messages OK")
+server._bot_dm = _orig_botdm
 
 shutil.rmtree(D2, ignore_errors=True)
 
