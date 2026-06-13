@@ -387,6 +387,9 @@
         <div class="row2" style="align-items:center"><label style="display:flex;align-items:center;gap:8px;font-size:13.5px"><input type="checkbox" id="setDigest"> Post a daily summary</label><label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)">at <input id="setDigestHour" type="number" min="0" max="23" style="width:60px"> :00 UTC</label></div>
         <div class="row2" style="margin-top:6px"><button id="setSaveDigest">Save daily summary</button><button id="setTestDigest" class="mini">Send a test now</button></div>
         <div class="hint" id="setDigestMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;margin-top:12px;border-top:1px solid var(--line);padding-top:12px"><input type="checkbox" id="setGameChannel"> Post live game events to the channel (kickoff / goals / full-time)</label>
+        <p style="margin:4px 0 0;color:var(--muted);font-size:12px">Turn this <b>off</b> to silence the communal channel feed of game events for everyone — people who opted in for DMs still get their personal DMs. Bet, win and lead-change posts are unaffected.</p>
+        <div class="hint" id="setGameChannelMsg" style="color:var(--muted);font-size:12px;margin-top:4px"></div>
       </div>
       <div id="wagerSetup" style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
         <p style="margin:0 0 8px"><b>💷 Betting.</b> Let players stake the points they've earned on games (fractional odds, capped, no cash-out). Off until you switch it on.</p>
@@ -502,6 +505,7 @@
     <div class="tab" data-s="fixtures">Fixtures</div>
     <div class="tab" data-s="odds">Odds &amp; stats</div>
     <div class="tab" data-s="bets" id="betsTab" style="display:none">💷 Bets</div>
+    <div class="tab" data-s="notify" id="notifyTab" style="display:none">🔔 Alerts</div>
   </div>
 
   <section class="on" id="overview"><div id="ovBody"></div></section>
@@ -529,6 +533,7 @@
   <section id="bracket"><div class="modesel" id="koRounds"></div><div id="bracketBody"></div></section>
   <section id="fixtures"><div class="fx" id="fixturesBody"></div></section>
   <section id="bets"><div id="betsBody"></div></section>
+  <section id="notify"><div id="notifyBody"></div></section>
   <section id="odds">
     <div class="statgrid" id="statsBody"></div>
     <div id="bettingStats"></div>
@@ -567,6 +572,7 @@ function flag(n){const f=FLAGS[n];return f?f+" ":"";}
 
 function isDone(s){return s==='FINISHED'||s==='AWARDED';}   // a forfeit (AWARDED) is a played, decided result
 let BETPLAYER=null, BETPICK=null, BETMSG='', ACCAMODE=false, ACCA=[];
+let NOTIFYPLAYER=null, NOTIFYBUSY=false;   // Alerts tab: who we're managing + a guard so the live poll never stomps a render mid-toggle
 let BETPIN_DRAFT=null;  // what's typed in the passcode box this session — preserved across re-renders but NEVER persisted until it's proven correct
 // Idempotency: one nonce per in-flight bet, reused if a placement is retried after a dropped
 // connection (so the server dedupes instead of double-betting), regenerated only on success.
@@ -1045,6 +1051,76 @@ async function loadMyBets(){
     box.innerHTML=html;
   }catch(e){ box.innerHTML='<div class="empty">Could not load your bets.</div>'; }
 }
+
+// ---------------- Alerts tab: per-player Discord notification controls (mirrors /mute on Discord) ----------------
+function alertToggleHTML(id, on, label){
+  return '<button class="atog" id="'+id+'" data-on="'+(on?'1':'0')+'" style="border:none;cursor:pointer;border-radius:999px;padding:5px 12px;font-weight:700;font-size:12.5px;'
+    +(on?'background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205':'background:#21262d;color:var(--muted)')+'">'+label+'</button>';
+}
+async function renderNotifyTab(){
+  const el=document.getElementById('notifyBody'); if(!el) return;
+  if(!STATUS.wagering_enabled && !STATUS.discord_oauth){ el.innerHTML='<div class="empty">Alerts aren\'t set up for this sweepstake.</div>'; return; }
+  const players=(DATA.players||[]).map(p=>p.name);
+  if(!players.length){ el.innerHTML='<div class="empty">No players yet.</div>'; return; }
+  if(!NOTIFYPLAYER||!players.includes(NOTIFYPLAYER)) NOTIFYPLAYER=(BETPLAYER&&players.includes(BETPLAYER))?BETPLAYER:players[0];
+  if(SESSION.logged_in&&SESSION.player&&players.includes(SESSION.player)) NOTIFYPLAYER=SESSION.player;
+  const sessionAuthed=(SESSION.logged_in&&SESSION.player===NOTIFYPLAYER);
+  const pin=sessionAuthed?'':betPin(NOTIFYPLAYER);
+  const head='<div style="margin:0 0 6px;font-size:12.5px;color:var(--muted)">Choose which Discord DMs you get for your teams and your bets. (Phone/browser pop-ups are separate — use <b>🔔 Get alerts</b> on the Overview tab.)</div>'
+    +'<div style="margin:0 0 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px">Alerts for '
+    +'<select id="notifyWho"'+(sessionAuthed?' disabled':'')+' style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:14px">'
+    +players.map(p=>'<option'+(p===NOTIFYPLAYER?' selected':'')+'>'+esc(p)+'</option>').join('')+'</select></div>';
+  const wireWho=()=>{ const w=document.getElementById('notifyWho'); if(w) w.onchange=()=>{ NOTIFYPLAYER=w.value; renderNotifyTab(); }; };
+  if(!sessionAuthed && !pin){
+    el.innerHTML=head+'<div class="empty" style="line-height:1.6">To manage your alerts here, first enter your passcode on the <b>💷 Bets</b> tab (it\'s remembered on this device) — or log in with Discord. Then come back.</div>';
+    wireWho(); return;
+  }
+  NOTIFYBUSY=true;
+  el.innerHTML=head+'<div class="empty">Loading your alerts…</div>'; wireWho();
+  let st;
+  try{ st=await fetch('/api/my_alerts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:NOTIFYPLAYER,pin:pin})}).then(r=>r.json()); }
+  catch(e){ NOTIFYBUSY=false; el.innerHTML=head+'<div class="empty">Could not reach the server.</div>'; wireWho(); return; }
+  if(!st.ok){ NOTIFYBUSY=false; el.innerHTML=head+'<div class="empty">'+esc(st.error||'Could not verify you — re-enter your passcode on the Bets tab.')+'</div>'; wireWho(); return; }
+  if(!st.connected){
+    NOTIFYBUSY=false;
+    el.innerHTML=head+'<div style="background:var(--card);border:1px solid var(--gold);border-radius:12px;padding:14px 16px;font-size:13.5px;line-height:1.6">🔔 <b>You\'re not connected to Discord yet.</b><br>Game and bet alerts are sent as Discord DMs, so to choose which ones you get, tap <b>Connect Discord</b> on the 💷 Bets tab (or run <code>/notifyme</code> in the server). Then your games will show up here with on/off switches.</div>';
+    wireWho(); return;
+  }
+  const muted=new Set(st.muted||[]);
+  const myTeams=new Set((((DATA.players||[]).find(p=>p.name===NOTIFYPLAYER)||{}).teams||[]).map(t=>t.name));
+  let betMids=new Set();
+  try{ const j=await fetch('/api/wagers?player='+encodeURIComponent(NOTIFYPLAYER)).then(r=>r.json());
+    (j.wagers||[]).filter(w=>w.status==='pending'&&!w.credit).forEach(w=>{ if(w.matchId) betMids.add(w.matchId); (w.legs||[]).forEach(l=>l.matchId&&betMids.add(l.matchId)); }); }catch(e){}
+  const games=(DATA.fixtures||[]).filter(f=>f.matchId && !isDone(f.status) && (myTeams.has(f.home)||myTeams.has(f.away)||betMids.has(f.matchId)))
+    .sort((a,b)=>String(a.utcDate||'').localeCompare(String(b.utcDate||'')));
+  let html=head;
+  html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px">'
+    +'<div style="font-size:13.5px"><b>Personal DMs</b><div style="color:var(--muted);font-size:12px">When on, I DM you when your teams play & score and for games you\'ve bet on.</div></div>'
+    +alertToggleHTML('dmMaster', !st.dm_off, st.dm_off?'OFF':'ON')+'</div>';
+  html+='<div style="font-size:11.5px;color:var(--muted);font-weight:700;letter-spacing:.06em;margin:4px 0 6px">MUTE A SPECIFIC GAME'+(st.dm_off?' (your DMs are off above)':'')+'</div>';
+  if(!games.length){ html+='<div class="empty">No upcoming games involving your teams or your open bets right now.</div>'; }
+  else html+=games.map((f,i)=>{
+    const reason=(myTeams.has(f.home)||myTeams.has(f.away))?(betMids.has(f.matchId)?'your team · you bet':'your team'):'you bet';
+    const when=f.utcDate?('<span style="color:var(--muted);font-size:11.5px">'+esc(String(f.utcDate).slice(5,16).replace('T',' '))+'</span>'):'';
+    const liveTag=(f.status==='IN_PLAY'||f.status==='PAUSED')?' <span style="color:#ff6b6b;font-size:11px">🔴 LIVE</span>':'';
+    const isMuted=muted.has(f.matchId);
+    return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:6px">'
+      +'<div style="min-width:0"><div style="font-weight:600;font-size:13.5px">'+esc(f.home)+' v '+esc(f.away)+liveTag+'</div>'
+      +'<div style="color:var(--muted);font-size:11.5px">'+reason+' · '+when+'</div></div>'
+      +alertToggleHTML('mute_'+i, !isMuted, isMuted?'MUTED':'ON')+'</div>';
+  }).join('');
+  el.innerHTML=html; wireWho(); NOTIFYBUSY=false;
+  // master DM toggle
+  const dm=document.getElementById('dmMaster');
+  if(dm) dm.onclick=async()=>{ const turnOff=dm.dataset.on==='1'; dm.disabled=true;
+    try{ const r=await fetch('/api/dm_master',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:NOTIFYPLAYER,pin:pin,off:turnOff})}).then(x=>x.json());
+      if(r.ok) renderNotifyTab(); else { dm.disabled=false; el.insertAdjacentHTML('afterbegin','<div class="empty">'+esc(r.error||'Could not update.')+'</div>'); } }catch(e){ dm.disabled=false; } };
+  // per-game mute toggles
+  games.forEach((f,i)=>{ const b=document.getElementById('mute_'+i); if(!b) return;
+    b.onclick=async()=>{ const wantMute=b.dataset.on==='1'; b.disabled=true;   // on -> tapping mutes it
+      try{ const r=await fetch('/api/game_mute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:NOTIFYPLAYER,pin:pin,matchId:f.matchId,muted:wantMute})}).then(x=>x.json());
+        if(r.ok) renderNotifyTab(); else { b.disabled=false; } }catch(e){ b.disabled=false; } }; });
+}
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 function koNote(m){   // " a.e.t. · pens 3–5" style note for a finished knockout decided in ET / on penalties
   if(!(isDone(m.status)&&(m.aet||m.shootout))) return '';
@@ -1298,6 +1374,11 @@ function render(d){
     else if(document.getElementById('bets').classList.contains('on')) refreshBetsLive(); }  // poll: refresh lists only, NEVER rebuild the stake/passcode box you're typing in
   else { const t=document.getElementById('betsTab'); if(t) t.style.display='none';
     if(document.getElementById('bets')&&document.getElementById('bets').classList.contains('on')){ const b=document.getElementById('betsBody'); if(b&&STATUS.wagering_enabled) b.innerHTML='<div class="empty">Betting runs on points — switch the sweepstake to Points or Both to use it.</div>'; } }
+  // Alerts tab: available whenever Discord notifications are possible (betting on, or Discord login configured)
+  { const at=document.getElementById('notifyTab');
+    if(at){ if(STATUS.wagering_enabled||STATUS.discord_oauth){ at.style.display='';
+        if(document.getElementById('notify').classList.contains('on') && !NOTIFYBUSY) renderNotifyTab(); }
+      else at.style.display='none'; } }
   // leaderboard for the active mode
   MODE=d.default_mode||'hybrid';
   const sm=STATUS.scoring_mode||MODE||'hybrid';
@@ -1462,6 +1543,7 @@ function activateTab(s){
   t.classList.add('on'); document.getElementById(s).classList.add('on');
   try{ localStorage.setItem('wc26_tab', s); }catch(e){}      // remember the tab so a refresh keeps you here
   if(s==='bets' && STATUS.wagering_enabled && !document.getElementById('betWho')) renderBets();
+  if(s==='notify') renderNotifyTab();
 }
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>activateTab(t.dataset.s));
 (function(){ const mb=document.getElementById('menuBtn'), md=document.getElementById('menuDrop');
@@ -2031,6 +2113,7 @@ async function refreshStatus(){
   if(STATUS.has_invite){ const iv=document.getElementById('setInvite'); if(iv) iv.placeholder='invite saved ✅ (paste to replace)'; }
   const su=document.getElementById('setSite'); if(su && STATUS.site_url) su.value=STATUS.site_url;
   const dg=document.getElementById('setDigest'); if(dg) dg.checked=!!STATUS.digest_enabled;
+  const gc=document.getElementById('setGameChannel'); if(gc) gc.checked=(STATUS.game_channel_alerts!==false);
   const sw=document.getElementById('setWager'); if(sw) sw.checked=!!STATUS.wagering_enabled;
   const swl=document.getElementById('setWagerLock'); if(swl) swl.checked=!!STATUS.wager_locked;
   const caps=STATUS.wager_caps||{}; const mr=document.getElementById('setMaxReturn'), ma=document.getElementById('setMaxAcca');
@@ -2082,6 +2165,13 @@ document.getElementById('setSave').onclick=async()=>{
     else msg.textContent=j.error||'Could not save.';
   }catch(e){ msg.textContent='Could not reach the server.'; }
 };
+{ const gc=document.getElementById('setGameChannel');
+  if(gc) gc.onchange=async()=>{ const m=document.getElementById('setGameChannelMsg'); m.textContent='Saving…';
+    try{ const j=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({game_channel_alerts:gc.checked,admin_key:ADMINKEY})}).then(r=>r.json());
+      if(j.ok){ m.textContent=gc.checked?'Channel game feed ON.':'Channel game feed OFF — DMs still go to opted-in players.'; refreshStatus(); }
+      else if(j.need_key){ m.textContent='Session expired — reopen Settings and unlock again.'; ADMINKEY=''; gc.checked=!gc.checked; }
+      else { m.textContent=j.error||'Could not save.'; gc.checked=!gc.checked; }
+    }catch(e){ m.textContent='Could not reach the server.'; gc.checked=!gc.checked; } }; }
 document.getElementById('setSaveDiscord').onclick=async()=>{
   const m=document.getElementById('setDiscordMsg'); const v=document.getElementById('setDiscord').value.trim();
   if(v && !v.startsWith('https://')){ m.textContent='That doesn\'t look like a webhook URL (must start with https://).'; return; }

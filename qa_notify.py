@@ -169,6 +169,23 @@ _cfg = S.load_config()
 ck("/stopnotify clears the personal sub", "111" not in _cfg.get("discord_subs", {}), _cfg.get("discord_subs"))
 ck("/stopnotify clears the all-games opt-in", "111" not in [str(x) for x in _cfg.get("discord_dm_all", [])], _cfg.get("discord_dm_all"))
 
+print("\n== admin kill switch: game_channel_alerts=false silences the channel feed but DMs still fire ==")
+def _set_flag(v):
+    c = S.load_config(); c["game_channel_alerts"] = v; S.save_config(c)
+_set_flag(False)
+transition(tracker(0, "TIMED", None, None), tracker(0, "IN_PLAY", 0, 0))   # a kickoff
+ck("kickoff does NOT post to the channel when the feed is off", not any("Kicked off" in x for x in DISC), DISC)
+ck("...but owners are still DM'd personally", any("Spain" in d[1] or "France" in d[1] for d in DM), DM)
+_set_flag(True)
+transition(tracker(0, "TIMED", None, None), tracker(0, "IN_PLAY", 0, 0))
+ck("kickoff DOES post to the channel when the feed is on", any("Kicked off" in x for x in DISC), DISC)
+# a goal with the feed off: no channel post, owner still DM'd
+_set_flag(False)
+transition(tracker(1, "IN_PLAY", 0, 0), tracker(1, "IN_PLAY", 1, 0))
+ck("a goal does NOT post to the channel when the feed is off", not any("scored" in x for x in DISC), DISC)
+ck("...but the scorer's owner is still DM'd", any("scored" in d[1] for d in DM), DM)
+_set_flag(True)
+
 import shutil
 shutil.rmtree(t, ignore_errors=True)
 if FAILS:

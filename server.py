@@ -557,6 +557,12 @@ def _bot_dm_player(player, text, match_id=None):
         return 0
 
 
+def _game_channel_on():
+    """Admin kill switch for the COMMUNAL channel feed of game events (kickoff/HT/FT/goals). Default on.
+    When off, personal DMs to opted-in players still go out — only the public channel posts are silenced."""
+    return load_config().get("game_channel_alerts", True) is not False
+
+
 def _bettors_on_match(match_id):
     """Players holding an OPEN bet (single or any acca leg) on this match — for default-on bet reminders."""
     if not match_id:
@@ -1385,8 +1391,8 @@ def notify_changes(old):
             if ow and ow not in ("—", "-"):
                 push_player(ow, etype, ti, bo)
                 _bot_dm_player(ow, "%s — %s" % (ti, bo), match_id=match_id)   # personal -> always DM (falls back to @mention for opt-ins)
-        if send_channel:
-            discord_send(group_line)        # communal feed: important games only
+        if send_channel and _game_channel_on():
+            discord_send(group_line)        # communal feed: important games only, and only if the admin left it on
         _dm_all_games(group_line)           # ...and DMs anyone who opted into the all-games feed
 
     def own(o):
@@ -1464,13 +1470,13 @@ def notify_changes(old):
                     if nhs > ohs and ho_ok:
                         push_player(ho, "goal", "%s scored! ⚽" % h, score)
                         _bot_dm_player(ho, "⚽ **%s** scored — %s" % (h, score), match_id=mid)     # personal -> DM
-                        if _goal_chan:
+                        if _goal_chan and _game_channel_on():
                             discord_send("⚽ **%s** (%s) scored — %s" % (h, ho, score))
                         _dm_all_games("⚽ **%s** (%s) scored — %s" % (h, ho, score))
                     if nas > oas and ao_ok:
                         push_player(ao, "goal", "%s scored! ⚽" % a, score)
                         _bot_dm_player(ao, "⚽ **%s** scored — %s" % (a, score), match_id=mid)     # personal -> DM
-                        if _goal_chan:
+                        if _goal_chan and _game_channel_on():
                             discord_send("⚽ **%s** (%s) scored — %s" % (a, ao, score))
                         _dm_all_games("⚽ **%s** (%s) scored — %s" % (a, ao, score))
     except Exception:
@@ -2931,6 +2937,7 @@ class Handler(BaseHTTPRequestHandler):
                 "wager_pins_for": sorted(_wager_pins().keys()),
                 "discord_oauth": _oauth_enabled(),
                 "discord_guild_gate": _guild_gate_on(cfg),
+                "game_channel_alerts": load_config().get("game_channel_alerts", True) is not False,
                 "wager_budget": (wager_mod.STAGE_BUDGET if wager_mod is not None else None),
                 "free_bet": ((lambda dr: {"open": True, "id": dr["id"], "closes": dr["closes"], "stake": wager_mod.FREE_BET_STAKE,
                                           "claimed": sorted((cfg.get("free_bet_claims", {}).get(dr["id"]) or {}).keys())}
@@ -3134,6 +3141,8 @@ class Handler(BaseHTTPRequestHandler):
                 cfg["site_url"] = s if (s == "" or s.startswith("https://")) else cfg.get("site_url", "")
             if "digest_enabled" in body:
                 cfg["digest_enabled"] = bool(body["digest_enabled"])
+            if "game_channel_alerts" in body:        # admin kill switch for the communal channel feed (DMs still go out)
+                cfg["game_channel_alerts"] = bool(body["game_channel_alerts"])
             if "wagering_enabled" in body:
                 cfg["wagering_enabled"] = bool(body["wagering_enabled"])
             if "wager_locked" in body:
@@ -3377,6 +3386,55 @@ class Handler(BaseHTTPRequestHandler):
             player = str(body.get("player", "")).strip()
             valid = _pin_ok(player, body.get("pin"))
             return self._send(200, json.dumps({"ok": True, "valid": bool(valid)}))
+        if path in ("/api/my_alerts", "/api/game_mute", "/api/dm_master"):
+            # Per-player notification controls on the website. Authorised exactly like a bet: a logged-in Discord
+            # session for this player, OR their passcode. They act on every Discord account known to be this
+            # player (so muting on the site silences the same DMs as /mute on Discord).
+            player = str(body.get("player", "")).strip()
+            if not self._authed_as(player, body):
+                return self._send(403, json.dumps({"ok": False, "error": "Wrong passcode — or log in with Discord."}))
+            uids = set(_uids_for_player(player))
+            did = self._session_discord_id()
+            if did and self._session_player() == player:
+                uids.add(str(did))
+            cfg = load_config()
+            if path == "/api/my_alerts":
+                optout = set(str(u) for u in (cfg.get("discord_dm_off") or []))
+                mutesmap = cfg.get("discord_mutes") if isinstance(cfg.get("discord_mutes"), dict) else {}
+                muted = sorted({str(mid) for u in uids for mid in (mutesmap.get(u) or [])})
+                dm_off = bool(uids) and all(u in optout for u in uids)
+                return self._send(200, json.dumps({"ok": True, "connected": bool(uids), "dm_off": dm_off, "muted": muted}))
+            if not uids:
+                return self._send(400, json.dumps({"ok": False, "not_connected": True,
+                    "error": "Connect Discord first — tap Connect Discord on the Bets tab (or run /notifyme), then come back."}))
+            if path == "/api/game_mute":
+                mid = str(body.get("matchId", "")).strip()
+                if not mid:
+                    return self._send(400, json.dumps({"ok": False, "error": "No game specified."}))
+                want = bool(body.get("muted"))
+                mutes = cfg.get("discord_mutes") if isinstance(cfg.get("discord_mutes"), dict) else {}
+                for u in uids:
+                    lst = [str(x) for x in (mutes.get(u) or [])]
+                    if want and mid not in lst:
+                        lst.append(mid)
+                    if not want:
+                        lst = [x for x in lst if x != mid]
+                    mutes[u] = lst
+                cfg["discord_mutes"] = mutes
+                save_config(cfg)
+                muted = sorted({str(m) for u in uids for m in (mutes.get(u) or [])})
+                return self._send(200, json.dumps({"ok": True, "muted": muted}))
+            # /api/dm_master — turn ALL of this player's personal DMs on/off (same as /stopnotify // /notifyme)
+            want_off = bool(body.get("off"))
+            off = [str(x) for x in (cfg.get("discord_dm_off") or [])]
+            for u in uids:
+                if want_off and u not in off:
+                    off.append(u)
+            if not want_off:
+                off = [x for x in off if x not in uids]
+            cfg["discord_dm_off"] = off
+            save_config(cfg)
+            return self._send(200, json.dumps({"ok": True, "dm_off": want_off}))
         if path == "/api/discord_claim_player":    # first login: bind THIS logged-in Discord account to a player name (first-come)
             did = self._session_discord_id()
             if not did:
