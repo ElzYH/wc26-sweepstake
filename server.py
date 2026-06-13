@@ -1142,12 +1142,6 @@ def push_broadcast(etype, title, body):
 
 
 # ---------------- unified dispatch: both channels at once ----------------
-def alert_player(player, etype, title, body, group_line):
-    if player and player not in ("—", "-"):
-        push_player(player, etype, title, body)
-    discord_send(group_line)
-
-
 def alert_all(etype, title, body, group_line):
     push_broadcast(etype, title, body)
     discord_send(group_line)
@@ -1287,14 +1281,19 @@ def notify_changes(old):
     if _mp == 0 and not _any_live:
         return                              # truly nothing happening yet (pre-tournament): stay quiet
 
-    def match_event(etype, recipients, group_line, ping=False):
-        # recipients: list of (owner, title, body); one Discord line for the whole match event
+    def match_event(etype, recipients, group_line, ping=False, important=False):
+        # recipients: list of (owner, title, body). Personal alerts always go to the owner (push + DM).
+        # The communal CHANNEL line only fires for "important" games — two players head-to-head, or a
+        # knockout tie — so the channel stays signal, not spam. Everything else is DM-only.
+        owners = [ow for ow, _t, _b in recipients if ow and ow not in ("—", "-")]
+        head_to_head = len(set(owners)) >= 2          # two different players' teams in the same match
+        send_channel = important or head_to_head
         for ow, ti, bo in recipients:
             if ow and ow not in ("—", "-"):
                 push_player(ow, etype, ti, bo)
-                if ping:
-                    _bot_dm_player(ow, "%s — %s" % (ti, bo))   # personal -> DM (falls back to @mention)
-        discord_send(group_line)            # communal feed stays in the channel
+                _bot_dm_player(ow, "%s — %s" % (ti, bo))   # personal -> always DM (falls back to @mention)
+        if send_channel:
+            discord_send(group_line)        # communal feed: important games only
         _dm_all_games(group_line)           # ...and DMs anyone who opted into the all-games feed
 
     def own(o):
@@ -1312,9 +1311,8 @@ def notify_changes(old):
     # head-to-head overtakes (positions below 1st), in the active scoring mode
     try:
         for x, y, pos in (rivalry_alerts(old, new, _active_mode()) if _mp > 0 else []):
-            alert_player(x, "rivalry", "Moved up 📊", "You overtook %s for %s." % (y, _ord(pos)),
-                         "📊 **%s** overtakes **%s** for %s." % (x, y, _ord(pos)))
-            _bot_dm_player(x, "📊 You overtook **%s** for %s." % (y, _ord(pos)))   # personal -> DM
+            push_player(x, "rivalry", "Moved up 📊", "You overtook %s for %s." % (y, _ord(pos)))
+            _bot_dm_player(x, "📊 You overtook **%s** for %s." % (y, _ord(pos)))   # personal -> DM only (no channel spam)
     except Exception:
         pass
     # per-match transitions: kickoff, half-time, second half, goals
@@ -1329,16 +1327,18 @@ def notify_changes(old):
             was = ov[0] if ov else None
             ho_ok = ho and ho not in ("—", "-")
             ao_ok = ao and ao not in ("—", "-")
+            mm0 = nmatch.get(key) or {}
+            _ko = str(mm0.get("stage") or "").upper() not in ("", "GROUP_STAGE", "GROUP")  # knockout = always important
             if st in LIVE_STATUSES and was not in LIVE_STATUSES:                      # kickoff
                 match_event("kickoff",
                             [(ho, "%s vs %s" % (h, a), "Kicked off — your team %s is playing!" % h),
                              (ao, "%s vs %s" % (h, a), "Kicked off — your team %s is playing!" % a)],
-                            "🔵 Kicked off — **%s** (%s) vs **%s** (%s)" % (h, own(ho), a, own(ao)), ping=True)
+                            "🔵 Kicked off — **%s** (%s) vs **%s** (%s)" % (h, own(ho), a, own(ao)), ping=True, important=_ko)
             elif st == "PAUSED" and was in PLAYING:                                   # half-time
                 sc = "%s %s–%s %s" % (h, nhs, nas, a) if None not in (nhs, nas) else "%s vs %s" % (h, a)
                 match_event("flow",
                             [(ho, "Half-time ⏸️", sc), (ao, "Half-time ⏸️", sc)],
-                            "⏸️ Half-time — %s" % sc)
+                            "⏸️ Half-time — %s" % sc, important=_ko)
             elif st in FT_STATUSES and was in LIVE_STATUSES:                          # full-time (incl. a.e.t. / pens)
                 mm = nmatch.get(key) or {}
                 sc = "%s %s–%s %s" % (h, nhs, nas, a) if None not in (nhs, nas) else "%s vs %s" % (h, a)
@@ -1350,18 +1350,24 @@ def notify_changes(old):
                     extra = " — after extra time"
                 match_event("flow",
                             [(ho, "Full-time ⏱️", sc + extra), (ao, "Full-time ⏱️", sc + extra)],
-                            "⏱️ Full-time — %s%s" % (sc, extra), ping=True)
+                            "⏱️ Full-time — %s%s" % (sc, extra), ping=True, important=_ko)
             if ov is not None:                                                        # goals (any time score rises)
                 ohs, oas = ov[3], ov[4]
                 if None not in (nhs, nas, ohs, oas):
                     score = "%s %d–%d %s" % (h, nhs, nas, a)
+                    _both = ho_ok and ao_ok                # both teams owned -> a head-to-head goal is channel-worthy
+                    _goal_chan = _both or _ko
                     if nhs > ohs and ho_ok:
-                        alert_player(ho, "goal", "%s scored! ⚽" % h, score, "⚽ **%s** (%s) scored — %s" % (h, ho, score))
+                        push_player(ho, "goal", "%s scored! ⚽" % h, score)
                         _bot_dm_player(ho, "⚽ **%s** scored — %s" % (h, score))     # personal -> DM
+                        if _goal_chan:
+                            discord_send("⚽ **%s** (%s) scored — %s" % (h, ho, score))
                         _dm_all_games("⚽ **%s** (%s) scored — %s" % (h, ho, score))
                     if nas > oas and ao_ok:
-                        alert_player(ao, "goal", "%s scored! ⚽" % a, score, "⚽ **%s** (%s) scored — %s" % (a, ao, score))
+                        push_player(ao, "goal", "%s scored! ⚽" % a, score)
                         _bot_dm_player(ao, "⚽ **%s** scored — %s" % (a, score))     # personal -> DM
+                        if _goal_chan:
+                            discord_send("⚽ **%s** (%s) scored — %s" % (a, ao, score))
                         _dm_all_games("⚽ **%s** (%s) scored — %s" % (a, ao, score))
     except Exception:
         pass
@@ -1371,9 +1377,8 @@ def notify_changes(old):
         for t in oa:
             if oa[t][0] and t in na and not na[t][0]:
                 owner = na[t][1]
-                alert_player(owner, "knockout", "%s is out ❌" % t, "Check the leaderboard to see where you stand.",
-                             "❌ **%s** (%s) is out." % (t, own(owner)))
-                _bot_dm_player(owner, "❌ **%s** is out." % t)     # personal -> DM
+                push_player(owner, "knockout", "%s is out ❌" % t, "Check the leaderboard to see where you stand.")
+                _bot_dm_player(owner, "❌ **%s** is out." % t)     # personal -> DM only
     except Exception:
         pass
     # champion decided -> everyone, with the winner's standing in the active scoring mode
@@ -2574,6 +2579,11 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/draw.html", "/draw", "/reveal"):     # legacy/dead links -> the real draw page
             self.send_response(302); self.send_header("Location", "/wheel"); self.end_headers(); return
         if path == "/setup":   return self._file("setup.html")
+        if path == "/join":                        # stable public link -> always 302 to the CURRENT saved invite,
+            inv = load_config().get("discord_invite") or ""   # so a rotated/expired discord.gg never breaks the shared URL
+            if inv:
+                self.send_response(302); self.send_header("Location", inv); self.end_headers(); return
+            self.send_response(302); self.send_header("Location", "/tracker?join=none"); self.end_headers(); return
         if path == "/tracker": return self._file("tracker.html")
         if path == "/wheel":   return self._file("wheel.html")
         if path == "/me":      return self._file("me.html")

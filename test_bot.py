@@ -218,8 +218,11 @@ elif "120" not in _champ_msgs[0]:
 else:
     print("[champion-alert] champion notification fires with finishing score OK")
 
-# head-to-head rivalry: overtaking another player (position 2+) fires an alert naming both + the new place
+# head-to-head rivalry: overtaking another player (position 2+) now DMs that player (no channel spam)
 _sent.clear()
+_dms = []
+_orig_dm = server._bot_dm_player
+server._bot_dm_player = lambda player, text: (_dms.append((player, text)) or 1)
 _lo = {"hybrid": [{"name": "A", "score": 50, "alive_teams": 3, "total_teams": 9},
                   {"name": "B", "score": 40, "alive_teams": 3, "total_teams": 9},
                   {"name": "C", "score": 30, "alive_teams": 3, "total_teams": 9}], "points": [], "survival": []}
@@ -230,13 +233,16 @@ _oldr = {"stats": {"matches_played": 10}, "fixtures": [], "leaderboards": _lo, "
 _newr = {"stats": {"matches_played": 10}, "fixtures": [], "leaderboards": _ln, "players": []}
 json.dump(_newr, open(os.path.join(D, "tracker_data.json"), "w"))
 server.notify_changes(_oldr)
-_riv = [s for s in _sent if "overtakes" in s]
-if not _riv:
-    fails.append(("rivalry", "no overtake alert fired"))
-elif not ("C" in _riv[0] and "B" in _riv[0] and "2nd" in _riv[0]):
-    fails.append(("rivalry", "overtake alert wrong: %r" % _riv[0]))
+server._bot_dm_player = _orig_dm
+_rivdm = [d for d in _dms if "overtook" in d[1]]
+if not _rivdm:
+    fails.append(("rivalry", "no overtake DM fired"))
+elif not (_rivdm[0][0] == "C" and "B" in _rivdm[0][1] and "2nd" in _rivdm[0][1]):
+    fails.append(("rivalry", "overtake DM wrong: %r" % (_rivdm[0],)))
+elif any("overtakes" in s for s in _sent):
+    fails.append(("rivalry", "overtake should NOT post to the channel anymore"))
 else:
-    print("[rivalry] overtake alert fires (C overtakes B for 2nd) OK")
+    print("[rivalry] overtake DMs the player (C overtook B for 2nd), no channel post OK")
 
 # 'your day' digest: today's fixtures grouped per player
 _today = time.strftime("%Y-%m-%dT15:00:00Z", time.gmtime())

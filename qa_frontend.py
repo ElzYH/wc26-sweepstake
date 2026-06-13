@@ -44,7 +44,6 @@ ck("the 'this bet is final' notice rides inside the single-bet sticky bar", "thi
 # tab-scoped: the bar is built inside renderBets() (#bets section), which is display:none on other tabs
 ck("the bar lives in the betting tab only (rendered in renderBets/#betsBody)", "function renderBets(" in JS and 'id="betsBody"' in HTML, None)
 ck("sections are display:none when inactive (so the bar can't show on other tabs)", re.search(r"section\{[^}]*display:none", HTML.replace(" ", "")) is not None, None)
-ck("the bar drops to static while typing (iOS keyboard fix)", ".betcta.noFloat{position:static" in HTML.replace(" ", ""), None)
 
 # ---- XSS regression: name-bearing fields must never be interpolated raw into templates ----
 print("\n== escaping regression (names always esc()'d) ==")
@@ -66,12 +65,27 @@ ck("push test failures are surfaced to the user", "j.errors" in HTML and "failed
 # ---- pool teams: every surface says they score for no one ----
 ck("the live breakdown flags an unowned (pool) side", "unowned (pool) — those points count for no one" in HTML, None)
 ck("group tables carry the pool-teams note", "Pool teams (no owner):" in HTML and "you only ever earn points for your own team" in HTML, None)
-ck("the rules panel explains the pool", "The pool (leftover teams):" in HTML and "score points for <b>no one</b>" in HTML, None)
+ck("the rules panel explains the pool", "The pool (leftover teams):" in HTML and "score for <b>no one</b>" in HTML, None)
 _setup = open(os.path.join(REPO, "setup.html")).read() if os.path.exists(os.path.join(REPO, "setup.html")) else ""
 ck("setup explains both leftover options plainly", "belong to no one and score points for no one" in _setup, None)
 
+# ---- this round: betting revert, layout, stable join link, leaner copy ----
+print("\n== iOS betting fix + layout + join link ==")
+ck("the broken noFloat/scrollBy keyboard hack is gone", "noFloat" not in HTML and "scrollBy" not in HTML, None)
+ck("stake inputs are 16px (iOS won't zoom)", HTML.count("padding:8px 10px;font-size:16px") == 2 and "padding:8px 10px;font-size:14px" not in HTML, None)
+ck("tabs row is centred", ".tabs{display:flex;gap:8px;margin:22px 0 18px;flex-wrap:wrap;justify-content:center}" in HTML, None)
+ck("on phone the controls sit left (don't run off-page)", ".ctrls{margin-left:0;width:auto;justify-content:flex-start}" in HTML, None)
+ck("on phone the menu opens from the left", ".menu{left:0;right:auto;min-width:210px}" in HTML, None)
+ck("the bets chip is now LEFT of the score on the leaderboard", re.search(r'class="pscore">\$\{\(p\.bet_potential>0[^`]*`<span class="betdelta"', HTML) is not None, None)
+ck("the chips are smaller (9.5px)", ".betdelta{font-family:'Sora',sans-serif;font-size:9.5px" in HTML and ".livedelta{font-family:'Sora',sans-serif;font-size:9.5px" in HTML, None)
+ck("a stable /join link is advertised on the tracker", '/join' in HTML and "always points at the latest invite" in HTML, None)
+ck("the Join button points at the stable /join redirect", 'href="/join"' in HTML, None)
+
+# ---- leaner copy: the giant get-alerts paragraph is gone ----
+ck("the get-alerts help is trimmed (no Home-Screen wall of text)", "On iPhone you must first add the site to your Home Screen (Share" not in HTML, None)
+
 # ---- potential betting points: visible but never added to the score ----
-ck("leaderboard rows show a '+N bets' potential chip", 'class="betdelta"' in HTML and "+${p.bet_potential} bets" in HTML, None)
+ck("leaderboard rows show a potential-bets chip", 'class="betdelta"' in HTML and "+${p.bet_potential}" in HTML, None)
 ck("the chip explains it only counts when a bet settles", "counts only when a bet settles" in HTML, None)
 ck("player cards carry the open-bets potential line", "if they all win" in HTML and "only counts when a bet settles" in HTML, None)
 ck("a .betdelta style exists (gold, distinct from the green live chip)", ".betdelta{" in HTML.replace(" ", "") and "var(--gold)" in HTML.split(".betdelta{",1)[1][:200], None)

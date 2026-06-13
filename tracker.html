@@ -33,7 +33,7 @@
   .dot-live{display:inline-block;width:8px;height:8px;border-radius:50%;background:#39d98a;margin-right:6px;
     animation:pulse 1.6s infinite}
   @keyframes pulse{50%{opacity:.3}}
-  .tabs{display:flex;gap:8px;margin:22px 0 18px;flex-wrap:wrap}
+  .tabs{display:flex;gap:8px;margin:22px 0 18px;flex-wrap:wrap;justify-content:center}
   .tab{flex:0 0 auto;white-space:nowrap;font-family:'Sora';font-weight:700;font-size:14px;padding:9px 18px;border-radius:999px;cursor:pointer;
     background:#10301f;border:1px solid var(--line);color:var(--ink)}
   .tab.on{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205;border-color:var(--gold)}
@@ -50,8 +50,8 @@
   .pname{font-family:'Anton';font-size:22px;letter-spacing:.01em}
   .palive{color:var(--muted);font-size:12px;letter-spacing:.06em}
   .pscore{font-family:'Anton';font-size:30px;color:var(--gold)}
-  .livedelta{font-family:'Sora',sans-serif;font-size:11px;font-weight:700;color:#fff;background:#1f8f4e;border-radius:6px;padding:1px 7px;margin-left:8px;vertical-align:middle}
-  .betdelta{font-family:'Sora',sans-serif;font-size:11px;font-weight:700;color:#1a1205;background:var(--gold);border-radius:6px;padding:1px 7px;margin-left:8px;vertical-align:middle}
+  .livedelta{font-family:'Sora',sans-serif;font-size:9.5px;font-weight:700;color:#fff;background:#1f8f4e;border-radius:5px;padding:1px 5px;margin-left:5px;vertical-align:middle}
+  .betdelta{font-family:'Sora',sans-serif;font-size:9.5px;font-weight:700;color:#1a1205;background:var(--gold);border-radius:5px;padding:1px 5px;margin-right:5px;vertical-align:middle}
   .betpill{font-family:'Sora',sans-serif;font-size:11px;font-weight:700;border-radius:6px;padding:1px 7px;margin-left:6px;vertical-align:middle}
   .betpill.win{color:#0a1f12;background:#7ee787}
   .betpill.loss{color:#fff;background:#b3343a}
@@ -245,7 +245,6 @@
      tabs) so it can never appear on another page. No JS — pure CSS sticky, safe on iOS Safari / iPad. */
   .betcta{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:25;
     box-shadow:0 8px 30px rgba(0,0,0,.55),0 -2px 12px rgba(0,0,0,.30)}
-  .betcta.noFloat{position:static;box-shadow:none}  /* while typing a stake: iOS keyboard + sticky strands the bar mid-screen */
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
   .lmatch{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin-top:8px;
     color:var(--ink);font-weight:600;font-size:14px;letter-spacing:0}
@@ -255,10 +254,11 @@
   .simh:hover{text-decoration:underline}
   @media(max-width:560px){
     body{padding:18px 13px 60px}
-    .ctrls{margin-left:0;width:100%;justify-content:flex-end}
+    .subbar{justify-content:flex-start}
+    .ctrls{margin-left:0;width:auto;justify-content:flex-start}
     #menuBtn{width:auto;text-align:center;padding:7px 14px}
-    .menu{left:auto;right:0;min-width:210px}
-    .tabs{gap:6px;margin:16px 0 14px}
+    .menu{left:0;right:auto;min-width:210px}
+    .tabs{gap:6px;margin:16px 0 14px;justify-content:center}
     .tabs .tab{padding:7px 12px;font-size:13px}
     th,td{padding:6px 7px;font-size:11.5px}
     caption{font-size:15px;padding:10px 12px 5px}
@@ -323,16 +323,16 @@
       <li><b>Survival</b> — how far your teams go and how many are still alive. It rewards <i>lasting</i> — owning teams that keep advancing.</li>
       <li><b>Both</b> — literally <b>Points + Survival added together</b> for each player, then ranked once. You win it by having a squad that both racks up points <i>and</i> goes deep.</li>
     </ul>
-    <p><b>So why is someone's "Both" bigger than their "Points"?</b> Because Both adds their Survival value on top. If a player owns the champion and other deep teams, their Survival can be a few hundred — so Both = Points + that. It's not double-counting and it's not a bug; the live example below shows the exact sum.</p>
+    <p><b>Why is "Both" bigger than "Points"?</b> Both = Points + Survival. Owning deep-running teams makes Survival large, so Both is too — not a bug. The live example below shows the sum.</p>
     <div id="scoringRules"></div>
-    <p><b>Fixtures:</b> the bar under each match is the win chance — home / draw / away — from team strength, shifting toward the leader once a game is in-play.</p>
-    <p><b>Odds &amp; stats:</b> the win bars are your live chance of owning the champion (from bookmaker prices, updating as teams go out). The simulator there estimates your odds of winning on Points, Survival or Both.</p>
+    <p><b>Fixtures:</b> the bar under each match is the win chance (home / draw / away).</p>
+    <p><b>Odds &amp; stats:</b> your live chance of owning the champion (from bookmaker prices), plus a simulator of your odds to win on each mode.</p>
     <p><b>📋 Summary:</b> the quick digest at the top of Overview — leaders, teams left, top team and goals. The same digest can be posted to Discord from Settings.</p>
     <p><b>⬇ Export:</b> <a href="/api/export.csv" style="color:var(--gold)">download the standings as a CSV</a> — open it in Excel/Sheets or print it for the group.</p>
-    <p><b>🔔 Get alerts:</b> tap it in the ⋯ menu, pick your name, and turn on alerts for your teams — goals, kick-offs, half-time, knockouts, lead changes and rivalries (when you overtake another player). Tick exactly which of those you want. If the daily summary is on, you'll also get your fixtures for the day each morning. On iPhone you must first add the site to your Home Screen (Share → Add to Home Screen) and open it from that icon; on a laptop just allow notifications. You can also join the group Discord, where the same alerts post for everyone.</p>
-    <p><b>Discord bot:</b> in the group server, type <code>/</code> to pull live data — <code>/leaderboard</code>, <code>/summary</code>, <code>/odds</code>, <code>/fixtures</code>, <code>/myteams</code>, <code>/help</code>. It's read-only; nobody can change the draw from Discord.</p>
-    <p><b>The draw — Fair vs Weighted:</b> Fair spreads the strongest teams evenly so everyone gets a balanced mix (within each strength band it's still random, so it's fair but not predictable). Weighted is luck-of-the-draw — a bigger team gives better odds but you might land several strong or several weak ones. On the Reveal page, <b>Run draw on the server</b> does the draw on the server and keeps going even if you close the tab — everyone can watch it live.</p>
-    <p><b>The pool (leftover teams):</b> when 48 teams don't split evenly, the spares go to the pool. Pool teams belong to <b>no one</b> and score points for <b>no one</b> — they're just kept visible so you can follow them. Playing against one is a normal game: you earn your own team's points as usual. If a pool team wins the whole thing, nobody gets the glory.</p>
+    <p><b>🔔 Get alerts:</b> tap <b>Get alerts</b>, pick your name, choose which alerts you want (goals, kick-offs, knockouts, lead changes…). <i>iPhone:</i> first add the site to your Home Screen (Share → Add to Home Screen) and open it from there. Most match news comes by DM on Discord; the group channel only gets the big games.</p>
+    <p><b>Discord bot:</b> type <code>/</code> in the server for live data — <code>/leaderboard</code>, <code>/odds</code>, <code>/fixtures</code>, <code>/myteams</code>, <code>/help</code>. Read-only.</p>
+    <p><b>The draw — Fair vs Weighted:</b> Fair spreads strong teams evenly (still random within each band); Weighted is pure luck — bigger teams give better odds but you might land all strong or all weak. On Reveal, <b>Run draw on the server</b> keeps going even if you close the tab.</p>
+    <p><b>The pool (leftover teams):</b> spare teams that don't divide evenly. They belong to <b>no one</b> and score for <b>no one</b> — just shown so you can follow them. You always earn only your own team's points.</p>
   </div>
   <div class="panel" id="setPanel" style="display:none">
     <h4>Settings — add live scores later</h4>
@@ -357,7 +357,7 @@
         <div class="row2" style="margin-top:6px"><button id="setSaveDiscord">Save webhook</button><button id="setTestDiscord" class="mini">Send Discord test</button></div>
         <div class="row2" style="margin-top:6px"><button id="setDemoDiscord" class="mini">Demo a game in Discord</button><button id="setSummaryDiscord" class="mini">Post summary to Discord</button></div>
         <div class="hint" id="setDiscordMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
-        <p style="margin:12px 0 6px;color:var(--muted);font-size:12.5px">• <b>Invite link</b> — paste your Discord server invite. Anyone using the site gets a “Join the group chat” button. To keep randoms out, lock it down in Discord itself (set the invite’s max-uses / expiry, or use “Invite Only”).</p>
+        <p style="margin:12px 0 6px;color:var(--muted);font-size:12.5px">• <b>Invite link</b> — paste your Discord server invite. In Discord, set the invite to <b>Never expire</b> with <b>no max uses</b> (Edit invite link → Expire after: Never), so it can't go stale. Then share <b style="color:var(--ink)">your-site/join</b> — it always redirects to whatever invite is saved here, so even if you do rotate the invite, the link you've shared keeps working.</p>
         <input id="setInvite" type="text" placeholder="https://discord.gg/… (server invite)">
         <div class="row2" style="margin-top:6px"><button id="setSaveInvite">Save invite</button></div>
         <div class="hint" id="setInviteMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
@@ -645,7 +645,7 @@ function renderBets(){
       +'<div style="font-weight:600;margin-bottom:8px">🎰 '+ACCA.length+'-fold accumulator <span style="color:var(--muted);font-weight:400">· max stake '+accaCap+'</span></div>'
       +ACCA.map((l,i)=>{const fxp=fx.find(m=>m.matchId===l.matchId); const who=l.sel==='HOME'?(fxp?fxp.home:'home'):(l.sel==='AWAY'?(fxp?fxp.away:'away'):'Draw');
         return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>'+esc(who)+' <span style="color:var(--gold)">'+l.frac+'</span></span><button class="accarm" data-i="'+i+'" style="background:none;border:none;color:#ff7a7a;cursor:pointer">✕</button></div>';}).join('')
-      +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;border-top:1px solid var(--line);padding-top:8px"><input id="accaStake" type="number" min="'+caps.min_stake+'" max="'+Math.min(accaCap,avail)+'" step="0.01" placeholder="stake (pts)" style="width:120px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px">'
+      +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;border-top:1px solid var(--line);padding-top:8px"><input id="accaStake" type="number" min="'+caps.min_stake+'" max="'+Math.min(accaCap,avail)+'" step="0.01" placeholder="stake (pts)" style="width:120px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:16px">'
       +'<span id="accaReturn" style="color:var(--muted);font-size:13px">combined ~'+(Math.round(dec*100)/100)+'×</span>'
       +'<button id="accaPlace" class="mini cta">Place acca</button></div><div style="color:var(--muted);font-size:11.5px;margin-top:6px">Once placed, this acca is final — it can\'t be cancelled.</div></div>';
   }
@@ -654,7 +654,7 @@ function renderBets(){
     if(fxp){ const o=fxp.odds[BETPICK.sel], who=BETPICK.sel==='HOME'?fxp.home:(BETPICK.sel==='AWAY'?fxp.away:'Draw'); const smax=Math.min(fxp.maxStake||caps.max_stake, headroom);
       h+='<div class="betcta" style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
         +'<div style="font-size:13.5px;margin-bottom:8px">Bet on <b>'+esc(who)+'</b> @ <b style="color:var(--gold)">'+o.frac+'</b> <span style="color:var(--muted)">· max '+smax+'</span></div>'
-        +(smax<=0?'<div style="color:#ffb86b;font-size:13px">You\'ve hit the open-bet limit — wait for a bet to settle.</div>':('<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="betStake" type="number" min="'+caps.min_stake+'" max="'+Math.min(smax,avail)+'" step="0.01" placeholder="stake (pts)" style="width:120px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px">'
+        +(smax<=0?'<div style="color:#ffb86b;font-size:13px">You\'ve hit the open-bet limit — wait for a bet to settle.</div>':('<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="betStake" type="number" min="'+caps.min_stake+'" max="'+Math.min(smax,avail)+'" step="0.01" placeholder="stake (pts)" style="width:120px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:16px">'
         +'<span id="betReturn" style="color:var(--muted);font-size:13px"></span>'
         +'<button id="betPlace" class="mini cta">Place bet</button></div><div style="color:var(--muted);font-size:11.5px;margin-top:6px">Once placed, this bet is final — it can\'t be cancelled.</div>'))+'</div>';
     }
@@ -737,12 +737,6 @@ function renderBets(){
       else box.textContent=j.error||'Could not unlink.';
     }catch(e){ box.textContent='Could not reach the server.'; }
   };
-  // iOS Safari: while the on-screen keyboard is up, a sticky bar gets stranded mid-screen. Make the
-  // bar sit still while a stake is being typed, and nudge a repaint when the keyboard closes.
-  // (Property assignment, not addEventListener — renderBets() runs often and must not stack handlers.)
-  el.onfocusin=(e)=>{ const c=e.target&&e.target.closest&&e.target.closest('.betcta'); if(c) c.classList.add('noFloat'); };
-  el.onfocusout=(e)=>{ const c=e.target&&e.target.closest&&e.target.closest('.betcta');
-    if(c) setTimeout(()=>{ c.classList.remove('noFloat'); window.scrollBy(0,1); window.scrollBy(0,-1); },250); };
   el.querySelectorAll('.betodd').forEach(b=>b.onclick=()=>{
     const mid=b.dataset.mid, sel=b.dataset.sel, frac=b.dataset.frac;
     if(ACCAMODE){
@@ -1200,7 +1194,7 @@ function render(d){
     <div class="row ${rank===1&&p.score>0?'lead':''}">
       <div class="rank">${rank}</div>
       <div><div class="pname">${esc(p.name)}${tied?' <span class="tiebadge">tied</span>':''}</div><div class="palive">${p.alive_teams}/${p.total_teams} teams still in</div></div>
-      <div class="pscore">${disp(p.score)}<span> ${unit}</span>${(p.live>0 && (lbm==='points'||lbm==='hybrid'))?`<span class="livedelta" title="points from games in play right now">+${p.live} live</span>`:''}${(p.bet_potential>0 && (lbm==='points'||lbm==='hybrid'))?`<span class="betdelta" title="what their open bets would add if they ALL win — counts only when a bet settles">+${p.bet_potential} bets</span>`:''}</div>
+      <div class="pscore">${(p.bet_potential>0 && (lbm==='points'||lbm==='hybrid'))?`<span class="betdelta" title="what their open bets would add if they ALL win — counts only when a bet settles">+${p.bet_potential}</span>`:''}${disp(p.score)}<span> ${unit}</span>${(p.live>0 && (lbm==='points'||lbm==='hybrid'))?`<span class="livedelta" title="points from games in play right now">+${p.live}</span>`:''}</div>
     </div>`;}).join('')
     + (board.length>1?`<div class="tbcap">${tbrule}</div>`:'');
   // player cards
@@ -2188,7 +2182,8 @@ function renderDiscord(){
   let h='';
   if(STATUS.invite){
     h+='<p style="margin:0 0 12px;font-size:13px;color:var(--ink);opacity:.85">Join the group server to get every kickoff, goal, half-time, full-time, knockout and lead change in the channel — plus the round-by-round draw and the daily summary. Type <code>/notifyme &lt;your name&gt;</code> in the server and the bot will <b>DM you</b> on your own teams&#39; events — or <code>/notifyme all</code> to be DMed every game.</p>';
-    h+='<a class="mini cta" href="'+esc(STATUS.invite)+'" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;padding:10px 16px;font-size:14px">💬 Join the group chat</a>';
+    h+='<a class="mini cta" href="/join" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;padding:10px 16px;font-size:14px">💬 Join the group chat</a>';
+    h+='<p style="margin:8px 0 12px;font-size:12px;color:var(--muted)">Share this link — it always points at the latest invite, even if you refresh the Discord one: <b style="color:var(--ink)">'+esc(location.host)+'/join</b></p>';
   } else {
     h+='<p style="margin:0 0 12px;font-size:13px;color:var(--muted)">No Discord invite link has been added yet'+(STATUS.discord?' — alerts are posting to a channel, but there\'s no public join link.':'.')+'</p>';
   }

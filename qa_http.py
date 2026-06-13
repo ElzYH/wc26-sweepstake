@@ -147,6 +147,18 @@ def run():
         ck("admin key never leaked in status", KEY not in body, "")
         st, body = req("GET", "/tracker")
         ck("tracker still served", st == 200 and "<" in body, st)
+        # /join must 302 to the saved invite (stable public link that survives invite rotation)
+        class _NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, *a, **k): return None
+        _op = urllib.request.build_opener(_NoRedirect)
+        try:
+            _op.open(BASE + "/join", timeout=5)
+            _loc, _code = "", 0
+        except urllib.error.HTTPError as e:
+            _code, _loc = e.code, e.headers.get("Location", "")
+        ck("/join redirects (302/301)", _code in (301, 302), _code)
+        # with no invite saved it should bounce to the tracker, not error
+        ck("/join points somewhere sensible", ("discord" in _loc.lower()) or _loc.startswith("/tracker"), _loc)
     finally:
         proc.terminate()
         try: proc.wait(timeout=5)
