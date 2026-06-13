@@ -593,10 +593,11 @@ function ouRowHTML(m){
   const mkOU=(sel,lbl)=>{ const o=leg[sel]; if(!o) return '';
     const on=ACCAMODE?ACCA.some(l=>samePick(l,m.matchId,sel,'ou',ln)):samePick(BETPICK,m.matchId,sel,'ou',ln);
     return '<button class="betodd'+(on?' on':'')+'" data-mid="'+m.matchId+'" data-sel="'+sel+'" data-market="ou" data-line="'+ln+'" data-frac="'+o.frac+'">'+lbl+' <b>'+o.frac+'</b></button>'; };
-  return '<div style="display:flex;gap:6px;margin-top:6px;align-items:stretch">'
-    +'<span style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)">Goals'
+  return '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:stretch">'
+    +'<span style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);white-space:nowrap">Goals'
     +'<select class="ouline" data-mid="'+esc(m.matchId)+'" style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 6px;font-size:13px;font-family:Sora,sans-serif">'+opts+'</select></span>'
-    +mkOU('OVER','Over')+mkOU('UNDER','Under')+'</div>';
+    +'<div style="display:flex;gap:6px;flex:1 1 166px;min-width:166px;align-items:stretch">'+mkOU('OVER','Over')+mkOU('UNDER','Under')+'</div>'
+    +'</div>';
 }
 function renderBets(){
   const el=document.getElementById('betsBody'); if(!el) return;

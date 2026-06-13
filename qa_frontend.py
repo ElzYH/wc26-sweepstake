@@ -74,6 +74,10 @@ ck("the line dropdown defaults to 2.5", "OULINE[mid] || '2.5'" in HTML, None)
 ck("picks compare on matchId+market+sel+line (samePick)", "function samePick(p, mid, sel, market, line)" in HTML, None)
 ck("placeBet sends market + line", "market:BETPICK.market||'result',line:BETPICK.line" in HTML, None)
 ck("placeAcca sends per-leg market + line", "market:l.market||'result',line:l.line" in HTML, None)
+# overflow fix: the O/U row must be allowed to wrap, and the two buttons must sit in ONE min-width group
+# so on a narrow (multi-column desktop) card the button group drops to a second line instead of spilling out.
+ck("the O/U row can wrap (flex-wrap) so it never overflows a narrow card", "margin-top:6px;flex-wrap:wrap" in HTML, None)
+ck("the Over/Under buttons are wrapped in a min-width flex group (wrap together, not spill)", "flex:1 1 166px;min-width:166px" in HTML, None)
 ck("the server attaches O/U prices to fixtures", "f[\"ouOdds\"] = wager.goals_odds(ch, ca)" in open(os.path.join(REPO, "scoring.py")).read(), None)
 try:
     import subprocess as _sp6
