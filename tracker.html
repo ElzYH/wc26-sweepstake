@@ -250,6 +250,19 @@
   .lmatch{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin-top:8px;
     color:var(--ink);font-weight:600;font-size:14px;letter-spacing:0}
   .lmatch small{display:block;color:var(--gold);font-size:10.5px;font-weight:600}
+  .livebd-wrap{margin-top:7px;display:grid;gap:5px}
+  .livebd{font-size:11.5px;color:var(--muted);background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:8px}
+  .livebd>summary{cursor:pointer;padding:6px 10px;list-style:none;display:flex;align-items:center;gap:7px}
+  .livebd>summary::-webkit-details-marker{display:none}
+  .livebd>summary::after{content:'▾';margin-left:auto;opacity:.55;transition:transform .15s ease}
+  .livebd[open]>summary::after{transform:rotate(180deg)}
+  .livebd .lbd-tot{color:#7ee787;font-weight:800;font-family:'Sora',sans-serif}
+  .livebd .lbd-cap{opacity:.7}
+  .livebd .lbd-body{padding:1px 10px 8px}
+  .lbd-row{display:flex;justify-content:space-between;gap:12px;padding:2px 0}
+  .lbd-row>span:first-child{opacity:.85}
+  .lbd-grand{border-top:1px solid var(--line);margin-top:4px;padding-top:5px;font-weight:800;color:var(--ink)}
+  .lbd-pool{font-size:11px;color:var(--muted);opacity:.8;padding:1px 2px}
   .lmatch .lr{text-align:right}
   .lsc{font-family:'Anton';font-weight:400;font-size:22px;text-align:center;color:var(--gold)}
   .simh:hover{text-decoration:underline}
@@ -1055,16 +1068,34 @@ function liveParts(scored, conceded){
   return {pts:Math.round(pts*100)/100, parts};
 }
 // One small line under a live match: who's earning what right now, and why.
+const LIVEBD=new Set();   // which live breakdowns the user has expanded (key = match|player), kept across 30s refreshes
 function liveBreakLine(m){
-  const sides=[[m.homeOwner,m.homeScore??0,m.awayScore??0,m.home],[m.awayOwner,m.awayScore??0,m.homeScore??0,m.away]];
-  const bits=sides.filter(s=>s[0]&&s[0]!=='—'&&s[0]!=='-').map(s=>{
-    const b=liveParts(s[1],s[2]);
-    return '<b>'+esc(s[0])+'</b> +'+b.pts+(b.parts.length?' <span style="opacity:.75">('+b.parts.map(p=>esc(p[0])+' '+p[1]).join(' · ')+')</span>':'');
+  // Group this match's OWNED teams by player (one person can own both sides -> combine, no more "Louis +2 · Louis +2").
+  const byP={};
+  [[m.homeOwner,m.homeScore??0,m.awayScore??0,m.home],[m.awayOwner,m.awayScore??0,m.homeScore??0,m.away]].forEach(([ow,sc,co,tm])=>{
+    if(!ow||ow==='—'||ow==='-') return;
+    (byP[ow]=byP[ow]||[]).push({tm,b:liveParts(sc,co)});
   });
-  const unowned=sides.filter(s=>!s[0]||s[0]==='—'||s[0]==='-').map(s=>esc(s[3]));
-  const poolNote=unowned.length?('<span style="opacity:.75">'+unowned.join(' & ')+(unowned.length===1?' is':' are')+' unowned (pool) — those points count for no one</span>'):'';
-  if(!bits.length&&!poolNote) return '';
-  return '<div style="margin-top:5px;font-size:11.5px;color:var(--muted)">'+(bits.length?('If it ends like this: '+bits.join(' &nbsp;·&nbsp; ')):'')+(bits.length&&poolNote?' &nbsp;·&nbsp; ':'')+poolNote+'</div>';
+  const lbRows=((DATA.leaderboards||{}).points)||[];
+  const betPot=p=>{ const r=lbRows.find(x=>x.name===p); return (r&&r.bet_potential)||0; };
+  let html='';
+  Object.keys(byP).forEach(ow=>{
+    const teams=byP[ow];
+    const liveTot=Math.round(teams.reduce((s,t)=>s+t.b.pts,0)*100)/100;
+    const bp=betPot(ow);                                   // this player's open-bet upside (any game), folded into the total
+    const tot=Math.round((liveTot+bp)*100)/100;
+    const key=(m.matchId||(m.home+'_'+m.away))+'|'+ow;
+    const rows=teams.map(t=>'<div class="lbd-row"><span>'+esc(t.tm)+'</span><span>'+(t.b.parts.length?t.b.parts.map(p=>esc(p[0])+' +'+p[1]).join(' · '):'nothing yet')+(' = +'+t.b.pts)+'</span></div>').join('');
+    html+='<details class="livebd" data-bd="'+esc(key)+'"'+(LIVEBD.has(key)?' open':'')+'>'
+      +'<summary><b>'+esc(ow)+'</b> <span class="lbd-tot">+'+tot+'</span> <span class="lbd-cap">if it ends like this</span></summary>'
+      +'<div class="lbd-body">'+rows
+      +(bp>0?'<div class="lbd-row"><span>🎲 your open bets</span><span style="color:var(--gold)">+'+bp+' if they land</span></div>':'')
+      +(bp>0?'<div class="lbd-row lbd-grand"><span>Total</span><span>+'+tot+'</span></div>':'')
+      +'</div></details>';
+  });
+  const un=[[m.homeOwner,m.home],[m.awayOwner,m.away]].filter(s=>!s[0]||s[0]==='—'||s[0]==='-').map(s=>esc(s[1]));
+  if(un.length) html+='<div class="lbd-pool">'+un.join(' & ')+(un.length===1?' is':' are')+' unowned (pool) — scores for no one</div>';
+  return html?('<div class="livebd-wrap">'+html+'</div>'):'';
 }
 function liveClockText(status, minute, liveSec, pens){
   if(pens==='1'||pens===true) return 'PENS';                          // shootout in progress/decided while still live
@@ -1478,6 +1509,13 @@ function renderOverview(d){
     +(st.top_scorer_player?`<div class="statcard"><div class="l">MOST GOALS · PLAYER</div><div class="v">${st.top_scorer_player} <small>${st.top_scorer_player_goals}</small></div></div>`:'')
     +'</div></div>';
   document.getElementById('ovBody').innerHTML=html;
+  // keep any expanded live breakdowns open across the 30s auto-refresh (click fires BEFORE the native toggle,
+  // so det.open is the OLD state). Property assignment, not addEventListener — renderOverview runs often.
+  const _ovb=document.getElementById('ovBody');
+  if(_ovb) _ovb.onclick=(e)=>{ const sm=e.target.closest&&e.target.closest('summary'); if(!sm) return;
+    const det=sm.parentElement; if(!det||!det.classList.contains('livebd')) return;
+    const k=det.getAttribute('data-bd'); if(!k) return;
+    if(det.open) LIVEBD.delete(k); else LIVEBD.add(k); };
   // carousel arrows
   const wp=document.getElementById('winPrev'), wn=document.getElementById('winNext');
   if(wp) wp.onclick=()=>{ const n=winSlides(d).length; WINSLIDE=(WINSLIDE-1+n)%n; renderOverview(d); };

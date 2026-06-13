@@ -4,7 +4,7 @@ by extracting them and running them under node — especially esc() (the XSS-esc
 (team->owner lookup used all over the UI), koNote() (extra-time/penalty caption), and the 2-dp money
 rounding used for stakes/returns/balances. DOM-bound functions can't run headless, so we test the logic
 that does the actual work."""
-import os, sys, re, subprocess, shutil
+import os, sys, re, subprocess, shutil, json
 
 REPO = os.path.dirname(os.path.abspath(__file__))
 FAILS = []
@@ -62,8 +62,26 @@ ck("a best/worst bets container exists", 'id="betHall"' in HTML and 'id="betHall
 ck("best/worst excludes free-points credit rows", "filter(w=>!w.credit&&(w.status==='won'||w.status==='lost'))" in HTML, None)
 ck("push test failures are surfaced to the user", "j.errors" in HTML and "failed" in HTML, None)
 
-# ---- pool teams: every surface says they score for no one ----
-ck("the live breakdown flags an unowned (pool) side", "unowned (pool) — those points count for no one" in HTML, None)
+# ---- live breakdown is now a collapsible per-player total (dedup + betting folded in) ----
+print("\n== live breakdown dropdown ==")
+ck("the live breakdown is a collapsible <details> per player", "<details class=\"livebd\"" in HTML and "const LIVEBD=new Set();" in HTML, None)
+ck("expanded breakdowns survive the 30s refresh (state kept in LIVEBD)", "LIVEBD.has(key)" in HTML and "LIVEBD.delete(k)" in HTML and "LIVEBD.add(k)" in HTML, None)
+ck("an unowned side is still flagged as pool", "unowned (pool) — scores for no one" in HTML, None)
+try:
+    import subprocess as _sp3
+    _lp = re.search(r"(function liveParts\(scored, conceded\)\{.*?\n\})", HTML, re.S).group(1)
+    _s = HTML.index("const LIVEBD=new Set();"); _e = HTML.index("return html?('<div class=\"livebd-wrap\">'+html+'</div>'):'';", _s); _e = HTML.index("\n}", _e) + 2
+    _lb = HTML[_s:_e]
+    _js = ("const esc=s=>String(s);\nlet DATA={scoring:{points:{per_goal:1,win:3,draw:1,clean_sheet:1}},"
+           "leaderboards:{points:[{name:'Louis',bet_potential:3.34}]}};\n" + _lp + "\n" + _lb +
+           "\nconst o=liveBreakLine({home:'Japan',away:'Brazil',homeOwner:'Louis',awayOwner:'Louis',homeScore:0,awayScore:0,matchId:'X'});"
+           "console.log(JSON.stringify({n:(o.match(/<details/g)||[]).length, has734:o.includes('+7.34'), bets:o.includes('your open bets')}));")
+    open("/tmp/_lb.js", "w").write(_js)
+    _r = json.loads(_sp3.run(["node", "/tmp/_lb.js"], capture_output=True, text=True).stdout.strip())
+    ck("owning both sides dedupes to ONE dropdown (not 'Louis +2 · Louis +2')", _r["n"] == 1, _r)
+    ck("the total folds in betting (+4 live + 3.34 bets = +7.34)", _r["has734"] and _r["bets"], _r)
+except Exception as _e:
+    ck("live-breakdown dropdown cross-check ran", False, str(_e)[:140])
 ck("group tables carry the pool-teams note", "Pool teams (no owner):" in HTML and "You only ever earn your own team" in HTML, None)
 ck("the rules panel explains the pool", "The pool (leftover teams):" in HTML and "score for <b>no one</b>" in HTML, None)
 _setup = open(os.path.join(REPO, "setup.html")).read() if os.path.exists(os.path.join(REPO, "setup.html")) else ""
