@@ -62,7 +62,32 @@ ck("a best/worst bets container exists", 'id="betHall"' in HTML and 'id="betHall
 ck("best/worst excludes free-points credit rows", "filter(w=>!w.credit&&(w.status==='won'||w.status==='lost'))" in HTML, None)
 ck("push test failures are surfaced to the user", "j.errors" in HTML and "failed" in HTML, None)
 
-# ---- leaderboard: combined total chip (live+bets) on the LEFT, with a where-from breakdown ----
+# ---- bets list: live score on all bet types, frozen at FT ----
+print("\n== bet cards show the score (live + frozen at FT) ==")
+ck("acca legs show the score (live + frozen FT), not just a dot", "FT '+sc+'</span>" in HTML and "🔴 '+sc+'</span>" in HTML, None)
+ck("single bets freeze the final score at FT", "🔴 LIVE '+sc+'</span>" in HTML, None)
+try:
+    import subprocess as _sp5
+    def _g(nm):
+        s = HTML.index("function " + nm); i = HTML.index("{", s); depth = 0
+        for j in range(i, len(HTML)):
+            if HTML[j] == "{": depth += 1
+            elif HTML[j] == "}":
+                depth -= 1
+                if depth == 0: return HTML[s:j + 1]
+    _fns = "\n".join(_g(n) for n in ["isDone", "provResult", "provChip", "accaLiveStatus", "betCardHTML"])
+    _js = ("const esc=s=>String(s);\n" + _fns + """
+    const fixById=new Map([['M1',{matchId:'M1',home:'Qatar',away:'Switzerland',homeScore:0,awayScore:0,status:'IN_PLAY'}],
+      ['M2',{matchId:'M2',home:'Brazil',away:'Morocco',homeScore:2,awayScore:1,status:'FINISHED'}]]); const live=new Set(['M1']);
+    const acca={player:'J',legs:[{home:'Qatar',away:'Switzerland',selection:'AWAY',frac:'4/6',matchId:'M1'},
+      {home:'Brazil',away:'Morocco',selection:'HOME',frac:'6/5',matchId:'M2',result:'won'}],stake:4,return:14.67,status:'pending'};
+    const o=betCardHTML(acca,{showPlayer:true,live:live,fixById:fixById});
+    console.log(JSON.stringify({liveScore:o.includes('🔴 0–0'),ftScore:o.includes('FT 2–1'),tick:o.includes('✅')}));""")
+    open("/tmp/_bc.js", "w").write(_js)
+    _r = json.loads(_sp5.run(["node", "/tmp/_bc.js"], capture_output=True, text=True).stdout.strip())
+    ck("acca: live leg shows 🔴 0–0 and finished leg shows FT 2–1 ✅", _r["liveScore"] and _r["ftScore"] and _r["tick"], _r)
+except Exception as _e:
+    ck("bet-card score cross-check ran", False, str(_e)[:140])
 print("\n== leaderboard combined total + breakdown ==")
 ck("the two chips are merged into one combined total chip on the left", 'class="lbtot"' in HTML and "(p.live||0)+(p.bet_potential||0)" in HTML, None)
 ck("each row has a where-from breakdown panel", 'class="lbbd"' in HTML and "function lbBreakdown(p)" in HTML, None)

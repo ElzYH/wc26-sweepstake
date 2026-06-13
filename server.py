@@ -1343,11 +1343,15 @@ def notify_changes(old):
                       "📈 New leader: **%s** now tops the table." % nl)
     except Exception:
         pass
-    # head-to-head overtakes (positions below 1st), in the active scoring mode
+    # head-to-head overtakes (positions below 1st), in the active scoring mode. An overtake involves two
+    # players, so it's a genuine head-to-head moment -> it posts to the channel AND DMs both players.
     try:
         for x, y, pos in (rivalry_alerts(old, new, _active_mode()) if _mp > 0 else []):
             push_player(x, "rivalry", "Moved up 📊", "You overtook %s for %s." % (y, _ord(pos)))
-            _bot_dm_player(x, "📊 You overtook **%s** for %s." % (y, _ord(pos)))   # personal -> DM only (no channel spam)
+            push_player(y, "rivalry", "Overtaken 📉", "%s just passed you for %s." % (x, _ord(pos)))
+            _bot_dm_player(x, "📊 You overtook **%s** for %s." % (y, _ord(pos)))
+            _bot_dm_player(y, "📉 **%s** just passed you for %s." % (x, _ord(pos)))
+            discord_send("📊 **%s** overtakes **%s** for %s." % (x, y, _ord(pos)))   # 2-player event = channel-worthy
     except Exception:
         pass
     # per-match transitions: kickoff, half-time, second half, goals

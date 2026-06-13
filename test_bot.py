@@ -255,15 +255,18 @@ _newr = {"stats": {"matches_played": 10}, "fixtures": [], "leaderboards": _ln, "
 json.dump(_newr, open(os.path.join(D, "tracker_data.json"), "w"))
 server.notify_changes(_oldr)
 server._bot_dm_player = _orig_dm
-_rivdm = [d for d in _dms if "overtook" in d[1]]
-if not _rivdm:
-    fails.append(("rivalry", "no overtake DM fired"))
-elif not (_rivdm[0][0] == "C" and "B" in _rivdm[0][1] and "2nd" in _rivdm[0][1]):
-    fails.append(("rivalry", "overtake DM wrong: %r" % (_rivdm[0],)))
-elif any("overtakes" in s for s in _sent):
-    fails.append(("rivalry", "overtake should NOT post to the channel anymore"))
+_rivup = [d for d in _dms if "overtook" in d[1]]      # the overtaker's DM
+_rivdn = [d for d in _dms if "passed you" in d[1]]    # the overtaken player's DM
+if not _rivup:
+    fails.append(("rivalry", "no overtake DM fired to the overtaker"))
+elif not (_rivup[0][0] == "C" and "B" in _rivup[0][1] and "2nd" in _rivup[0][1]):
+    fails.append(("rivalry", "overtaker DM wrong: %r" % (_rivup[0],)))
+elif not (_rivdn and _rivdn[0][0] == "B"):
+    fails.append(("rivalry", "the overtaken player (B) was not DM'd"))
+elif not any("overtakes" in s for s in _sent):
+    fails.append(("rivalry", "overtake should ALSO post to the channel (head-to-head moment)"))
 else:
-    print("[rivalry] overtake DMs the player (C overtook B for 2nd), no channel post OK")
+    print("[rivalry] overtake DMs both players AND posts to the channel (C overtook B for 2nd) OK")
 
 # 'your day' digest: today's fixtures grouped per player
 _today = time.strftime("%Y-%m-%dT15:00:00Z", time.gmtime())
