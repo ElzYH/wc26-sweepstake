@@ -62,7 +62,42 @@ ck("a best/worst bets container exists", 'id="betHall"' in HTML and 'id="betHall
 ck("best/worst excludes free-points credit rows", "filter(w=>!w.credit&&(w.status==='won'||w.status==='lost'))" in HTML, None)
 ck("push test failures are surfaced to the user", "j.errors" in HTML and "failed" in HTML, None)
 
-# ---- bets list: live score on all bet types, frozen at FT ----
+# ---- scoring panel: Points must show it includes the knockout round bonuses (match the code) ----
+print("\n== scoring explanation matches the code (points include round bonuses) ==")
+ck("the Points table lists the furthest-round bonus", "furthest knockout round reached" in HTML and "pOrder.filter(k=>SB[k])" in HTML, None)
+ck("the false 'points have no round bonus' text is gone", "POINTS has no separate" not in HTML and "Points come purely from goals" not in HTML, None)
+ck("the worked example says round bonuses add to points", "each knockout round your team reaches adds a one-off points bonus" in HTML, None)
+print("\n== Over/Under betting UI (Stage 5) ==")
+ck("the match card renders an O/U row via ouRowHTML", "function ouRowHTML(m)" in HTML and "ouRow=ouRowHTML(m)" in HTML, None)
+ck("O/U buttons carry market + line data attributes", 'data-market="ou"' in HTML and "data-line=\"'+ln+'\"" in HTML, None)
+ck("the line dropdown defaults to 2.5", "OULINE[mid] || '2.5'" in HTML, None)
+ck("picks compare on matchId+market+sel+line (samePick)", "function samePick(p, mid, sel, market, line)" in HTML, None)
+ck("placeBet sends market + line", "market:BETPICK.market||'result',line:BETPICK.line" in HTML, None)
+ck("placeAcca sends per-leg market + line", "market:l.market||'result',line:l.line" in HTML, None)
+ck("the server attaches O/U prices to fixtures", "f[\"ouOdds\"] = wager.goals_odds(ch, ca)" in open(os.path.join(REPO, "scoring.py")).read(), None)
+try:
+    import subprocess as _sp6
+    def _g(nm):
+        s = HTML.index("function " + nm); i = HTML.index("{", s); depth = 0
+        for j in range(i, len(HTML)):
+            if HTML[j] == "{": depth += 1
+            elif HTML[j] == "}":
+                depth -= 1
+                if depth == 0: return HTML[s:j + 1]
+    _fns = "\n".join(_g(n) for n in ["samePick", "ouLineFor", "ouRowHTML"])
+    _js = ("const esc=s=>String(s);const OULINE={};let ACCAMODE=false,ACCA=[],BETPICK=null;\n" + _fns + """
+    const m={matchId:'M1',home:'Brazil',away:'Serbia',ouOdds:{'2.5':{OVER:{frac:'5/6'},UNDER:{frac:'8/11'}},'3.5':{OVER:{frac:'9/4'},UNDER:{frac:'1/5'}}}};
+    const r=ouRowHTML(m);
+    console.log(JSON.stringify({def25:r.includes('value="2.5" selected'),over:r.includes('Over <b>5/6</b>'),under:r.includes('Under <b>8/11</b>'),
+      sameTrue:samePick({matchId:'M1',sel:'OVER',market:'ou',line:2.5},'M1','OVER','ou',2.5),
+      lineMatters:!samePick({matchId:'M1',sel:'OVER',market:'ou',line:2.5},'M1','OVER','ou',3.5)}));""")
+    open("/tmp/_ou.js", "w").write(_js)
+    _r = json.loads(_sp6.run(["node", "/tmp/_ou.js"], capture_output=True, text=True).stdout.strip())
+    ck("O/U row renders the right prices at the default line", _r["def25"] and _r["over"] and _r["under"], _r)
+    ck("samePick treats different lines as different picks", _r["sameTrue"] and _r["lineMatters"], _r)
+except Exception as _e:
+    ck("O/U UI cross-check ran", False, str(_e)[:140])
+
 print("\n== bet cards show the score (live + frozen at FT) ==")
 ck("acca legs show the score (live + frozen FT), not just a dot", "FT '+sc+'</span>" in HTML and "🔴 '+sc+'</span>" in HTML, None)
 ck("single bets freeze the final score at FT", "🔴 LIVE '+sc+'</span>" in HTML, None)
@@ -236,6 +271,7 @@ _BODY = HTML[_i + 1:_j]
 _slip = """
 let ACCA=[], BETPICK=null, ACCAMODE=false, BETMSG='';
 let maxLegs=3, accasOn=true;
+function samePick(p, mid, sel, market, line){ return !!(p && p.matchId===mid && (p.market||'result')===(market||'result') && p.sel===sel && String(p.line==null?'':p.line)===String(line==null?'':line)); }
 function renderBets(){}
 function click(mid,sel,frac){ const b={dataset:{mid,sel,frac}}; (()=>{%s})(); }
 function st(){ return ACCAMODE ? ('ACCA['+ACCA.map(l=>l.matchId+'-'+l.sel).join(',')+']') : (BETPICK?('SINGLE '+BETPICK.matchId+'-'+BETPICK.sel):'EMPTY'); }

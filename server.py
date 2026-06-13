@@ -3387,6 +3387,8 @@ class Handler(BaseHTTPRequestHandler):
             player = str(body.get("player", "")).strip()
             selection = str(body.get("selection", "")).strip().upper()
             match_id = str(body.get("matchId", "")).strip()
+            market = str(body.get("market", "result")).strip().lower() or "result"
+            line = body.get("line")
             stake = body.get("stake")
             if player not in players:
                 return self._send(400, json.dumps({"ok": False, "error": "Pick a valid player."}))
@@ -3437,7 +3439,7 @@ class Handler(BaseHTTPRequestHandler):
                 if dup is not None:
                     ok, res = True, dup                 # idempotent: a retry of the same bet returns the original
                 else:
-                    ok, res = wager_mod.place(wlist, player, match, selection, stake, settled, ch, ca, group_mid_ts=_group_mid_ts())
+                    ok, res = wager_mod.place(wlist, player, match, selection, stake, settled, ch, ca, group_mid_ts=_group_mid_ts(), market=market, line=line)
                     if ok:
                         if nonce:
                             res["nonce"] = nonce
@@ -3516,6 +3518,8 @@ class Handler(BaseHTTPRequestHandler):
                 if m.get("home") not in teams or m.get("away") not in teams:
                     return self._send(400, json.dumps({"ok": False, "error": "You can only bet once both teams are confirmed — one of those games isn't set yet."}))
                 selections.append({"match": m, "selection": str(lg.get("selection", "")).upper(),
+                                   "market": str(lg.get("market", "result")).strip().lower() or "result",
+                                   "line": lg.get("line"),
                                    "comp_home": wager_mod.live_strength((teams.get(m.get("home"), {}) or {}).get("composite", 0), m.get("home"), results.get("matches", [])),
                                    "comp_away": wager_mod.live_strength((teams.get(m.get("away"), {}) or {}).get("composite", 0), m.get("away"), results.get("matches", []))})
             prow = next((p for p in (td.get("players") or []) if p.get("name") == player), {})

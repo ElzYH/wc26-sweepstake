@@ -34,7 +34,8 @@
     animation:pulse 1.6s infinite}
   @keyframes pulse{50%{opacity:.3}}
   .tabs{display:flex;gap:8px;margin:22px 0 18px;flex-wrap:wrap}
-  .tab{flex:0 0 auto;white-space:nowrap;font-family:'Sora';font-weight:700;font-size:14px;padding:9px 18px;border-radius:999px;cursor:pointer;
+  .tab{flex:0 0 auto;white-space:nowrap;font-family:'Sora';font-weight:700;
+    font-size:clamp(12px,2.5vw,14px);padding:clamp(7px,1.6vw,9px) clamp(12px,2.9vw,18px);border-radius:999px;cursor:pointer;
     background:#10301f;border:1px solid var(--line);color:var(--ink)}
   .tab.on{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205;border-color:var(--gold)}
   section{display:none}section.on{display:block}
@@ -50,7 +51,13 @@
   .pname{font-family:'Anton';font-size:22px;letter-spacing:.01em}
   .palive{color:var(--muted);font-size:12px;letter-spacing:.06em}
   .pscore{font-family:'Anton';font-size:30px;color:var(--gold)}
-  .livedelta{font-family:'Sora',sans-serif;font-size:11px;font-weight:700;color:#fff;background:#1f8f4e;border-radius:6px;padding:1px 7px;margin-left:8px;vertical-align:middle}
+  .livedelta{font-family:'Sora',sans-serif;font-size:9.5px;font-weight:700;color:#fff;background:#1f8f4e;border-radius:5px;padding:1px 5px;margin-left:5px;vertical-align:middle}
+  .betdelta{font-family:'Sora',sans-serif;font-size:9.5px;font-weight:700;color:#1a1205;background:var(--gold);border-radius:5px;padding:1px 5px;margin-right:5px;vertical-align:middle}
+  .lbtot{font-family:'Sora',sans-serif;font-size:10px;font-weight:800;color:#1a1205;background:var(--gold);border-radius:6px;padding:2px 7px;margin-right:7px;vertical-align:middle;cursor:pointer;user-select:none;white-space:nowrap}
+  .lbbd{margin:-2px 0 10px 44px;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:10px;padding:7px 11px;font-size:12px;color:var(--muted)}
+  .lbbd-h{font-weight:700;color:var(--ink);margin:5px 0 2px;font-size:11.5px}
+  .lbbd-h:first-child{margin-top:0}
+  .lbbd-row{display:flex;justify-content:space-between;gap:12px;padding:2px 0;line-height:1.4}
   .betpill{font-family:'Sora',sans-serif;font-size:11px;font-weight:700;border-radius:6px;padding:1px 7px;margin-left:6px;vertical-align:middle}
   .betpill.win{color:#0a1f12;background:#7ee787}
   .betpill.loss{color:#fff;background:#b3343a}
@@ -118,6 +125,7 @@
   .h2hteam{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0}
   .h2hteam.out{opacity:.5;text-decoration:line-through}
   .live{color:var(--live);font-weight:700;font-size:11px;letter-spacing:.08em}
+  .liveclock{font-variant-numeric:tabular-nums;font-feature-settings:'tnum'}
   .stagetag{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
   .empty{color:var(--muted);padding:30px;text-align:center}
   .lcgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr));gap:12px}
@@ -130,6 +138,12 @@
   .lcscore{font-family:'Anton';font-size:24px}
   .fxrow{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 13px}
   .fxt{font-size:13.5px;font-weight:500}.fxt small{color:var(--muted);font-weight:400}
+  /* symmetric "team v team": names mirror around a fixed centre column, like the live-match rows */
+  .fxteams{display:grid;grid-template-columns:1fr 38px 1fr;gap:4px;align-items:center;flex:1;min-width:0;font-size:13.5px;font-weight:500}
+  .fxteams .th{text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fxteams .tc{text-align:center;color:var(--muted);font-weight:400}
+  .fxteams .ta{text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fxteams .ta small{color:var(--muted);font-weight:400}
   .fxmeta{color:var(--muted);font-size:11.5px;text-align:right;white-space:nowrap}
   .modesel{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
   .modecap{color:var(--muted);font-size:12.5px;line-height:1.5;margin:-6px 0 14px;padding:9px 12px;background:#08180f;border:1px solid var(--line);border-radius:9px}
@@ -168,8 +182,8 @@
   .menu{display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:30;flex-direction:column;gap:5px;
     background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px;min-width:200px;box-shadow:0 14px 34px #0009}
   .menu.open{display:flex}
-  .menu .mini{width:100%;text-align:left}
-  .mini{font-family:'Sora';font-weight:700;font-size:12px;padding:7px 13px;border-radius:999px;cursor:pointer;background:#10301f;border:1px solid var(--line);color:var(--ink)}
+  .menu .mini{width:100%;text-align:center}
+  .mini{font-family:'Sora';font-weight:700;font-size:12px;padding:7px 13px;border-radius:999px;cursor:pointer;background:#10301f;border:1px solid var(--line);color:var(--ink);text-align:center}
   .mini:hover{background:#143a26}
   .ctrls .cta{background:var(--gold);border-color:var(--gold);color:#04140d}
   .ctrls .cta:hover{filter:brightness(1.07);background:var(--gold)}
@@ -177,6 +191,8 @@
   .panel h4{font-family:'Anton';font-weight:400;color:var(--gold);text-transform:uppercase;font-size:16px;margin-bottom:8px}
   .panel p,.panel li{color:var(--muted);font-size:13.5px;line-height:1.6}.panel ul{margin:6px 0 0 18px}.panel b{color:var(--ink)}
   .panel input{width:100%;margin:6px 0;padding:9px 11px;border-radius:8px;background:#08180f;border:1px solid var(--line);color:var(--ink);font-family:'Sora'}
+  .panel input[type=checkbox]{width:16px;height:16px;flex:none;margin:0;padding:0}   /* don't let the 100% rule stretch checkboxes (it mashes the betting labels together) */
+  .panel label input[type=checkbox]{width:16px}
   .panel .row2{display:flex;gap:8px}.panel .row2 input{width:50%}
   .panel button{font-family:'Sora';font-weight:700;background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205;border:0;border-radius:999px;padding:10px 20px;cursor:pointer;margin-top:6px}
   .statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
@@ -221,7 +237,8 @@
   .mdcard.mdlive{border-color:var(--live);box-shadow:0 0 0 1px var(--live) inset}
   .mdcard.mdfin{opacity:.72}
   .mdmeta{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
-  .mdteams{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13.5px;font-weight:600}
+  .mdteams{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;font-size:13.5px;font-weight:600}
+  .mdteams>span:nth-child(2){text-align:center}
   .mdteams span small{display:block;color:var(--muted);font-weight:500;font-size:10.5px}
   .mdsc{font-family:'Anton';color:var(--gold);font-size:16px;flex:0 0 auto}
   .mdr{text-align:right}
@@ -229,20 +246,38 @@
   .betodd{flex:1;min-width:80px;background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:7px 8px;font-size:12.5px;cursor:pointer;font-family:'Sora',sans-serif}
   .betodd b{color:var(--gold)}
   .betodd.on{border-color:var(--gold);background:#13301c}
+  /* Bet confirmation bar: floats pinned just above the bottom of the screen while its real slot is below the
+     fold, then docks into place once you scroll down to it. Lives inside #bets (which is display:none on other
+     tabs) so it can never appear on another page. No JS — pure CSS sticky, safe on iOS Safari / iPad. */
+  .betcta{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:25;
+    box-shadow:0 8px 30px rgba(0,0,0,.55),0 -2px 12px rgba(0,0,0,.30)}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
   .lmatch{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin-top:8px;
     color:var(--ink);font-weight:600;font-size:14px;letter-spacing:0}
   .lmatch small{display:block;color:var(--gold);font-size:10.5px;font-weight:600}
+  .livebd-wrap{margin-top:7px;display:grid;gap:5px}
+  .livebd{font-size:11.5px;color:var(--muted);background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:8px}
+  .livebd>summary{cursor:pointer;padding:6px 10px;list-style:none;display:flex;align-items:center;gap:7px}
+  .livebd>summary::-webkit-details-marker{display:none}
+  .livebd>summary::after{content:'▾';margin-left:auto;opacity:.55;transition:transform .15s ease}
+  .livebd[open]>summary::after{transform:rotate(180deg)}
+  .livebd .lbd-tot{color:#7ee787;font-weight:800;font-family:'Sora',sans-serif}
+  .livebd .lbd-cap{opacity:.7}
+  .livebd .lbd-body{padding:1px 10px 8px}
+  .lbd-row{display:flex;justify-content:space-between;gap:12px;padding:2px 0}
+  .lbd-row>span:first-child{opacity:.85}
+  .lbd-grand{border-top:1px solid var(--line);margin-top:4px;padding-top:5px;font-weight:800;color:var(--ink)}
+  .lbd-pool{font-size:11px;color:var(--muted);opacity:.8;padding:1px 2px}
   .lmatch .lr{text-align:right}
   .lsc{font-family:'Anton';font-weight:400;font-size:22px;text-align:center;color:var(--gold)}
   .simh:hover{text-decoration:underline}
   @media(max-width:560px){
     body{padding:18px 13px 60px}
-    .ctrls{margin-left:0;width:100%}
-    #menuBtn{width:100%;text-align:center;padding:9px 13px}
-    .menu{left:0;right:0}
-    .tabs{gap:6px;margin:16px 0 14px}
-    .tabs .tab{padding:7px 12px;font-size:13px}
+    .subbar{justify-content:flex-start}
+    .ctrls{margin-left:0;width:auto;justify-content:flex-start}
+    #menuBtn{width:auto;text-align:center;padding:7px 14px}
+    .menu{left:0;right:auto;min-width:210px}
+    .tabs{margin:16px 0 14px}
     th,td{padding:6px 7px;font-size:11.5px}
     caption{font-size:15px;padding:10px 12px 5px}
     .match{grid-template-columns:1fr 44px 1fr;gap:7px;padding:9px 11px}
@@ -306,15 +341,16 @@
       <li><b>Survival</b> — how far your teams go and how many are still alive. It rewards <i>lasting</i> — owning teams that keep advancing.</li>
       <li><b>Both</b> — literally <b>Points + Survival added together</b> for each player, then ranked once. You win it by having a squad that both racks up points <i>and</i> goes deep.</li>
     </ul>
-    <p><b>So why is someone's "Both" bigger than their "Points"?</b> Because Both adds their Survival value on top. If a player owns the champion and other deep teams, their Survival can be a few hundred — so Both = Points + that. It's not double-counting and it's not a bug; the live example below shows the exact sum.</p>
+    <p><b>Why is "Both" bigger than "Points"?</b> Both = Points + Survival. Owning deep-running teams makes Survival large, so Both is too — not a bug. The live example below shows the sum.</p>
     <div id="scoringRules"></div>
-    <p><b>Fixtures:</b> the bar under each match is the win chance — home / draw / away — from team strength, shifting toward the leader once a game is in-play.</p>
-    <p><b>Odds &amp; stats:</b> the win bars are your live chance of owning the champion (from bookmaker prices, updating as teams go out). The simulator there estimates your odds of winning on Points, Survival or Both.</p>
+    <p><b>Fixtures:</b> the bar under each match is the win chance (home / draw / away).</p>
+    <p><b>Odds &amp; stats:</b> your live chance of owning the champion (from bookmaker prices), plus a simulator of your odds to win on each mode.</p>
     <p><b>📋 Summary:</b> the quick digest at the top of Overview — leaders, teams left, top team and goals. The same digest can be posted to Discord from Settings.</p>
     <p><b>⬇ Export:</b> <a href="/api/export.csv" style="color:var(--gold)">download the standings as a CSV</a> — open it in Excel/Sheets or print it for the group.</p>
-    <p><b>🔔 Get alerts:</b> tap it in the ⋯ menu, pick your name, and turn on alerts for your teams — goals, kick-offs, half-time, knockouts, lead changes and rivalries (when you overtake another player). Tick exactly which of those you want. If the daily summary is on, you'll also get your fixtures for the day each morning. On iPhone you must first add the site to your Home Screen (Share → Add to Home Screen) and open it from that icon; on a laptop just allow notifications. You can also join the group Discord, where the same alerts post for everyone.</p>
-    <p><b>Discord bot:</b> in the group server, type <code>/</code> to pull live data — <code>/leaderboard</code>, <code>/summary</code>, <code>/odds</code>, <code>/fixtures</code>, <code>/myteams</code>, <code>/help</code>. It's read-only; nobody can change the draw from Discord.</p>
-    <p><b>The draw — Fair vs Weighted:</b> Fair spreads the strongest teams evenly so everyone gets a balanced mix (within each strength band it's still random, so it's fair but not predictable). Weighted is luck-of-the-draw — a bigger team gives better odds but you might land several strong or several weak ones. On the Reveal page, <b>Run draw on the server</b> does the draw on the server and keeps going even if you close the tab — everyone can watch it live.</p>
+    <p><b>🔔 Get alerts:</b> tap <b>Get alerts</b>, pick your name, choose which alerts you want (goals, kick-offs, knockouts, lead changes…). <i>iPhone:</i> first add the site to your Home Screen (Share → Add to Home Screen) and open it from there. Most match news comes by DM on Discord; the group channel only gets the big games.</p>
+    <p><b>Discord bot:</b> type <code>/</code> in the server for live data — <code>/leaderboard</code>, <code>/odds</code>, <code>/fixtures</code>, <code>/myteams</code>, <code>/help</code>. Read-only.</p>
+    <p><b>The draw — Fair vs Weighted:</b> Fair spreads strong teams evenly (still random within each band); Weighted is pure luck — bigger teams give better odds but you might land all strong or all weak. On Reveal, <b>Run draw on the server</b> keeps going even if you close the tab.</p>
+    <p><b>The pool (leftover teams):</b> spare teams that don't divide evenly. They belong to <b>no one</b> and score for <b>no one</b> — just shown so you can follow them. You always earn only your own team's points.</p>
   </div>
   <div class="panel" id="setPanel" style="display:none">
     <h4>Settings — add live scores later</h4>
@@ -339,7 +375,7 @@
         <div class="row2" style="margin-top:6px"><button id="setSaveDiscord">Save webhook</button><button id="setTestDiscord" class="mini">Send Discord test</button></div>
         <div class="row2" style="margin-top:6px"><button id="setDemoDiscord" class="mini">Demo a game in Discord</button><button id="setSummaryDiscord" class="mini">Post summary to Discord</button></div>
         <div class="hint" id="setDiscordMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
-        <p style="margin:12px 0 6px;color:var(--muted);font-size:12.5px">• <b>Invite link</b> — paste your Discord server invite. Anyone using the site gets a “Join the group chat” button. To keep randoms out, lock it down in Discord itself (set the invite’s max-uses / expiry, or use “Invite Only”).</p>
+        <p style="margin:12px 0 6px;color:var(--muted);font-size:12.5px">• <b>Invite link</b> — paste your Discord server invite. In Discord, set the invite to <b>Never expire</b> with <b>no max uses</b> (Edit invite link → Expire after: Never), so it can't go stale. Then share <b style="color:var(--ink)">your-site/join</b> — it always redirects to whatever invite is saved here, so even if you do rotate the invite, the link you've shared keeps working.</p>
         <input id="setInvite" type="text" placeholder="https://discord.gg/… (server invite)">
         <div class="row2" style="margin-top:6px"><button id="setSaveInvite">Save invite</button></div>
         <div class="hint" id="setInviteMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
@@ -360,11 +396,42 @@
           <label style="flex:1;font-size:12.5px;color:var(--muted)">Max winnings per bet <span style="opacity:.7">(blank = no limit)</span><input id="setMaxReturn" type="number" min="1" step="1" placeholder="no limit" style="margin-top:4px"></label>
           <label style="flex:1;font-size:12.5px;color:var(--muted)">Max accumulator legs <span style="opacity:.7">(default 3)</span><input id="setMaxAcca" type="number" min="2" max="10" step="1" placeholder="3" style="margin-top:4px"></label>
         </div>
+        <div class="row2" style="align-items:flex-end;margin-bottom:6px">
+          <label style="flex:1;font-size:12.5px;color:var(--muted)">Max open single bets / person <span style="opacity:.7">(blank = default 8)</span><input id="setMaxPending" type="number" min="1" max="50" step="1" placeholder="8" style="margin-top:4px"></label>
+          <label style="flex:1;font-size:12.5px;color:var(--muted)">Max open accas / person <span style="opacity:.7">(blank = default 2, 0 = off)</span><input id="setMaxAccas" type="number" min="0" max="20" step="1" placeholder="2" style="margin-top:4px"></label>
+        </div>
         <button id="setSaveCaps" class="mini">Save bet limits</button>
         <p style="margin:8px 0 6px;color:var(--muted);font-size:12.5px">• <b>Bet passcodes</b> — each player gets a private code so only they can stake their own points. Generate them, then send each person their code. Players enter it once on the Bets tab (and once on Discord via <code>/bet … pin:CODE</code>).</p>
         <div class="row2"><button id="setGenPins" class="mini">Generate / show passcodes</button><button id="setRegenPins" class="mini">Regenerate all</button></div>
         <div id="pinList" style="margin-top:8px;font-size:13px"></div>
         <div class="hint" id="setWagerMsg" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
+      </div>
+      <div id="voidSetup" style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
+        <p style="margin:0 0 8px"><b>🛑 Cancel bets.</b> Cancel anyone's open bet — the stake is refunded and it counts as neither a win nor a loss. Bets on games that have already finished can't be cancelled.</p>
+        <div class="row2" style="align-items:flex-end">
+          <label style="flex:1;font-size:12.5px;color:var(--muted)">Whose bets?<select id="setVoidWho" style="margin-top:4px;width:100%;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px"></select></label>
+          <button id="setLoadBets" class="mini">Show open bets</button>
+        </div>
+        <div id="voidList" style="margin-top:10px;font-size:13px"></div>
+        <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">
+          <p style="margin:0 0 6px;font-size:12.5px;color:var(--muted)"><b>Discord logins.</b> Force everyone to log in with Discord again (e.g. a shared or lost device). Passcodes are unaffected.</p>
+          <button id="setLogoutAll" class="mini">Log everyone out</button>
+        </div>
+        <div class="hint" id="setVoidMsg" style="color:var(--muted);font-size:12px;margin-top:8px"></div>
+      </div>
+      <div id="acctSetup" style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
+        <p style="margin:0 0 8px"><b>👤 Accounts &amp; access.</b> See who's linked to each name and fix anything that's wrong. <b>Unlink</b> frees a name so the right person can re-claim it. <b>Block</b> bars a Discord account from ever claiming (use if a stranger gets in) — it also unlinks them. You stay in full control here.</p>
+        <button id="acctShow" class="mini">Show linked accounts</button>
+        <div id="acctList" style="margin-top:10px;font-size:13px"></div>
+        <div style="border-top:1px solid var(--line);margin-top:12px;padding-top:10px">
+          <p style="margin:0 0 6px;font-size:12.5px;color:var(--muted)">Block a specific Discord account ID (right-click a user in Discord → <b>Copy User ID</b>, with Developer Mode on):</p>
+          <div class="row2" style="align-items:flex-end">
+            <input id="acctBlockId" type="text" inputmode="numeric" placeholder="Discord account ID" style="flex:1;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px">
+            <button id="acctBlockBtn" class="mini" style="border-color:#b3343a;color:#ff9a9a">Block &amp; unlink</button>
+          </div>
+          <div id="acctBlocked" style="margin-top:8px;font-size:12.5px"></div>
+        </div>
+        <div class="hint" id="acctMsg" style="color:var(--muted);font-size:12px;margin-top:8px"></div>
       </div>
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
         <p style="margin:0 0 8px"><b>Discord bot (slash commands).</b> Lets anyone in the server type <code>/leaderboard</code>, <code>/summary</code>, <code>/odds</code>, <code>/fixtures</code>, <code>/myteams</code> to pull live data. Read-only — no admin commands.</p>
@@ -458,7 +525,7 @@
     <div class="h2hsel"><select id="h2hA"></select><span class="vs">vs</span><select id="h2hB"></select></div>
     <div id="h2hBody"></div>
   </section>
-  <section id="groups"><div class="grid" id="groupsBody"></div></section>
+  <section id="groups"><div id="groupsPoolNote" style="font-size:12px;color:var(--muted);margin:0 0 12px"></div><div class="grid" id="groupsBody"></div></section>
   <section id="bracket"><div class="modesel" id="koRounds"></div><div id="bracketBody"></div></section>
   <section id="fixtures"><div class="fx" id="fixturesBody"></div></section>
   <section id="bets"><div id="betsBody"></div></section>
@@ -500,6 +567,16 @@ function flag(n){const f=FLAGS[n];return f?f+" ":"";}
 
 function isDone(s){return s==='FINISHED'||s==='AWARDED';}   // a forfeit (AWARDED) is a played, decided result
 let BETPLAYER=null, BETPICK=null, BETMSG='', ACCAMODE=false, ACCA=[];
+let BETPIN_DRAFT=null;  // what's typed in the passcode box this session — preserved across re-renders but NEVER persisted until it's proven correct
+// Idempotency: one nonce per in-flight bet, reused if a placement is retried after a dropped
+// connection (so the server dedupes instead of double-betting), regenerated only on success.
+let BETNONCE=null, ACCANONCE=null;
+let ALLWAGERS=[];           // all pending bets/accas (any player) — powers the leaderboard + live-game breakdowns
+const LBBD=new Set();       // which leaderboard rows are expanded (by player), kept across the 30s refresh
+function _nonce(){
+  try{ if(crypto&&crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
+  return 'n-'+Date.now()+'-'+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2);
+}
 function betPin(p){ try{ return localStorage.getItem('wc26_betpin_'+p)||''; }catch(e){ return ''; } }
 function setBetPin(p,v){ try{ if(v) localStorage.setItem('wc26_betpin_'+p,v); else localStorage.removeItem('wc26_betpin_'+p); }catch(e){} }
 function renderBets(){
@@ -507,43 +584,74 @@ function renderBets(){
   if(!STATUS.wagering_enabled){ el.innerHTML='<div class="empty">Betting isn\'t switched on for this sweepstake.</div>'; return; }
   const caps=STATUS.wager_caps||{min_stake:1,max_stake:30,max_return:null,max_acca_legs:3};
   const maxLegs=caps.max_acca_legs||3;
+  const accasOn=(maxLegs>=2)&&(caps.max_active_accas!==0);   // auto-acca only when accumulators are actually allowed
   const retCap=(typeof caps.max_return==='number'&&caps.max_return>0)?caps.max_return:null;   // null = no winnings limit
   const players=(DATA.players||[]).map(p=>p.name);
   if(!players.length){ el.innerHTML='<div class="empty">Bets open once the draw is done.</div>'; return; }
   if(!BETPLAYER||!players.includes(BETPLAYER)) BETPLAYER=players[0];
+  if(SESSION.logged_in && SESSION.player && players.includes(SESSION.player)) BETPLAYER=SESSION.player;   // logged in -> you can only be yourself
   const me=(DATA.players||[]).find(p=>p.name===BETPLAYER)||{};
-  const avail=Math.max(0,Math.round((((me.points_settled||0)+(me.wager_net||0)-(me.wager_held||0)))*10)/10);
-  const held=Math.max(0,Math.round((me.wager_held||0)*10)/10);
-  const headroom=Math.max(0,Math.round((caps.max_stake-held)*10)/10);
+  const avail=(me.bettable!=null)?Math.max(0,Math.round(me.bettable*100)/100):Math.max(0,Math.round((((me.points_settled||0)+(me.wager_net||0)-(me.wager_held||0)))*100)/100);
+  const held=Math.max(0,Math.round((me.wager_held||0)*100)/100);
+  const headroom=Math.max(0,Math.round((caps.max_stake-held)*100)/100);
   const fx=(DATA.fixtures||[]).filter(m=>m.odds&&m.matchId).sort((a,b)=>(a.utcDate||'').localeCompare(b.utcDate||'')).slice(0,40);
   const SEL={HOME:'home',DRAW:'draw',AWAY:'away'};
   let h='';
   h+='<div class="ovsec"><div class="ovh">💷 Place a bet</div>';
-  h+='<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--muted);line-height:1.55">Stake the points you\'ve <b style="color:var(--ink)">already earned</b> (settled games only) on any upcoming game. Win at the listed odds and the points are <b>added to your total once that game ends</b>; lose and your stake is gone. While a game is live your stake is held — nothing is credited until it finishes. Odds are fractional and <b>lock when you place</b>, bets close at kick-off, and <b style="color:#ffd97a">all bets are final — once placed they can\'t be changed, cancelled or cashed out.</b><br><b style="color:var(--ink)">Accumulator:</b> back up to '+maxLegs+' games in one bet — the odds multiply, but <b>every</b> leg must win; if a single leg loses, the whole acca loses and pays nothing.<br>You can never go below zero'+(retCap?(', and a bet can return at most <b>'+retCap+'</b> points'):' — there\'s no cap on winnings')+'.</div>';
-  // prominent: this round's max stake + what THIS player has left to bet
+  h+='<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--muted);line-height:1.6"><b style="color:#ffd97a">You start with 5 free points</b> — losing them costs nothing, and winnings are yours. After that you bet with points you\'ve already earned.<br>Win and the winnings join your total when the game ends; lose and the stake is gone. <b style="color:#ffd97a">All bets are final</b> — odds lock when you place, and bets close at kick-off.<br><b style="color:var(--ink)">Tap two or more games</b> to build a 🎰 accumulator: the odds multiply, but every leg must win.'+(retCap?(' Max return on any bet is <b>'+retCap+'</b> points.'):'')+' You can never go below zero.</div>';
+  // prominent: the per-bet ceiling + the LIVE amount this player can stake right now (drops as bets open, recovers as they settle)
   h+='<div style="margin:12px 0;display:flex;gap:10px;flex-wrap:wrap">'
-    +'<div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--gold);border-radius:12px;padding:10px 14px"><div style="color:var(--muted);font-size:11.5px;letter-spacing:.04em">MAX STAKE THIS ROUND</div><div style="font-family:\'Anton\';color:var(--gold);font-size:26px;line-height:1.1">'+caps.max_stake+'</div><div style="color:var(--muted);font-size:11px">rises each round · 65 in the final</div></div>'
-    +'<div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px"><div style="color:var(--muted);font-size:11.5px;letter-spacing:.04em">'+esc(BETPLAYER.toUpperCase())+' CAN BET NOW</div><div style="font-family:\'Anton\';font-size:26px;line-height:1.1;color:'+(headroom>0?'var(--ink)':'#ff9a9a')+'" id="betAvail">'+Math.min(avail,headroom)+'</div><div style="color:var(--muted);font-size:11px">'+avail+' pts available'+(held>0?' · '+held+' already riding':'')+'</div></div>'
+    +'<div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px"><div style="color:var(--muted);font-size:11.5px;letter-spacing:.04em">MAX PER BET</div><div style="font-family:\'Anton\';font-size:26px;line-height:1.1">'+caps.max_stake+'</div><div style="color:var(--muted);font-size:11px">ceiling for one bet · rises each round (65 in the final)</div></div>'
+    +'<div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--gold);border-radius:12px;padding:10px 14px"><div style="color:var(--muted);font-size:11.5px;letter-spacing:.04em">'+esc(BETPLAYER.toUpperCase())+' CAN STAKE NOW</div><div style="font-family:\'Anton\';font-size:26px;line-height:1.1;color:'+(headroom>0?'var(--gold)':'#ff9a9a')+'" id="betAvail">'+Math.min(avail,headroom)+'</div><div style="color:var(--muted);font-size:11px">'+(held>0?held+' of '+caps.max_stake+' riding on open bets · frees up as they settle':'up to the '+caps.max_stake+' cap · '+avail+' pts available')+'</div></div>'
     +'</div>';
-  h+='<div style="margin:0 0 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px">Betting as <select id="betWho" style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:14px">'+players.map(p=>`<option${p===BETPLAYER?' selected':''}>${esc(p)}</option>`).join('')+'</select></div>';
-  if(STATUS.wager_pins_set){
-    const cached=betPin(BETPLAYER); const linked=(STATUS.wager_links_for||[]).indexOf(BETPLAYER)>=0;
-    // ALWAYS-VISIBLE setup guide (not hidden behind a toggle)
-    h+='<div style="margin:0 0 12px;border:1px solid var(--gold);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--muted);line-height:1.6">'
-      +'<div style="color:var(--ink);font-weight:700;font-size:14px;margin-bottom:6px">Set up your betting account (one minute, once)</div>'
-      +'<div style="color:var(--ink);font-weight:600;margin-top:4px">Bet on the website</div><ol style="margin:4px 0 8px;padding-left:20px"><li>Pick <b>your name</b> above.</li><li>Get <b>your bet passcode</b> from the organiser and type it in the box below. It\'s saved on this device so only you can stake '+esc(BETPLAYER)+'\'s points — you only enter it once.</li><li>Tap a team\'s odds → enter a stake → <b>Place bet</b>. (Or <b>🎰 Accumulator</b> for several games in one bet.)</li><li><b style="color:#ffd97a">All bets are final</b> — once you confirm, a bet can\'t be changed or cancelled, and the odds are locked in.</li></ol>'
-      +'<div style="color:var(--ink);font-weight:600">Bet on Discord (optional)</div><ol style="margin:4px 0 6px;padding-left:20px"><li>Join the group Discord (ask the organiser for the invite link).</li><li>Run <code>/notifyme '+esc(BETPLAYER)+'</code> to claim your name.</li><li>Type your passcode below, tap <b>Connect Discord</b> for a one-time code, then in a <b>DM to the bot</b> run <code>/linkdiscord code:THATCODE</code>.</li><li>After that just use <code>/bet</code>, <code>/games</code>, <code>/points</code> — your passcode is never typed in a channel.</li></ol>'
-      +'<div style="opacity:.85;font-size:12px">The organiser can also link you instantly with “DM via bot”. Linked the wrong name? Use <b>Unlink</b> below or run <code>/unlink</code> in Discord.</div>'
-      +'<div style="opacity:.85;font-size:12px;margin-top:4px"><b style="color:#ffd97a">Forgot or leaked your passcode?</b> If your Discord is linked, DM the bot <code>/mypin</code> to see it again, or <code>/resetpin</code> to roll a fresh one — no organiser needed, and only <i>your</i> linked account can do it. If you\'re not linked, ask the organiser; they can re-send or reset it for you.</div></div>';
-    h+='<div style="margin:0 0 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">🔒 <input id="betPinInput" type="text" autocomplete="off" placeholder="your bet passcode" value="'+esc(cached)+'" style="width:160px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:14px;letter-spacing:1px;text-transform:uppercase"><button id="linkDiscordBtn" class="mini">Connect Discord</button><button id="selfUnlinkBtn" class="mini" title="Disconnect your Discord from this player">Unlink my Discord</button></div>';
-    h+='<div id="linkCodeBox" style="display:none;margin:0 0 12px;padding:8px 12px;border:1px solid var(--gold);border-radius:8px;font-size:13px"></div>';
+  h+='<div style="margin:0 0 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px">Betting as <select id="betWho"'+((SESSION.logged_in&&SESSION.player)?' disabled':'')+' style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:14px">'+players.map(p=>`<option${p===BETPLAYER?' selected':''}>${esc(p)}</option>`).join('')+'</select></div>';
+  if(SESSION.logged_in && SESSION.player===BETPLAYER){
+    h+='<div style="margin:0 0 12px;padding:11px 14px;border:1px solid #3ba55d;border-radius:10px;background:#0f2417;color:#7ee787;font-size:13.5px;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span>✅ Logged in with Discord as <b>'+esc(BETPLAYER)+'</b> — no passcode needed. Tap a team\'s odds to bet.</span><button id="logoutBtn" class="mini">Log out</button></div>';
+  } else if(SESSION.logged_in){
+    h+='<div style="margin:0 0 12px;padding:11px 14px;border:1px solid var(--gold);border-radius:10px;background:#1a1606;font-size:13.5px"><div style="color:var(--ink);font-weight:700;margin-bottom:5px">You\'re logged in with Discord — which player are you?</div><div style="color:var(--muted);font-size:12.5px;margin-bottom:8px">Pick your name in the dropdown above, then confirm. This links your Discord account to that player so you bet with no passcode. First come, first served — if a name\'s already taken the organiser can fix it.</div><button id="claimPlayerBtn" class="mini cta">I\'m '+esc(BETPLAYER)+' — claim it</button> <button id="logoutBtn" class="mini">Log out</button></div>';
   } else {
-    h+='<div style="margin:0 0 12px;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--muted);line-height:1.6"><div style="color:var(--ink);font-weight:700;font-size:14px;margin-bottom:4px">How to bet</div><ol style="margin:4px 0 4px;padding-left:20px"><li>Pick <b>your name</b> above.</li><li>Tap a team\'s odds → enter a stake → <b>Place bet</b>, or use <b>🎰 Accumulator</b> for several games in one bet.</li><li>Winnings land in your total <b>when that game ends</b>. All bets are <b>final</b>.</li></ol></div>';
+    const cached=betPin(BETPLAYER); const linked=(STATUS.wager_links_for||[]).indexOf(BETPLAYER)>=0;
+    const hasPin=(STATUS.wager_pins_for||[]).indexOf(BETPLAYER)>=0;   // has this player set a passcode yet?
+    const pinVal=(BETPIN_DRAFT!=null?BETPIN_DRAFT:cached);             // show what's being typed, else the saved one
+    if(STATUS.discord_oauth){
+      h+='<div style="margin:0 0 10px;padding:10px 12px;border:1px solid #5865F2;border-radius:10px;background:#10122b;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="color:var(--ink);font-size:13px"><b>Easiest &amp; safest:</b> log in with Discord — it proves it\'s really you and you bet with no passcode.</span><button id="discordLoginBtn" class="mini cta" style="background:#5865F2;border-color:#5865F2;color:#fff">Log in with Discord</button></div>';
+    }
+    // Collapsible setup + rules guide (collapsed by default to cut clutter)
+    h+='<details style="margin:0 0 12px;border:1px solid var(--gold);border-radius:10px;padding:2px 14px;font-size:13px;color:var(--muted);line-height:1.6">'
+      +'<summary style="cursor:pointer;color:var(--ink);font-weight:700;font-size:14px;padding:9px 0">ⓘ How betting works &amp; account setup <span style="opacity:.55;font-weight:400">(tap to expand)</span></summary>'
+      +'<div style="color:var(--ink);font-weight:600;margin-top:4px">How your points &amp; stakes work</div><ul style="margin:4px 0 8px;padding-left:20px"><li>Everyone starts with <b>5 free betting points</b> so you can bet from kick-off. They\'re bet-only: <b>only winnings reach the leaderboard</b> — the 5 never count as your points, and losing them costs you nothing.</li><li>After that you bet with the <b>points your teams have earned</b>. All winnings go straight onto the points leaderboard.</li><li>Each round you get a <b>100-point staking budget</b>. Lose and it drops (bet 20, lose → 80 left); win and it tops back up — <b>never above 100</b>. Spend the lot and you\'re <b>locked out of betting until the next round</b>.</li><li>The budget <b>resets halfway through the group stage</b>'+(window.__betMidStr?(' (around <b>'+window.__betMidStr+'</b>)'):'')+', then again at <b>every knockout round</b> (last-32, last-16, quarters, semis, final).</li><li>On top of the budget, the most you can put on <b>one game</b> is <b>30</b> in the group stage, rising each knockout round (35 → 40 → 45 → 50 → <b>65</b> in the final). Both limits apply.'+(window.__stageCapStr?('<br><span style="opacity:.85">Round by round: '+window.__stageCapStr+'.</span>'):'')+'</li><li>🎁 <b>Free points</b> drop the day before the first game and on roughly one match-day a week (up to 5 drops). Each is <b>'+((STATUS.free_bet&&STATUS.free_bet.stake)||5)+' free betting points</b> added to your balance — bet them on any game: <b>win and the winnings are yours; lose and it costs nothing</b>. Claim on this tab when the 🎁 banner appears, or with <code>/claim</code> in Discord. One per person per drop.</li></ul>'
+      +'<div style="color:var(--ink);font-weight:600;margin-top:4px">Set up &amp; bet on the website (no organiser needed)</div><ol style="margin:4px 0 8px;padding-left:20px"><li>Pick <b>your name</b> above.</li><li><b>First time:</b> choose your own <b>bet passcode</b> (4+ characters) in the box below and tap <b>Create my passcode</b>. That claims your name — nobody can stake your points without it. (Returning on a new device? Just type the passcode you already chose and tap <b>Save</b>.) It\'s stored on this device so you only enter it once. A wrong passcode is never saved.</li><li>Tap a team\'s odds → enter a stake → <b>Place bet</b>. (Or <b>🎰 Accumulator</b> for several games in one bet.)</li><li>Need to change your passcode later? Tap <b>Change</b> and enter your current one. <b style="color:#ffd97a">All bets are final</b> — once you confirm, a bet can\'t be changed or cancelled, and the odds are locked in.</li></ol>'
+      +'<div style="color:var(--ink);font-weight:600">Bet on Discord (optional)</div><ol style="margin:4px 0 6px;padding-left:20px"><li>Join the group Discord (ask the organiser for the invite link).</li><li>Type your passcode below and tap <b>Connect Discord</b> for a one-time code, then in a <b>DM to the bot</b> run <code>/linkdiscord code:THATCODE</code>. That links your Discord for betting.</li><li>After that just use <code>/bet</code>, <code>/claim</code> (free points), <code>/games</code>, <code>/points</code> — your passcode is never typed in a channel.</li><li><i>Optional:</i> run <code>/notifyme '+esc(BETPLAYER)+'</code> for match alerts.</li></ol>'
+      +'<div style="opacity:.85;font-size:12px">The organiser can also link you instantly with “DM via bot”. Linked the wrong name? Use <b>Unlink</b> below or run <code>/unlink</code> in Discord.</div>'
+      +'<div style="opacity:.85;font-size:12px;margin-top:4px"><b style="color:#ffd97a">Forgot or leaked your passcode?</b> If your Discord is linked, DM the bot <code>/mypin</code> to see it again, or <code>/resetpin</code> to roll a fresh one — only <i>your</i> linked account can do it. Not linked? Tap <b>Change</b> above (you\'ll need the current one), or ask the organiser to reset it for you.</div></details>';
+    if(!hasPin){
+      h+='<div style="margin:0 0 10px;padding:10px 12px;border:1px solid var(--gold);border-radius:10px;background:#1a1606">'
+        +'<div style="color:var(--ink);font-weight:700;font-size:13.5px;margin-bottom:5px">Set up your betting account — no organiser needed</div>'
+        +'<div style="color:var(--muted);font-size:12.5px;margin-bottom:8px">Choose a passcode (4–24 characters) for <b>'+esc(BETPLAYER)+'</b>. Whoever sets it first owns this name\'s betting, so pick something only you know — you\'ll use it to stake '+esc(BETPLAYER)+'\'s points. It\'s saved on this device; you only enter it once.</div>'
+        +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">🔒 <input id="betPinInput" type="text" autocomplete="off" placeholder="choose a passcode" value="'+esc(pinVal)+'" style="width:170px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:14px;letter-spacing:1px;text-transform:uppercase"><button id="createPinBtn" class="mini cta">Create my passcode</button></div></div>';
+    } else {
+      h+='<div style="margin:0 0 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">🔒 <input id="betPinInput" type="text" autocomplete="off" placeholder="your bet passcode" value="'+esc(pinVal)+'" style="width:160px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:14px;letter-spacing:1px;text-transform:uppercase"><button id="savePinBtn" class="mini" title="Check your passcode and save it on this device so you only enter it once">Save</button><button id="changePinBtn" class="mini" title="Change your passcode (needs your current one)">Change</button><button id="linkDiscordBtn" class="mini">Connect Discord</button><button id="selfUnlinkBtn" class="mini" title="Disconnect your Discord from this player">Unlink my Discord</button>'+(cached?'<span style="color:var(--muted);font-size:12px">🔒 saved on this device</span>':'')+'</div>';
+    }
+    h+='<div id="linkCodeBox" style="display:none;margin:0 0 12px;padding:8px 12px;border:1px solid var(--gold);border-radius:8px;font-size:13px"></div>';
   }
   if(held>=caps.max_stake-1e-9){ h+='<div style="margin:0 0 12px;padding:9px 12px;border-radius:8px;background:#2a2210;border:1px solid #ffc83d;color:#ffd97a;font-size:13px">⚠ You\'re maxed out — '+held+' points riding on open bets (limit '+caps.max_stake+'). Wait for one to settle before betting again.</div>'; }
-  if(BETMSG) h+='<div style="margin:0 0 10px;padding:8px 12px;border-radius:8px;background:'+(BETMSG[0]==='✓'?'#10240f':'#2a1414')+';color:'+(BETMSG[0]==='✓'?'#7ee787':'#ff9a9a')+';font-size:13px">'+esc(BETMSG)+'</div>';
-  h+='<div style="display:flex;gap:6px;margin:0 0 10px"><button class="mini'+(!ACCAMODE?' cta':'')+'" id="modeSingle">Single bet</button><button class="mini'+(ACCAMODE?' cta':'')+'" id="modeAcca">🎰 Accumulator (up to '+maxLegs+')</button></div>';
-  if(ACCAMODE) h+='<div style="color:var(--muted);font-size:12.5px;margin:0 0 10px">Pick up to '+maxLegs+' upcoming games — the odds multiply and <b>all</b> must win (one loss = the whole acca pays nothing). Tap an odds button to add a leg.'+(retCap?(' Max return on any bet is <b>'+retCap+'</b> points.'):'')+' '+(maxLegs!==3?'(The organiser set the leg limit to '+maxLegs+'.)':'')+'</div>';
+  if(BETMSG){
+    // success (✓ 🔒 🎁) = green, in-progress (…) = neutral, everything else = error red.
+    // startsWith handles emoji correctly — BETMSG[0] only grabs half of a surrogate-pair emoji like 🔒.
+    const _ok=BETMSG.startsWith('✓')||BETMSG.startsWith('🔒')||BETMSG.startsWith('🎁')||BETMSG.startsWith('✅');
+    const _info=!_ok && BETMSG.endsWith('…');
+    const _bg=_ok?'#10240f':(_info?'#10202f':'#2a1414'), _fg=_ok?'#7ee787':(_info?'#9fc4ff':'#ff9a9a');
+    h+='<div style="margin:0 0 10px;padding:8px 12px;border-radius:8px;background:'+_bg+';color:'+_fg+';font-size:13px">'+esc(BETMSG)+'</div>';
+  }
+  // 🎁 Free-points drop — claim N free betting points on certain days, one per person (only winnings count)
+  const fbet=STATUS.free_bet||{}; const fbMine=(fbet.claimed||[]).indexOf(BETPLAYER)>=0;
+  if(fbet.open && !fbMine){
+    h+='<div style="margin:0 0 12px;padding:11px 14px;border:1px solid var(--gold);border-radius:10px;background:#1b1606;font-size:13px;color:var(--ink)">🎁 <b>Free betting points!</b> Claim <b>'+(fbet.stake||5)+' free points</b> and bet them on any game — if a bet <b>wins</b>, the winnings go to your total; if it loses, it costs you nothing. One per person, available today only.<div style="margin-top:8px"><button class="mini cta" id="claimFreeBtn" style="border-color:var(--gold)">🎁 Claim '+(fbet.stake||5)+' free points</button></div></div>';
+  } else if(fbet.open && fbMine){
+    h+='<div style="margin:0 0 12px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;color:var(--muted)">🎁 You\'ve claimed today\'s free points — they\'re in your balance above. Bet them on any game. The next drop is another day.</div>';
+  }
+  h+='<div style="color:var(--muted);font-size:12px;margin:0 0 10px">Tap a game to bet · tap it again to remove'+(accasOn?' · tap a second game to build a 🎰 accumulator':'')+'.</div>';
+  if(ACCAMODE) h+='<div style="color:var(--muted);font-size:12.5px;margin:0 0 10px">🎰 Building an accumulator — odds multiply, but <b>every</b> leg must win. Up to '+maxLegs+' legs, and up to '+((caps.max_active_accas)||2)+' accas running at once.'+(retCap?(' Max return: <b>'+retCap+'</b>.'):'')+'</div>';
   if(!fx.length) h+='<div class="empty">No upcoming games to bet on right now — check back before kick-off.</div>';
   else h+='<div class="mdgrid">'+fx.map(m=>{
     const ko=m.stage&&m.stage!=='GROUP_STAGE';
@@ -554,26 +662,26 @@ function renderBets(){
     const homeAway='<div style="display:flex;gap:6px">'+mk('HOME',m.home)+mk('AWAY',m.away)+'</div>';   // home left, away right
     const drawRow=(!ko && m.odds.DRAW)?('<div style="display:flex;margin-top:6px">'+mk('DRAW','Draw')+'</div>'):'';   // draw below, full width
     return `<div class="mdcard"><div class="mdmeta">${ko?(STAGE_LABEL[m.stage]||m.stage):'Group '+(m.group||'?')} · ${esc(when)}</div>
-      <div class="mdteams" style="margin-bottom:8px"><span>${flag(m.home)}${m.home}</span><span style="color:var(--muted)">v</span><span class="mdr">${flag(m.away)}${m.away}</span></div>
+      <div class="mdteams" style="margin-bottom:8px"><span>${flag(m.home)}${esc(m.home)}</span><span style="color:var(--muted)">v</span><span class="mdr">${flag(m.away)}${esc(m.away)}</span></div>
       <div class="betodds" style="display:block">${homeAway}${drawRow}</div></div>`;
   }).join('')+'</div>';
   if(ACCAMODE && ACCA.length){
     let dec=1; ACCA.forEach(l=>{const [n,d2]=l.frac.split('/').map(Number); dec*=(1+n/d2);});
     const accaCap=Math.min(headroom, Math.min.apply(null,ACCA.map(l=>{const f=fx.find(m=>m.matchId===l.matchId); return f&&f.maxStake?f.maxStake:caps.max_stake;})));
-    h+='<div style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
+    h+='<div class="betcta" style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
       +'<div style="font-weight:600;margin-bottom:8px">🎰 '+ACCA.length+'-fold accumulator <span style="color:var(--muted);font-weight:400">· max stake '+accaCap+'</span></div>'
       +ACCA.map((l,i)=>{const fxp=fx.find(m=>m.matchId===l.matchId); const who=l.sel==='HOME'?(fxp?fxp.home:'home'):(l.sel==='AWAY'?(fxp?fxp.away:'away'):'Draw');
         return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>'+esc(who)+' <span style="color:var(--gold)">'+l.frac+'</span></span><button class="accarm" data-i="'+i+'" style="background:none;border:none;color:#ff7a7a;cursor:pointer">✕</button></div>';}).join('')
-      +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;border-top:1px solid var(--line);padding-top:8px"><input id="accaStake" type="number" min="'+caps.min_stake+'" max="'+Math.min(accaCap,avail)+'" step="0.5" placeholder="stake (pts)" style="width:120px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px">'
+      +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;border-top:1px solid var(--line);padding-top:8px"><input id="accaStake" type="number" min="'+caps.min_stake+'" max="'+Math.min(accaCap,avail)+'" step="0.01" placeholder="stake (pts)" style="width:120px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:16px">'
       +'<span id="accaReturn" style="color:var(--muted);font-size:13px">combined ~'+(Math.round(dec*100)/100)+'×</span>'
       +'<button id="accaPlace" class="mini cta">Place acca</button></div><div style="color:var(--muted);font-size:11.5px;margin-top:6px">Once placed, this acca is final — it can\'t be cancelled.</div></div>';
   }
   if(!ACCAMODE && BETPICK){
     const fxp=fx.find(m=>m.matchId===BETPICK.matchId);
     if(fxp){ const o=fxp.odds[BETPICK.sel], who=BETPICK.sel==='HOME'?fxp.home:(BETPICK.sel==='AWAY'?fxp.away:'Draw'); const smax=Math.min(fxp.maxStake||caps.max_stake, headroom);
-      h+='<div style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
+      h+='<div class="betcta" style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
         +'<div style="font-size:13.5px;margin-bottom:8px">Bet on <b>'+esc(who)+'</b> @ <b style="color:var(--gold)">'+o.frac+'</b> <span style="color:var(--muted)">· max '+smax+'</span></div>'
-        +(smax<=0?'<div style="color:#ffb86b;font-size:13px">You\'ve hit the open-bet limit — wait for a bet to settle.</div>':('<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="betStake" type="number" min="'+caps.min_stake+'" max="'+Math.min(smax,avail)+'" step="0.5" placeholder="stake (pts)" style="width:120px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px">'
+        +(smax<=0?'<div style="color:#ffb86b;font-size:13px">You\'ve hit the open-bet limit — wait for a bet to settle.</div>':('<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="betStake" type="number" min="'+caps.min_stake+'" max="'+Math.min(smax,avail)+'" step="0.01" placeholder="stake (pts)" style="width:120px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:16px">'
         +'<span id="betReturn" style="color:var(--muted);font-size:13px"></span>'
         +'<button id="betPlace" class="mini cta">Place bet</button></div><div style="color:var(--muted);font-size:11.5px;margin-top:6px">Once placed, this bet is final — it can\'t be cancelled.</div>'))+'</div>';
     }
@@ -582,15 +690,64 @@ function renderBets(){
   // your bets
   h+='<div class="ovsec"><div class="ovh">Your bets</div><div id="myBets"><div class="empty">Loading…</div></div></div>';
   h+='<div class="ovsec"><div class="ovh">Everyone\'s open bets</div><div id="allBets"><div class="empty">Loading…</div></div></div>';
+  h+='<div class="ovsec" id="betHallWrap" style="display:none"><div class="ovh">Best &amp; worst bets so far</div><div id="betHall"></div></div>';
   el.innerHTML=h;
-  const ws=document.getElementById('betWho'); if(ws) ws.onchange=()=>{ BETPLAYER=ws.value; BETPICK=null; BETMSG=''; renderBets(); loadMyBets(); };
+  const ws=document.getElementById('betWho'); if(ws) ws.onchange=()=>{ BETPLAYER=ws.value; BETPICK=null; ACCA=[]; ACCAMODE=false; BETMSG=''; BETPIN_DRAFT=null; renderBets(); loadMyBets(); };
+  const dlb=document.getElementById('discordLoginBtn'); if(dlb) dlb.onclick=()=>{ location.href='/api/discord_login'; };
+  const lob=document.getElementById('logoutBtn'); if(lob) lob.onclick=async()=>{ try{ await fetch('/api/logout',{method:'POST'}); }catch(e){} SESSION={oauth:STATUS.discord_oauth}; BETMSG='Logged out.'; await refreshStatus(); renderBets(); };
+  const clb=document.getElementById('claimPlayerBtn'); if(clb) clb.onclick=async()=>{
+    BETMSG='Claiming…'; renderBets();
+    try{ const j=await fetch('/api/discord_claim_player',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:BETPLAYER})}).then(r=>r.json());
+      if(j&&j.ok){ BETMSG='✓ You\'re '+esc(BETPLAYER)+' — bet with no passcode from now on.'; await refreshStatus(); }
+      else { BETMSG=(j&&j.error)||'Couldn\'t claim that name.'; }
+    }catch(e){ BETMSG='Couldn\'t reach the server — try again.'; }
+    renderBets();
+  };
+  const bpi=document.getElementById('betPinInput');
+  if(bpi) bpi.oninput=()=>{ BETPIN_DRAFT=(bpi.value||'').trim().toUpperCase(); };   // hold it across re-renders WITHOUT saving — a wrong code never gets stored
+  // Save = verify the passcode with the server, then store it on this device only if it's correct
+  const sp=document.getElementById('savePinBtn'); if(sp) sp.onclick=async()=>{
+    const v=((document.getElementById('betPinInput')||{}).value||'').trim().toUpperCase();
+    if(!v){ BETMSG='Type your passcode first, then tap Save.'; renderBets(); return; }
+    BETMSG='Checking…'; renderBets();
+    try{ const j=await fetch('/api/wager_check_pin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:BETPLAYER,pin:v})}).then(r=>r.json());
+      if(j&&j.valid){ setBetPin(BETPLAYER,v); BETPIN_DRAFT=null; BETMSG='🔒 Passcode verified and saved on this device — you won\'t need to type it again.'; }
+      else { setBetPin(BETPLAYER,''); BETMSG='That passcode is wrong, so it wasn\'t saved. Try again, or tap Change if you set a different one.'; }
+    }catch(e){ BETMSG='Couldn\'t reach the server to check it — try again.'; }
+    renderBets();
+  };
+  // Create = first-time self-serve setup (no organiser): claim the name with a passcode of your choice
+  const cp=document.getElementById('createPinBtn'); if(cp) cp.onclick=async()=>{
+    const v=((document.getElementById('betPinInput')||{}).value||'').trim().toUpperCase();
+    if(v.length<4){ BETMSG='Choose a passcode of at least 4 characters.'; renderBets(); return; }
+    BETMSG='Setting up…'; renderBets();
+    try{ const j=await fetch('/api/wager_set_pin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:BETPLAYER,new_pin:v})}).then(r=>r.json());
+      if(j&&j.ok){ setBetPin(BETPLAYER,v); BETPIN_DRAFT=null; BETMSG='✓ You\'re set up — '+esc(BETPLAYER)+'\'s betting passcode is saved on this device. Tap a team\'s odds to place your first bet.'; await refreshStatus(); }
+      else { BETMSG=(j&&j.error)||'Couldn\'t set that up.'; }
+    }catch(e){ BETMSG='Couldn\'t reach the server — try again.'; }
+    renderBets();
+  };
+  // Change = update an existing passcode (needs the current one)
+  const chp=document.getElementById('changePinBtn'); if(chp) chp.onclick=async()=>{
+    const cur=prompt('Enter your CURRENT passcode for '+BETPLAYER+':'); if(cur==null) return;
+    const nw=prompt('Enter the NEW passcode (4–24 characters):'); if(nw==null) return;
+    const c=(cur||'').trim().toUpperCase(), n=(nw||'').trim().toUpperCase();
+    if(n.length<4){ BETMSG='New passcode must be at least 4 characters.'; renderBets(); return; }
+    BETMSG='Updating…'; renderBets();
+    try{ const j=await fetch('/api/wager_set_pin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:BETPLAYER,new_pin:n,current_pin:c})}).then(r=>r.json());
+      if(j&&j.ok){ setBetPin(BETPLAYER,n); BETPIN_DRAFT=null; BETMSG='✓ Passcode changed and saved on this device. The old one no longer works.'; await refreshStatus(); }
+      else if(j&&j.bad_pin){ BETMSG='That\'s not your current passcode, so nothing changed.'; }
+      else { BETMSG=(j&&j.error)||'Couldn\'t change it.'; }
+    }catch(e){ BETMSG='Couldn\'t reach the server — try again.'; }
+    renderBets();
+  };
   const ld=document.getElementById('linkDiscordBtn'); if(ld) ld.onclick=async()=>{
     const pi=document.getElementById('betPinInput'); const pin=((pi&&pi.value)||'').trim().toUpperCase();
     const box=document.getElementById('linkCodeBox');
     if(!pin){ box.style.display='block'; box.innerHTML='Enter your passcode first, then tap Connect Discord.'; return; }
     box.style.display='block'; box.textContent='Getting your link code…';
     try{ const j=await fetch('/api/wager_link_code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:BETPLAYER,pin:pin})}).then(r=>r.json());
-      if(j.ok){ setBetPin(BETPLAYER,pin); box.innerHTML='In Discord (DM the bot to keep it private) run:<br><code style="color:var(--gold);font-size:15px;letter-spacing:1px">/linkdiscord code:'+esc(j.code)+'</code><br><span style="color:var(--muted)">One use, expires in '+j.expires_min+' min. After that, just /bet — no passcode on Discord.</span>'; }
+      if(j.ok){ setBetPin(BETPLAYER,pin); BETPIN_DRAFT=null; box.innerHTML='In Discord (DM the bot to keep it private) run:<br><code style="color:var(--gold);font-size:15px;letter-spacing:1px">/linkdiscord code:'+esc(j.code)+'</code><br><span style="color:var(--muted)">One use, expires in '+j.expires_min+' min. After that, just /bet — no passcode on Discord.</span>'; }
       else if(j.bad_pin){ setBetPin(BETPLAYER,''); box.textContent='Wrong passcode for '+BETPLAYER+'.'; }
       else box.textContent=j.error||'Could not get a code.';
     }catch(e){ box.textContent='Could not reach the server.'; }
@@ -608,17 +765,35 @@ function renderBets(){
     }catch(e){ box.textContent='Could not reach the server.'; }
   };
   el.querySelectorAll('.betodd').forEach(b=>b.onclick=()=>{
+    const mid=b.dataset.mid, sel=b.dataset.sel, frac=b.dataset.frac;
     if(ACCAMODE){
-      const mid=b.dataset.mid, sel=b.dataset.sel, frac=b.dataset.frac;
       const ix=ACCA.findIndex(l=>l.matchId===mid);
-      if(ix>=0){ if(ACCA[ix].sel===sel) ACCA.splice(ix,1); else ACCA[ix]={matchId:mid,sel:sel,frac:frac}; }   // toggle/replace per game
-      else { if(ACCA.length>=maxLegs){ BETMSG='An accumulator can have at most '+maxLegs+' legs.'; renderBets(); return; } ACCA.push({matchId:mid,sel:sel,frac:frac}); }
+      if(ix>=0){
+        if(ACCA[ix].sel===sel) ACCA.splice(ix,1);                 // re-tap a leg -> remove it
+        else ACCA[ix]={matchId:mid,sel:sel,frac:frac};            // same game, other outcome -> switch that leg
+      } else {
+        if(ACCA.length>=maxLegs){ BETMSG='An accumulator can have at most '+maxLegs+' legs.'; renderBets(); return; }
+        ACCA.push({matchId:mid,sel:sel,frac:frac});               // a new game -> add a leg
+      }
+      if(ACCA.length===1){ BETPICK=ACCA[0]; ACCA=[]; ACCAMODE=false; }   // down to one -> it's just a single again
+      else if(ACCA.length===0){ ACCAMODE=false; }                 // emptied -> nothing selected
       BETMSG=''; renderBets();
-    } else { BETPICK={matchId:b.dataset.mid,sel:b.dataset.sel,frac:b.dataset.frac}; BETMSG=''; renderBets(); }
+    } else {
+      if(BETPICK && BETPICK.matchId===mid && BETPICK.sel===sel){
+        BETPICK=null;                                             // re-tap the single -> remove it
+      } else if(BETPICK && BETPICK.matchId===mid){
+        BETPICK={matchId:mid,sel:sel,frac:frac};                  // same game, other outcome -> switch
+      } else if(BETPICK && accasOn){
+        ACCA=[BETPICK,{matchId:mid,sel:sel,frac:frac}];           // a second game -> auto-accumulator
+        ACCAMODE=true; BETPICK=null;
+      } else {
+        BETPICK={matchId:mid,sel:sel,frac:frac};                  // first pick (or accas off -> just switch)
+      }
+      BETMSG=''; renderBets();
+    }
   });
-  const msng=document.getElementById('modeSingle'); if(msng) msng.onclick=()=>{ ACCAMODE=false; BETMSG=''; renderBets(); };
-  const macc=document.getElementById('modeAcca'); if(macc) macc.onclick=()=>{ ACCAMODE=true; BETPICK=null; BETMSG=''; renderBets(); };
-  el.querySelectorAll('.accarm').forEach(b=>b.onclick=()=>{ ACCA.splice(+b.dataset.i,1); renderBets(); });
+  const cfb=document.getElementById('claimFreeBtn'); if(cfb) cfb.onclick=claimFreePoints;
+  el.querySelectorAll('.accarm').forEach(b=>b.onclick=()=>{ ACCA.splice(+b.dataset.i,1); if(ACCA.length===1){ BETPICK=ACCA[0]; ACCA=[]; ACCAMODE=false; } else if(ACCA.length===0){ ACCAMODE=false; } renderBets(); });
   const ap=document.getElementById('accaPlace'); if(ap) ap.onclick=placeAcca;
   // live validation for the ACCA stake: warn on 0 / negative / over-max, disable Place
   const ast=document.getElementById('accaStake'), art=document.getElementById('accaReturn');
@@ -629,7 +804,7 @@ function renderBets(){
       if(isNaN(s)||s<=0){ art.textContent='⚠ Stake must be more than 0.'; art.style.color='#ff9a9a'; if(ap)ap.disabled=true; return; }
       if(s<amn){ art.textContent='⚠ Minimum stake is '+amn+'.'; art.style.color='#ff9a9a'; if(ap)ap.disabled=true; return; }
       if(s>amx){ art.textContent='⚠ Most you can stake here is '+amx+'.'; art.style.color='#ffb86b'; if(ap)ap.disabled=true; return; }
-      const ret=Math.round(s*dec*10)/10;
+      const ret=Math.round(s*dec*100)/100;
       if(retCap&&ret>retCap+1e-9){ art.textContent='⚠ Would return '+ret+' — over the '+retCap+' cap. Lower the stake.'; art.style.color='#ffb86b'; if(ap)ap.disabled=true; return; }
       art.textContent='returns '+ret+' if all win'; art.style.color='var(--muted)'; if(ap)ap.disabled=false; };
     ast.oninput=updA; }
@@ -641,7 +816,7 @@ function renderBets(){
       if(isNaN(s)||s<=0){ rt.textContent='⚠ Stake must be more than 0.'; rt.style.color='#ff9a9a'; if(pb)pb.disabled=true; return; }
       if(s<mn){ rt.textContent='⚠ Minimum stake is '+mn+'.'; rt.style.color='#ff9a9a'; if(pb)pb.disabled=true; return; }
       if(s>mx){ rt.textContent='⚠ Most you can stake here is '+mx+'.'; rt.style.color='#ffb86b'; if(pb)pb.disabled=true; return; }
-      const sret=Math.round(s*(1+fr[0]/fr[1])*10)/10;
+      const sret=Math.round(s*(1+fr[0]/fr[1])*100)/100;
       if(retCap&&sret>retCap+1e-9){ rt.textContent='⚠ Would return '+sret+' — over the '+retCap+' cap. Lower the stake.'; rt.style.color='#ffb86b'; if(pb)pb.disabled=true; return; }
       rt.textContent='returns '+sret+' if it wins'; rt.style.color='var(--muted)'; if(pb)pb.disabled=false; };
     st.oninput=upd; upd(); }
@@ -654,15 +829,16 @@ async function placeAcca(){
   const st=document.getElementById('accaStake'); const stake=parseFloat(st&&st.value);
   if(!(stake>0)){ BETMSG='Enter a stake.'; renderBets(); return; }
   let pin='';
-  if(STATUS.wager_pins_set){
+  if(STATUS.wager_pins_set && !(SESSION.logged_in && SESSION.player===BETPLAYER)){
     const pi=document.getElementById('betPinInput'); pin=((pi&&pi.value)||'').trim().toUpperCase();
     if(!pin){ BETMSG='Enter your bet passcode.'; renderBets(); return; }
   }
   const ap=document.getElementById('accaPlace'); if(ap){ ap.disabled=true; ap.textContent='Placing…'; }
+  if(!ACCANONCE) ACCANONCE=_nonce();
   try{
     const j=await fetch('/api/place_acca',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({player:BETPLAYER,legs:ACCA.map(l=>({matchId:l.matchId,selection:l.sel})),stake:stake,pin:pin})}).then(r=>r.json());
-    if(j.ok){ setBetPin(BETPLAYER,pin); BETMSG='✓ Acca placed: '+stake+' on a '+j.wager.legs.length+'-fold (returns '+j.wager.return+' if it all wins).'; ACCA=[]; await load(); renderBets(); }
+      body:JSON.stringify({player:BETPLAYER,legs:ACCA.map(l=>({matchId:l.matchId,selection:l.sel})),stake:stake,pin:pin,nonce:ACCANONCE})}).then(r=>r.json());
+    if(j.ok){ ACCANONCE=null; setBetPin(BETPLAYER,pin); BETPIN_DRAFT=null; BETMSG='✓ Acca placed: '+stake+' on a '+j.wager.legs.length+'-fold (returns '+j.wager.return+' if it all wins).'; ACCA=[]; await load(); renderBets(); }
     else if(j.bad_pin){ setBetPin(BETPLAYER,''); BETMSG='Wrong passcode for '+BETPLAYER+'.'; renderBets(); }
     else { BETMSG=j.error||'Could not place that acca.'; renderBets(); }
   }catch(e){ BETMSG='Could not reach the server.'; renderBets(); }
@@ -671,12 +847,45 @@ function refreshBetsLive(){
   // live-update only the parts that change, so we NEVER wipe an in-progress stake or passcode the user is typing
   loadMyBets(); loadAllBets();
   const caps=STATUS.wager_caps||{max_stake:30}; const me=(DATA.players||[]).find(p=>p.name===BETPLAYER); const av=document.getElementById('betAvail');
-  if(me && av){ const avail=Math.max(0,Math.round((((me.points_settled||0)+(me.wager_net||0)-(me.wager_held||0)))*10)/10);
-    const head=Math.max(0,Math.round((caps.max_stake-Math.max(0,me.wager_held||0))*10)/10);
+  if(me && av){ const avail=(me.bettable!=null)?Math.max(0,Math.round(me.bettable*100)/100):Math.max(0,Math.round((((me.points_settled||0)+(me.wager_net||0)-(me.wager_held||0)))*100)/100);
+    const head=Math.max(0,Math.round((caps.max_stake-Math.max(0,me.wager_held||0))*100)/100);
     av.textContent=Math.min(avail,head); }
+}
+// ---- "is this bet currently winning?" — provisional result from the live score (display only; never settles anything) ----
+function provResult(sel, hs, as_){
+  if(hs==null||as_==null) return null;           // no score yet -> unknown (don't coerce null to 0)
+  hs=Number(hs); as_=Number(as_); if(isNaN(hs)||isNaN(as_)) return null;
+  if(sel==='HOME') return hs>as_?'win':(hs<as_?'lose':'level');
+  if(sel==='AWAY') return as_>hs?'win':(as_<hs?'lose':'level');
+  return hs===as_?'win':'lose';   // DRAW selection
+}
+function provChip(r){
+  if(r==='win')   return '<span style="color:#7ee787;font-weight:700">🟢 winning</span>';
+  if(r==='lose')  return '<span style="color:#ff7a7a;font-weight:700">🔴 losing</span>';
+  if(r==='level') return '<span style="color:#ffd97a;font-weight:700">🟡 level</span>';
+  return '';
+}
+function accaLiveStatus(w, fixOf, live){
+  // overall provisional state of an accumulator from the live scores: 'win' only if every leg is currently
+  // winning/won, 'lose' if any leg has lost (settled or live), else 'level'. Null when nothing is live/lost yet.
+  if(!(w.legs&&w.legs.length)) return null;
+  let anyLive=false, anyLose=false, anyPending=false;
+  for(const l of w.legs){
+    if(l.result==='lost'){ anyLose=true; continue; }
+    if(l.result==='won'||l.result==='void') continue;            // this leg is already safe
+    if(live.has(l.matchId)){
+      anyLive=true;
+      const f=fixOf(l.matchId); const r=f?provResult(l.selection,f.homeScore,f.awayScore):null;
+      if(r==='lose') anyLose=true; else if(r!=='win') anyPending=true;
+    } else { anyPending=true; }                                  // a leg not yet kicked off -> not winning yet
+  }
+  if(!(anyLive||anyLose)) return null;
+  return anyLose?'lose':(anyPending?'level':'win');
 }
 function betCardHTML(w, opts){
   opts=opts||{}; const live=opts.live||new Set();
+  const fb=opts.fixById; const fixOf=id=>fb?(fb.get?fb.get(id):fb[id]):null;
+  if(!w||w.credit||w.status==='credit') return '';   // a free-points drop is not a bet — never a card
   const tg={pending:['#ffc83d','OPEN'],won:['#7ee787','WON'],lost:['#ff7a7a','LOST'],void:['#9aa','VOID']}[w.status]||['#9aa',(w.status||'').toUpperCase()];
   const isAcca=!!(w.legs&&w.legs.length);
   const who=opts.showPlayer?('<span style="color:var(--muted)">'+esc(w.player)+'</span> · '):'';
@@ -685,14 +894,28 @@ function betCardHTML(w, opts){
     let dec=1; w.legs.forEach(l=>{const p=l.frac.split('/').map(Number); dec*=(1+p[0]/p[1]);});
     const rows=w.legs.map(l=>{ const pick=l.selection==='HOME'?l.home:(l.selection==='AWAY'?l.away:'Draw');
       const lr=l.result==='won'?'✅ ':(l.result==='lost'?'❌ ':(l.result==='void'?'➖ ':'')); const isL=live.has(l.matchId);
-      return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0;color:var(--muted)"><span>'+lr+'<b style="color:var(--ink)">'+esc(pick)+'</b> <span style="opacity:.8">('+esc(l.home)+' v '+esc(l.away)+')</span>'+(isL?' <span style="color:#ff6b6b">🔴</span>':'')+'</span><span style="color:var(--gold);font-weight:600">'+l.frac+'</span></div>';
+      const f=fixOf(l.matchId);
+      let scoreBit='', chip='';
+      if(f && f.homeScore!=null && f.awayScore!=null){
+        const sc=f.homeScore+'–'+f.awayScore;
+        if(isL){ scoreBit=' <span style="color:#ff6b6b">🔴 '+sc+'</span>'; if(!l.result) chip=' '+provChip(provResult(l.selection,f.homeScore,f.awayScore)); }
+        else if(isDone(f.status)) scoreBit=' <span style="opacity:.65">FT '+sc+'</span>';   // frozen final score
+      } else if(isL){ scoreBit=' <span style="color:#ff6b6b">🔴 LIVE</span>'; }
+      return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0;color:var(--muted)"><span>'+lr+'<b style="color:var(--ink)">'+esc(pick)+'</b> <span style="opacity:.8">('+esc(l.home)+' v '+esc(l.away)+')</span>'+scoreBit+chip+'</span><span style="color:var(--gold);font-weight:600">'+l.frac+'</span></div>';
     }).join('');
-    body='<div style="font-weight:600;font-size:13.5px">'+who+'🎰 '+w.legs.length+'-fold accumulator · combined <span style="color:var(--gold)">~'+(Math.round(dec*100)/100)+'×</span></div><div style="margin-top:4px">'+rows+'</div>';
+    const ovr=(w.status==='pending')?accaLiveStatus(w,fixOf,live):null;
+    body='<div style="font-weight:600;font-size:13.5px">'+who+'🎰 '+w.legs.length+'-fold accumulator · combined <span style="color:var(--gold)">~'+(Math.round(dec*100)/100)+'×</span>'+(ovr?' · '+provChip(ovr):'')+'</div><div style="margin-top:4px">'+rows+'</div>';
   } else {
     const pick=w.selection==='HOME'?w.home:(w.selection==='AWAY'?w.away:'Draw'); const isL=live.has(w.matchId);
-    body='<div style="font-weight:600;font-size:13.5px">'+who+esc(pick)+' <span style="color:var(--gold)">'+w.frac+'</span></div><div style="color:var(--muted);font-size:12px">'+esc(w.home)+' v '+esc(w.away)+(isL?' · <span style="color:#ff6b6b">🔴 LIVE</span>':'')+'</div>';
+    let liveBit=''; const f=fixOf(w.matchId);
+    if(f && f.homeScore!=null && f.awayScore!=null){
+      const sc=f.homeScore+'–'+f.awayScore;
+      if(isL) liveBit=' · <span style="color:#ff6b6b">🔴 LIVE '+sc+'</span> · '+provChip(provResult(w.selection,f.homeScore,f.awayScore));
+      else if(isDone(f.status)) liveBit=' · <span style="opacity:.65">FT '+sc+'</span>';     // frozen final score
+    } else if(isL){ liveBit=' · <span style="color:#ff6b6b">🔴 LIVE</span>'; }
+    body='<div style="font-weight:600;font-size:13.5px">'+who+esc(pick)+' <span style="color:var(--gold)">'+w.frac+'</span></div><div style="color:var(--muted);font-size:12px">'+esc(w.home)+' v '+esc(w.away)+liveBit+'</div>';
   }
-  const outcome=w.status==='won'?('+'+Math.round((w.return-w.stake)*10)/10+' pts'):(w.status==='lost'?('−'+w.stake+' pts'):(w.status==='void'?'refunded':'→ '+w.return+' if it wins'));
+  const outcome=w.status==='won'?('+'+Math.round((w.return-w.stake)*100)/100+' pts'):(w.status==='lost'?('−'+w.stake+' pts'):(w.status==='void'?'refunded':'→ '+w.return+' if it wins'));
   return '<div style="border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:6px"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'
     +'<div style="flex:1;min-width:0">'+body+'</div>'
     +'<div style="text-align:right;white-space:nowrap"><span style="color:'+tg[0]+';font-weight:700;font-size:11px">'+tg[1]+'</span><div style="font-size:12.5px">stake <b>'+w.stake+'</b></div><div style="color:'+tg[0]+';font-size:12.5px;font-weight:600">'+outcome+'</div></div>'
@@ -704,25 +927,63 @@ async function loadAllBets(){
     const j=await fetch('/api/wagers').then(r=>r.json());
     const open=(j.wagers||[]).filter(w=>w.status==='pending');
     const live=new Set((DATA.fixtures||[]).filter(f=>f.status==='IN_PLAY'||f.status==='PAUSED').map(f=>f.matchId));
-    if(!open.length){ box.innerHTML='<div class="empty">No open bets right now.</div>'; return; }
-    open.sort((a,b)=>(b.placed_at||0)-(a.placed_at||0));
-    box.innerHTML=open.map(w=>betCardHTML(w,{showPlayer:true,live:live})).join('');
+    const fixById=new Map((DATA.fixtures||[]).map(f=>[f.matchId,f]));
+    if(!open.length){ box.innerHTML='<div class="empty">No open bets right now.</div>'; }
+    else{
+      open.sort((a,b)=>(b.placed_at||0)-(a.placed_at||0));
+      box.innerHTML=open.map(w=>betCardHTML(w,{showPlayer:true,live:live,fixById:fixById})).join('');
+    }
+    // best & worst settled bets (top 3 each) — biggest net wins, biggest losses
+    const hw=document.getElementById('betHallWrap'), hb=document.getElementById('betHall');
+    if(hw&&hb){
+      const pickOf=w=>w.legs?(w.legs.length+'-fold acca'):(w.selection==='HOME'?w.home:(w.selection==='AWAY'?w.away:'Draw'));
+      const settled=(j.wagers||[]).filter(w=>!w.credit&&(w.status==='won'||w.status==='lost'));
+      const wins=settled.filter(w=>w.status==='won').map(w=>({w,net:(w.return||0)-(w.stake||0)})).sort((a,b)=>b.net-a.net).slice(0,3);
+      const losses=settled.filter(w=>w.status==='lost').map(w=>({w,net:-(w.stake||0)})).sort((a,b)=>a.net-b.net).slice(0,3);
+      const row=(e,good)=>'<div style="display:flex;justify-content:space-between;gap:8px;font-size:12.5px;padding:3px 0">'
+        +'<span><b>'+esc(e.w.player||'')+'</b> — '+esc(pickOf(e.w))+' <span style="color:var(--gold)">'+(e.w.frac||'')+'</span> <span style="color:var(--muted)">(staked '+(e.w.stake||0)+')</span></span>'
+        +'<span style="font-weight:700;color:'+(good?'var(--t2)':'#ff6b6b')+'">'+(good?'+':'−')+Math.abs(Math.round(e.net*100)/100)+'</span></div>';
+      if(!wins.length&&!losses.length){ hw.style.display='none'; }
+      else{
+        hw.style.display='';
+        hb.innerHTML='<div class="mdcard" style="display:grid;gap:2px">'
+          +(wins.length?('<div style="font-size:11.5px;color:var(--muted);margin-bottom:2px">🏆 Biggest wins</div>'+wins.map(e=>row(e,true)).join('')):'')
+          +(losses.length?('<div style="font-size:11.5px;color:var(--muted);margin:'+(wins.length?'8px':'0')+' 0 2px">💀 Biggest losses</div>'+losses.map(e=>row(e,false)).join('')):'')
+          +'</div>';
+      }
+    }
   }catch(e){ box.innerHTML='<div class="empty">Could not load bets.</div>'; }
+}
+async function claimFreePoints(){
+  let pin='';
+  if(STATUS.wager_pins_set && !(SESSION.logged_in && SESSION.player===BETPLAYER)){
+    const pi=document.getElementById('betPinInput'); pin=((pi&&pi.value)||'').trim().toUpperCase();
+    if(!pin){ BETMSG='Enter your bet passcode first, then claim your free points.'; renderBets(); return; }
+  }
+  BETMSG='Claiming your free points…'; renderBets();
+  try{
+    const j=await fetch('/api/place_free_bet',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({player:BETPLAYER,pin:pin})}).then(r=>r.json());
+    if(j.ok){ setBetPin(BETPLAYER,pin); BETPIN_DRAFT=null; BETMSG='🎁 '+(j.amount||5)+' free points added to your balance — bet them on any game (win and the winnings are yours; lose and it costs nothing).'; await refreshStatus(); await load(); renderBets(); }
+    else if(j.bad_pin){ setBetPin(BETPLAYER,''); BETMSG='Wrong passcode for '+BETPLAYER+'. Check with the organiser.'; renderBets(); }
+    else { BETMSG=j.error||'Could not claim your free points.'; renderBets(); }
+  }catch(e){ BETMSG='Could not reach the server.'; renderBets(); }
 }
 async function placeBet(){
   if(!BETPICK) return;
   const st=document.getElementById('betStake'); const stake=parseFloat(st&&st.value);
   if(!(stake>0)){ BETMSG='Enter a stake.'; renderBets(); return; }
   let pin='';
-  if(STATUS.wager_pins_set){
+  if(STATUS.wager_pins_set && !(SESSION.logged_in && SESSION.player===BETPLAYER)){
     const pi=document.getElementById('betPinInput'); pin=((pi&&pi.value)||'').trim().toUpperCase();
     if(!pin){ BETMSG='Enter your bet passcode (ask the organiser if you don\'t have it).'; renderBets(); return; }
   }
   const pb=document.getElementById('betPlace'); if(pb){ pb.disabled=true; pb.textContent='Placing…'; }
+  if(!BETNONCE) BETNONCE=_nonce();                       // reused if this placement is retried after a network drop
   try{
     const j=await fetch('/api/place_wager',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({player:BETPLAYER,matchId:BETPICK.matchId,selection:BETPICK.sel,stake:stake,pin:pin})}).then(r=>r.json());
-    if(j.ok){ setBetPin(BETPLAYER,pin); BETMSG='✓ Bet placed: '+stake+' @ '+j.wager.frac+' (returns '+j.wager.return+' if it wins).'; BETPICK=null; await load(); renderBets(); }
+      body:JSON.stringify({player:BETPLAYER,matchId:BETPICK.matchId,selection:BETPICK.sel,stake:stake,pin:pin,nonce:BETNONCE})}).then(r=>r.json());
+    if(j.ok){ BETNONCE=null; setBetPin(BETPLAYER,pin); BETPIN_DRAFT=null; BETMSG='✓ Bet placed: '+stake+' @ '+j.wager.frac+' (returns '+j.wager.return+' if it wins).'; BETPICK=null; await load(); renderBets(); }
     else if(j.bad_pin){ setBetPin(BETPLAYER,''); BETMSG='Wrong passcode for '+BETPLAYER+'. Check with the organiser.'; renderBets(); }
     else { BETMSG=j.error||'Could not place that bet.'; renderBets(); }
   }catch(e){ BETMSG='Could not reach the server.'; renderBets(); }
@@ -734,17 +995,18 @@ async function loadMyBets(){
     const ws=(j.wagers||[]);
     if(!ws.length){ box.innerHTML='<div class="empty">No bets yet — place one above.</div>'; return; }
     const live=new Set((DATA.fixtures||[]).filter(f=>f.status==='IN_PLAY'||f.status==='PAUSED').map(f=>f.matchId));
-    const open=ws.filter(w=>w.status==='pending').slice().reverse();          // newest first
-    const done=ws.filter(w=>w.status!=='pending').slice().reverse();
+    const fixById=new Map((DATA.fixtures||[]).map(f=>[f.matchId,f]));
+    const open=ws.filter(w=>w.status==='pending'&&!w.credit).slice().reverse();          // newest first
+    const done=ws.filter(w=>w.status!=='pending'&&!w.credit).slice().reverse();           // credits are free-points drops, not bets — never render them as bet cards
     const won=done.filter(w=>w.status==='won'), lost=done.filter(w=>w.status==='lost');
-    const net=Math.round((won.reduce((s,w)=>s+(w.return-w.stake),0)-lost.reduce((s,w)=>s+w.stake,0))*10)/10;
-    const held=Math.round(open.reduce((s,w)=>s+w.stake,0)*10)/10;
+    const net=Math.round((won.reduce((s,w)=>s+(w.return-w.stake),0)-lost.reduce((s,w)=>s+w.stake,0))*100)/100;
+    const held=Math.round(open.reduce((s,w)=>s+w.stake,0)*100)/100;
     let html='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:12.5px">'
       +'<span style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px 10px">Record <b style="color:#7ee787">'+won.length+'W</b> · <b style="color:#ff7a7a">'+lost.length+'L</b></span>'
       +'<span style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px 10px">Net <b style="color:'+(net>0?'#7ee787':(net<0?'#ff7a7a':'var(--ink)'))+'">'+(net>0?'+':'')+net+'</b> pts</span></div>';
     html+='<div style="font-size:11.5px;color:var(--muted);font-weight:700;letter-spacing:.06em;margin:2px 0 6px">CURRENT (OPEN) BETS'+(open.length?' — '+held+' pts riding':'')+'</div>';
-    html+=open.length?open.map(w=>betCardHTML(w,{live:live})).join(''):'<div class="empty" style="margin-bottom:6px">None open right now.</div>';
-    if(done.length){ html+='<div style="font-size:11.5px;color:var(--muted);font-weight:700;letter-spacing:.06em;margin:14px 0 6px">SETTLED</div>'+done.map(w=>betCardHTML(w,{live:live})).join(''); }
+    html+=open.length?open.map(w=>betCardHTML(w,{live:live,fixById:fixById})).join(''):'<div class="empty" style="margin-bottom:6px">None open right now.</div>';
+    if(done.length){ html+='<div style="font-size:11.5px;color:var(--muted);font-weight:700;letter-spacing:.06em;margin:14px 0 6px">SETTLED</div>'+done.map(w=>betCardHTML(w,{live:live,fixById:fixById})).join(''); }
     box.innerHTML=html;
   }catch(e){ box.innerHTML='<div class="empty">Could not load your bets.</div>'; }
 }
@@ -776,22 +1038,155 @@ const STAGE_LABEL={GROUP_STAGE:"Group",LAST_32:"R32",LAST_16:"R16",QUARTER_FINAL
 const KO_STAGES=["LAST_32","LAST_16","QUARTER_FINALS","SEMI_FINALS","THIRD_PLACE","FINAL"];
 let KOROUND=null, KO_USER_SET=false;
 
-let DATA=SAMPLE;
+let DATA=SAMPLE, FETCH_AT=Date.now();   // FETCH_AT = when DATA arrived, so the live clock ticks on accurately from the server's seconds
 async function load(){
+  let loginParam=null;
+  try{ loginParam=new URLSearchParams(location.search).get('login');
+       if(loginParam){ if(loginParam==='failed') BETMSG='Discord login didn\'t complete — try again, or use a passcode.';
+               history.replaceState(null,'',location.pathname); } }catch(e){}
   let ok=false;
   try{ const r=await fetch('tracker_data.json?'+Date.now());
-       if(r.ok){ DATA=await r.json(); ok=!!(DATA&&DATA.players&&DATA.players.length); } }
+       if(r.ok){ DATA=await r.json(); FETCH_AT=Date.now(); ok=!!(DATA&&DATA.players&&DATA.players.length); } }
   catch(e){ ok=false; }
+  try{ const wr=await fetch('/api/wagers?'+Date.now());           // all open bets, so the breakdowns can name games + bets
+       if(wr.ok){ const wj=await wr.json(); ALLWAGERS=(wj.wagers||[]).filter(w=>w.status==='pending'&&!w.credit); } }
+  catch(e){ /* breakdowns just fall back to live-only if this fails */ }
   const gate=document.getElementById('gate'), tabs=document.querySelector('.tabs');
   const secs=['overview','live','lb','players','h2h','groups','bracket','fixtures','odds','bets'];
   if(!ok){ gate.style.display='block'; tabs.style.display='none';
            secs.forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';}); return; }
   gate.style.display='none'; tabs.style.display='';
   secs.forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='';});
-  render(DATA); refreshStatus();
+  render(DATA); await refreshStatus();        // wait for who-am-I before landing, so the right name shows (no flash)
+  if(loginParam && STATUS.wagering_enabled){ activateTab('bets'); }   // after a Discord login, drop you straight on the Bets tab
+  else {                                                              // otherwise restore whatever tab you were last on, so a refresh keeps your place
+    let saved=null; try{ saved=localStorage.getItem('wc26_tab'); }catch(e){}
+    const st=saved && document.querySelector('.tab[data-s="'+saved+'"]');
+    if(st && st.style.display!=='none' && !st.classList.contains('on')) activateTab(saved);
+  }
 }
 
 let H2H_A=null, H2H_B=null;
+// ---- live match clock: ticks MM:SS, anchored to the feed minute (re-anchors every refresh); 'HT' when paused ----
+// ---- live match clock: shows the official match minute from the data feed (e.g. 52'); 'HT' when paused.
+//      The feed reports the minute, NOT seconds, so we never extrapolate a ticking MM:SS — that drifts badly
+//      (counting through half-time and stoppage) and showed wildly wrong times. Minute is shown only when the
+//      feed actually broadcasts it; otherwise the row just reads LIVE. ----
+// ---- live match clock ----
+// Prefers the server's accurate elapsed seconds (liveSec, from real kickoff/half-time tracking) and ticks on
+// from there — re-anchored every refresh, with a hard cap so a backgrounded tab can't run the clock away.
+// Falls back to the feed minute (52'), then to 'LIVE' when the feed gives nothing. 'HT' while paused.
+// Provisional live points for one side of an in-play game — mirrors scoring.py's live branch exactly:
+// goals × per_goal, + clean sheet if the other side hasn't scored, + win if ahead / draw points if level.
+// Returns {pts, parts:[['draw',1],['clean sheet',1],...]} so the UI can show WHY (e.g. 0–0 = draw 1 + clean sheet 1).
+function liveParts(scored, conceded){
+  const SC=(DATA.scoring&&DATA.scoring.points)||{per_goal:1,win:3,draw:1,clean_sheet:1};
+  const parts=[]; let pts=0;
+  if(scored>0&&(SC.per_goal||0)>0){ const g=scored*SC.per_goal; parts.push([scored+(scored===1?' goal':' goals'),g]); pts+=g; }
+  if(conceded===0&&(SC.clean_sheet||0)>0){ parts.push(['clean sheet',SC.clean_sheet]); pts+=SC.clean_sheet; }
+  if(scored>conceded&&(SC.win||0)>0){ parts.push(['winning',SC.win]); pts+=SC.win; }
+  else if(scored===conceded&&(SC.draw||0)>0){ parts.push(['draw',SC.draw]); pts+=SC.draw; }
+  return {pts:Math.round(pts*100)/100, parts};
+}
+// One small line under a live match: who's earning what right now, and why.
+const LIVEBD=new Set();   // which live breakdowns the user has expanded (key = match|player), kept across 30s refreshes
+function betPickName(w){ return w.selection==='HOME'?w.home:(w.selection==='AWAY'?w.away:'Draw'); }
+function betProfit(w){ return Math.round(((w.return||0)-(w.stake||0))*100)/100; }
+function betLabel(w){   // short human description of a bet/acca + its upside
+  if(w.legs&&w.legs.length){
+    const legs=w.legs.map(lg=>esc(lg.selection==='HOME'?lg.home:(lg.selection==='AWAY'?lg.away:'Draw'))).join(' + ');
+    return w.stake+' on a '+w.legs.length+'-fold ('+legs+') → +'+betProfit(w)+' if it lands';
+  }
+  return w.stake+' on '+esc(betPickName(w))+' @ '+esc(w.frac)+' → +'+betProfit(w)+' if it wins';
+}
+function betsOnMatch(m){   // every pending bet/acca (any player) that touches this match
+  return ALLWAGERS.filter(w=> w.matchId===m.matchId || (w.legs&&w.legs.some(lg=>lg.matchId===m.matchId)));
+}
+function liveGamesOf(name){   // the in-play games this player owns a team in, with the live points breakdown
+  return (DATA.fixtures||[]).filter(m=>['IN_PLAY','PAUSED','LIVE','SUSPENDED'].includes(m.status)).flatMap(m=>{
+    const out=[];
+    if(m.homeOwner===name){ const b=liveParts(m.homeScore??0,m.awayScore??0); out.push({tm:m.home,opp:m.away,sc:(m.homeScore??0)+'–'+(m.awayScore??0),parts:b.parts,pts:b.pts}); }
+    if(m.awayOwner===name){ const b=liveParts(m.awayScore??0,m.homeScore??0); out.push({tm:m.away,opp:m.home,sc:(m.homeScore??0)+'–'+(m.awayScore??0),parts:b.parts,pts:b.pts}); }
+    return out;
+  });
+}
+function lbBreakdown(p){   // leaderboard row dropdown: where this player's live + potential points come from
+  const live=liveGamesOf(p.name), bets=ALLWAGERS.filter(w=>w.player===p.name);
+  let h='';
+  if(live.length){
+    h+='<div class="lbbd-h">⚡ Right now (live)</div>'+live.map(g=>
+      '<div class="lbbd-row"><span>'+esc(g.tm)+' vs '+esc(g.opp)+' ('+g.sc+')</span><span>+'+g.pts
+      +(g.parts.length?' <span style="opacity:.7">· '+g.parts.map(x=>esc(x[0])+' '+x[1]).join(', ')+'</span>':'')+'</span></div>').join('');
+  }
+  if(bets.length){
+    h+='<div class="lbbd-h">🎲 If your open bets land</div>'+bets.map(w=>
+      '<div class="lbbd-row"><span>'+betLabel(w)+'</span></div>').join('');
+  }
+  if(!h) h='<div class="lbbd-row"><span>Nothing in play and no open bets right now.</span></div>';
+  return h;
+}
+function liveBreakLine(m){
+  // Group this match's OWNED teams by player (one person can own both sides -> combine, no more "Louis +2 · Louis +2").
+  const byP={};
+  [[m.homeOwner,m.homeScore??0,m.awayScore??0,m.home],[m.awayOwner,m.awayScore??0,m.homeScore??0,m.away]].forEach(([ow,sc,co,tm])=>{
+    if(!ow||ow==='—'||ow==='-') return;
+    (byP[ow]=byP[ow]||[]).push({tm,b:liveParts(sc,co)});
+  });
+  const lbRows=((DATA.leaderboards||{}).points)||[];
+  const betPot=p=>{ const r=lbRows.find(x=>x.name===p); return (r&&r.bet_potential)||0; };
+  let html='';
+  Object.keys(byP).forEach(ow=>{
+    const teams=byP[ow];
+    const liveTot=Math.round(teams.reduce((s,t)=>s+t.b.pts,0)*100)/100;
+    const bp=betPot(ow);                                   // this player's open-bet upside (any game), folded into the total
+    const tot=Math.round((liveTot+bp)*100)/100;
+    const key=(m.matchId||(m.home+'_'+m.away))+'|'+ow;
+    const rows=teams.map(t=>'<div class="lbd-row"><span>'+esc(t.tm)+'</span><span>'+(t.b.parts.length?t.b.parts.map(p=>esc(p[0])+' +'+p[1]).join(' · '):'nothing yet')+(' = +'+t.b.pts)+'</span></div>').join('');
+    html+='<details class="livebd" data-bd="'+esc(key)+'"'+(LIVEBD.has(key)?' open':'')+'>'
+      +'<summary><b>'+esc(ow)+'</b> <span class="lbd-tot">+'+tot+'</span> <span class="lbd-cap">if it ends like this</span></summary>'
+      +'<div class="lbd-body">'+rows
+      +(bp>0?'<div class="lbd-row"><span>🎲 your open bets</span><span style="color:var(--gold)">+'+bp+' if they land</span></div>':'')
+      +(bp>0?'<div class="lbd-row lbd-grand"><span>Total</span><span>+'+tot+'</span></div>':'')
+      +'</div></details>';
+  });
+  const un=[[m.homeOwner,m.home],[m.awayOwner,m.away]].filter(s=>!s[0]||s[0]==='—'||s[0]==='-').map(s=>esc(s[1]));
+  if(un.length) html+='<div class="lbd-pool">'+un.join(' & ')+(un.length===1?' is':' are')+' unowned (pool) — scores for no one</div>';
+  // everyone's open bets on THIS game (singles on either team + any acca with a leg here)
+  const gbets=betsOnMatch(m);
+  if(gbets.length){
+    const key='bets|'+(m.matchId||(m.home+'_'+m.away));
+    const rows=gbets.map(w=>'<div class="lbd-row"><span><b>'+esc(w.player)+'</b></span><span>'+betLabel(w)+'</span></div>').join('');
+    html+='<details class="livebd" data-bd="'+esc(key)+'"'+(LIVEBD.has(key)?' open':'')+'>'
+      +'<summary>🎲 <b>'+gbets.length+' bet'+(gbets.length===1?'':'s')+'</b> on this game <span class="lbd-cap">— tap to see who</span></summary>'
+      +'<div class="lbd-body">'+rows+'</div></details>';
+  }
+  return html?('<div class="livebd-wrap">'+html+'</div>'):'';
+}
+function liveClockText(status, minute, liveSec, pens){
+  if(pens==='1'||pens===true) return 'PENS';                          // shootout in progress/decided while still live
+  if(status==='PAUSED') return 'HT';
+  if(!(status==='IN_PLAY'||status==='LIVE'||status==='SUSPENDED')) return '';
+  const ls=(liveSec===''||liveSec==null)?null:Number(liveSec);
+  if(ls!=null&&!isNaN(ls)&&ls>=0){
+    let sec=ls+Math.min(150,Math.max(0,(Date.now()-FETCH_AT)/1000));  // tick on from the server value; catch-up capped
+    if(sec>130*60) sec=130*60;                                        // never beyond ~130:00 (ET + stoppage ceiling)
+    const mm=Math.floor(sec/60), ss=Math.floor(sec%60);
+    return mm+':'+(ss<10?'0':'')+ss;
+  }
+  const mn=(minute===''||minute==null)?null:Number(minute);
+  if(mn!=null&&!isNaN(mn)&&mn>=0) return (mn>130?130:mn)+"'";
+  return 'LIVE';
+}
+function liveClock(m){
+  const pens=(m.shootout||m.penHome!=null||m.penAway!=null)?'1':'';
+  return '<span class="liveclock" data-st="'+esc(m.status||'')+'" data-mn="'+(m.minute==null?'':m.minute)+'" data-ls="'+(m.liveSec==null?'':m.liveSec)+'" data-pens="'+pens+'">'+liveClockText(m.status,m.minute,m.liveSec,pens)+'</span>';
+}
+function updateLiveClocks(){
+  const els=document.querySelectorAll('.liveclock'); if(!els.length) return;
+  els.forEach(el=>{ const ls=el.dataset.ls===''?null:el.dataset.ls; el.textContent=liveClockText(el.dataset.st, el.dataset.mn, ls, el.dataset.pens); });
+}
+setInterval(updateLiveClocks,1000);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) load(); });   // foregrounding re-syncs the clock
 function renderLive(d){
   const body=document.getElementById('liveBody'); if(!body) return;
   const fx=d.fixtures||[];
@@ -805,7 +1200,7 @@ function renderLive(d){
     h+='<div class="lcgrid">'+live.map(m=>{
       const stg=m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):(m.group?'Group '+m.group:'');
       return `<div class="lccard">
-        <div class="lchead"><span class="lcdot"></span>LIVE${m.minute?" "+m.minute+"'":""}${m.status==='PAUSED'?' · HT':''}${stg?' · '+stg:''}</div>
+        <div class="lchead"><span class="lcdot"></span>${liveClock(m)}${stg?' · '+stg:''}</div>
         <div class="lcrow"><span class="lcteam">${flag(m.home)}${esc(m.home)}${own(m.homeOwner)}</span><span class="lcscore">${m.homeScore??0}</span></div>
         <div class="lcrow"><span class="lcteam">${flag(m.away)}${esc(m.away)}${own(m.awayOwner)}</span><span class="lcscore">${m.awayScore??0}</span></div>
         ${(m.shootout||m.penHome!=null||m.penAway!=null)?`<div class="lcpens">🥅 Penalties <b>${m.penHome??0}–${m.penAway??0}</b></div>`:wpBar3(m,true)}
@@ -816,13 +1211,13 @@ function renderLive(d){
   if(soon.length){
     h+='<div class="ovh" style="margin-top:18px">Kicking off next</div><div class="fx">'+soon.map(m=>{
       const stg=m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):(m.group?'Group '+m.group:'');
-      return `<div class="fxrow"><span class="fxt">${flag(m.home)}${esc(m.home)} v ${flag(m.away)}${esc(m.away)}</span><span class="fxmeta">${stg} · ${dayKey(m.utcDate)} ${fmtTime(m.utcDate)}</span></div>`;
+      return `<div class="fxrow"><span class="fxteams"><span class="th">${flag(m.home)}${esc(m.home)}</span><span class="tc">v</span><span class="ta">${flag(m.away)}${esc(m.away)}</span></span><span class="fxmeta">${stg} · ${dayKey(m.utcDate)} ${fmtTime(m.utcDate)}</span></div>`;
     }).join('')+'</div>';
   }
   if(earlier.length){
     h+='<div class="ovh" style="margin-top:18px">Earlier today</div><div class="fx">'+earlier.map(m=>{
       const ko=(m.aet||m.shootout)?` <small>(${m.aet?'a.e.t.':''}${m.shootout?(m.aet?', ':'')+'pens '+(m.penHome??0)+'–'+(m.penAway??0):''})</small>`:'';
-      return `<div class="fxrow"><span class="fxt">${flag(m.home)}${esc(m.home)} ${m.homeScore??0}–${m.awayScore??0} ${flag(m.away)}${esc(m.away)}${ko}</span><span class="fxmeta">${fmtTime(m.utcDate)}</span></div>`;
+      return `<div class="fxrow"><span class="fxteams"><span class="th">${flag(m.home)}${esc(m.home)}</span><span class="tc" style="color:var(--ink);font-weight:600">${m.homeScore??0}–${m.awayScore??0}</span><span class="ta">${flag(m.away)}${esc(m.away)}${ko}</span></span><span class="fxmeta">${fmtTime(m.utcDate)}</span></div>`;
     }).join('')+'</div>';
   }
   body.innerHTML=h;
@@ -893,32 +1288,48 @@ function render(d){
     ? 'Level on teams still in? The higher total survival value ranks first.'
     : 'Level on '+unit.toLowerCase()+'? Most teams still in breaks the tie.';
   document.getElementById('lbBody').innerHTML=board.map((p,i)=>{
-    const tied=lbm!=='survival' && ((i>0&&board[i-1].score===p.score)||(i<board.length-1&&board[i+1].score===p.score));
+    const isSurv=lbm==='survival', al=p.alive_teams||0;
+    // Match the stated rule (and the backend + forecast): level on points/both is split by teams still in.
+    // Only a genuine dead-heat — same score AND same teams-in — is shown as joint/"tied".
+    const rank=1+board.filter(q=> q.score>p.score || (!isSurv && q.score===p.score && (q.alive_teams||0)>al)).length;
+    const tied=!isSurv && board.some((q,j)=> j!==i && q.score===p.score && (q.alive_teams||0)===al);
+    const xtra=Math.round(((p.live||0)+(p.bet_potential||0))*100)/100;       // live + open-bet upside, combined
+    const canBreak=(lbm==='points'||lbm==='hybrid') && xtra>0;
     return `
-    <div class="row ${i===0&&p.score>0?'lead':''}">
-      <div class="rank">${i+1}</div>
-      <div><div class="pname">${p.name}${tied?' <span class="tiebadge">tied</span>':''}</div><div class="palive">${p.alive_teams}/${p.total_teams} teams still in</div></div>
-      <div class="pscore">${disp(p.score)}<span> ${unit}</span>${(p.live>0 && (lbm==='points'||lbm==='hybrid'))?`<span class="livedelta" title="points from games in play right now">+${p.live} live</span>`:''}</div>
-    </div>`;}).join('')
+    <div class="row ${rank===1&&p.score>0?'lead':''}">
+      <div class="rank">${rank}</div>
+      <div><div class="pname">${esc(p.name)}${tied?' <span class="tiebadge">tied</span>':''}</div><div class="palive">${p.alive_teams}/${p.total_teams} teams still in</div></div>
+      <div class="pscore">${canBreak?`<span class="lbtot" data-lbp="${esc(p.name)}" title="live points + open-bet upside — tap for where it comes from">+${xtra} ▾</span>`:''}${disp(p.score)}<span> ${unit}</span></div>
+    </div>${canBreak?`<div class="lbbd" data-lbp="${esc(p.name)}"${LBBD.has(p.name)?'':' hidden'}>${lbBreakdown(p)}</div>`:''}`;}).join('')
     + (board.length>1?`<div class="tbcap">${tbrule}</div>`:'');
+  // expand/collapse a row's "where could these points come from" breakdown; state kept across the 30s refresh
+  const _lbb=document.getElementById('lbBody');
+  if(_lbb) _lbb.onclick=(e)=>{ const c=e.target.closest&&e.target.closest('.lbtot'); if(!c) return;
+    const nm=c.getAttribute('data-lbp');
+    _lbb.querySelectorAll('.lbbd').forEach(pan=>{ if(pan.getAttribute('data-lbp')!==nm) return;
+      if(pan.hasAttribute('hidden')){ pan.removeAttribute('hidden'); LBBD.add(nm); } else { pan.setAttribute('hidden',''); LBBD.delete(nm); } }); };
   // player cards
   document.getElementById('playersBody').innerHTML=d.players.map(p=>`
-    <div class="pcard"><h3>${p.name}<span class="pts">${p.points} pts${p.live>0?` <span style="color:#fff;background:#1f8f4e;border-radius:6px;padding:1px 6px;font-size:.82em">+${p.live} live</span>`:''} · ${p.alive_teams}/${p.total_teams} in</span></h3>
+    <div class="pcard"><h3>${esc(p.name)}<span class="pts">${p.points} pts${p.live>0?` <span style="color:#fff;background:#1f8f4e;border-radius:6px;padding:1px 6px;font-size:.82em">+${p.live} live</span>`:''} · ${p.alive_teams}/${p.total_teams} in</span></h3>
+    ${p.bet_potential>0?`<div style="font-size:12px;color:var(--muted);margin:-2px 0 6px">🎲 ${p.bets_open||''} open bet${p.bets_open===1?'':'s'}${p.wager_held>0?` · ${p.wager_held} riding`:''} — would add <b style="color:var(--gold)">+${p.bet_potential}</b> if they all win <span style="opacity:.75">(only counts when a bet settles)</span></div>`:''}
       <div class="tl">${p.teams.map(t=>`
         <div class="trow ${t.status==='out'?'out':''}">
           <span class="dot" style="background:${TIER[t.tier]}"></span>
-          <span>${flag(t.name)}${t.name}<span class="stg"> · ${t.record} · ${STAGE_LABEL[t.stage]||t.stage}</span></span>
-          <span class="stg">G${t.group}</span>
-          <span class="tp" title="points ${t.name} has earned ${p.name}">${t.points}</span>
+          <span>${flag(t.name)}${esc(t.name)}<span class="stg"> · ${t.record} · ${STAGE_LABEL[t.stage]||t.stage}</span></span>
+          <span class="stg">G${esc(t.group)}</span>
+          <span class="tp" title="points ${esc(t.name)} has earned ${esc(p.name)}">${t.points}${t.live>0?` <span class="livedelta" title="includes +${t.live} from a game in play right now">+${t.live} live</span>`:''}</span>
         </div>`).join('')}</div>
     </div>`).join('');
   // groups
   const gb=document.getElementById('groupsBody');
+  const poolTeams=[...new Set(d.groups.flatMap(g=>g.table.filter(r=>!r.owner||r.owner==='—'||r.owner==='-').map(r=>r.team)))];
+  const poolNoteEl=document.getElementById('groupsPoolNote');
+  if(poolNoteEl) poolNoteEl.innerHTML = poolTeams.length?('🎱 <b style="color:var(--ink)">Pool teams (no owner):</b> '+poolTeams.map(esc).join(', ')+' — they score for <b>no one</b>. You only ever earn your own team\'s points.'):'';
   gb.innerHTML = d.groups.length? d.groups.map(g=>`
     <table><caption>${/^group/i.test(g.group)?g.group:"Group "+g.group}</caption>
       <tr><th>#</th><th>Team</th><th>Owner</th><th>Pld</th><th>GD</th><th>Pts</th></tr>
       ${g.table.map(r=>`<tr class="${r.position<=2?'qual':''}">
-        <td class="n">${r.position}</td><td>${flag(r.team)}${r.team}</td><td class="owner">${r.owner}</td>
+        <td class="n">${r.position}</td><td>${flag(r.team)}${esc(r.team)}</td><td class="owner">${esc(r.owner)}</td>
         <td class="n">${r.playedGames}</td><td class="n">${r.goalDifference>0?'+':''}${r.goalDifference}</td>
         <td class="n"><b>${r.points}</b></td></tr>`).join('')}
     </table>`).join('') : '<div class="empty">Group tables appear once the group stage kicks off (11 June).</div>';
@@ -959,11 +1370,11 @@ function bracketCard(m){
   const done=isDone(m.status), hw=m.winner==='HOME', aw=m.winner==='AWAY';
   const show=done||isLive;
   const sc=home=>show?((home?m.homeScore:m.awayScore)??0):'';
-  const foot=isLive?'<div class="blive"><span class="pd"></span>LIVE</div>':(done?'':`<div class="btime">${fmtTime(m.utcDate)}</div>`);
+  const foot=isLive?`<div class="blive"><span class="pd"></span>${liveClock(m)}</div>`:(done?'':`<div class="btime">${fmtTime(m.utcDate)}</div>`);
   const konote=koNote(m)?`<div class="bnote">${koNote(m)}</div>`:'';
   return `<div class="bcard">
-    <div class="brow ${hw?'win':''} ${done&&aw?'lose':''}"><span class="bteam">${flag(m.home)}${m.home}<small>${m.homeOwner}</small></span><span class="bsc">${sc(true)}</span></div>
-    <div class="brow ${aw?'win':''} ${done&&hw?'lose':''}"><span class="bteam">${flag(m.away)}${m.away}<small>${m.awayOwner}</small></span><span class="bsc">${sc(false)}</span></div>
+    <div class="brow ${hw?'win':''} ${done&&aw?'lose':''}"><span class="bteam">${flag(m.home)}${esc(m.home)}<small>${esc(m.homeOwner)}</small></span><span class="bsc">${sc(true)}</span></div>
+    <div class="brow ${aw?'win':''} ${done&&hw?'lose':''}"><span class="bteam">${flag(m.away)}${esc(m.away)}<small>${esc(m.awayOwner)}</small></span><span class="bsc">${sc(false)}</span></div>
     ${konote}
     ${wpBar3(m,isLive)}
     ${foot}
@@ -986,7 +1397,7 @@ function winProb(h,a,hs,as_,inplay){
 function wpBar3(m,live){
   if(isDone(m.status)||!m.home||!m.away||(COMP[m.home]==null&&COMP[m.away]==null))return '';
   const p=winProb(m.home,m.away,m.homeScore,m.awayScore,live), R=x=>Math.round(x*100);
-  return `<div class="wp" title="${live?'live ':''}win chance — ${m.home} ${R(p.h)}% · draw ${R(p.d)}% · ${m.away} ${R(p.a)}%"><i style="width:${p.h*100}%;background:var(--t2)"></i><i style="width:${p.d*100}%;background:#3a4a40"></i><i style="width:${p.a*100}%;background:var(--gold)"></i></div><div class="wppct"><span>${R(p.h)}%</span><span style="text-align:center">draw ${R(p.d)}%</span><span style="text-align:right">${R(p.a)}%</span></div>`;
+  return `<div class="wp" title="${live?'live ':''}win chance — ${esc(m.home)} ${R(p.h)}% · draw ${R(p.d)}% · ${esc(m.away)} ${R(p.a)}%"><i style="width:${p.h*100}%;background:var(--t2)"></i><i style="width:${p.d*100}%;background:#3a4a40"></i><i style="width:${p.a*100}%;background:var(--gold)"></i></div><div class="wppct"><span>${R(p.h)}%</span><span style="text-align:center">draw ${R(p.d)}%</span><span style="text-align:right">${R(p.a)}%</span></div>`;
 }
 function matchRow(m){
   const live=m.status==='IN_PLAY'||m.status==='PAUSED';
@@ -994,13 +1405,13 @@ function matchRow(m){
   const score=(done||live)?`${m.homeScore??0}–${m.awayScore??0}`:'v';
   const kn=koNote(m);
   const knEl=kn?`<div class="konote">${kn}</div>`:'';
-  const mid=live?`<span class="live">● LIVE</span>`:(done?`<div class="sc">${score}</div>${knEl}`:`<div class="time">${fmtTime(m.utcDate)}</div>`);
+  const mid=live?`<span class="live">● ${liveClock(m)}</span>`:(done?`<div class="sc">${score}</div>${knEl}`:`<div class="time">${fmtTime(m.utcDate)}</div>`);
   const grp=(m.group||'').replace('GROUP_','').trim();
   const left=m.stage!=='GROUP_STAGE'?`${STAGE_LABEL[m.stage]||m.stage}`:(grp?`Group ${grp}`:'');
   return `<div>${left?`<div class="mstage">${left}</div>`:''}<div class="match">
-    <div class="t home">${flag(m.home)}${m.home||'TBD'}<span class="o">${m.homeOwner||''}</span></div>
+    <div class="t home">${flag(m.home)}${esc(m.home||'TBD')}<span class="o">${esc(m.homeOwner||'')}</span></div>
     <div class="mmid">${live?`<div class="sc">${score}</div>`+mid:mid}</div>
-    <div class="t away">${flag(m.away)}${m.away||'TBD'}<span class="o">${m.awayOwner||''}</span></div>
+    <div class="t away">${flag(m.away)}${esc(m.away||'TBD')}<span class="o">${esc(m.awayOwner||'')}</span></div>
   </div>${wpBar3(m,live)}</div>`;
 }
 
@@ -1009,12 +1420,15 @@ function fmtUpdated(s){if(!s||s==='pre-tournament')return 'pre-tournament (sampl
 function fmtTime(s){const d=new Date(s);return isNaN(d)?'TBC':d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
 function dayKey(s){const d=new Date(s);return isNaN(d)?'TBC':d.toLocaleDateString([],{weekday:'short',day:'numeric',month:'short'});}
 
-document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+function activateTab(s){
+  const t=document.querySelector('.tab[data-s="'+s+'"]'); if(!t) return;
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
   document.querySelectorAll('section').forEach(x=>x.classList.remove('on'));
-  t.classList.add('on');document.getElementById(t.dataset.s).classList.add('on');
-  if(t.dataset.s==='bets' && STATUS.wagering_enabled && !document.getElementById('betWho')) renderBets();
-});
+  t.classList.add('on'); document.getElementById(s).classList.add('on');
+  try{ localStorage.setItem('wc26_tab', s); }catch(e){}      // remember the tab so a refresh keeps you here
+  if(s==='bets' && STATUS.wagering_enabled && !document.getElementById('betWho')) renderBets();
+}
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>activateTab(t.dataset.s));
 (function(){ const mb=document.getElementById('menuBtn'), md=document.getElementById('menuDrop');
   mb.onclick=e=>{ e.stopPropagation(); md.classList.toggle('open'); };
   md.addEventListener('click',()=>md.classList.remove('open'));
@@ -1036,7 +1450,7 @@ function leaderCells(lb,done){
   const sm=STATUS.scoring_mode||'hybrid';
   const cell=(label,mode,unit,showlive)=>{const w=(lb[mode]||[])[0];
     const lv=(showlive && !done && w && w.live>0)?`<div class="wlive"><i>▲</i> +${w.live} live</div>`:'';
-    return `<div class="wcard"><div class="l">${label} ${done?'WINNER 🏆':'LEADER'}</div><div class="nm">${w?w.name:'—'}</div><div class="sc">${w?w.score+' '+unit:''}</div>${lv}</div>`;};
+    return `<div class="wcard"><div class="l">${label} ${done?'WINNER 🏆':'LEADER'}</div><div class="nm">${w?esc(w.name):'—'}</div><div class="sc">${w?w.score+' '+unit:''}</div>${lv}</div>`;};
   if(sm==='points') return [cell('POINTS','points','pts',true)];
   if(sm==='survival') return [cell('SURVIVAL','survival','in',false)];
   return [cell('POINTS','points','pts',true),cell('BOTH','hybrid','total',true),cell('SURVIVAL','survival','in',false)];
@@ -1062,13 +1476,13 @@ function renderScoringRules(d){
     +'<div><div style="font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:3px">Points (per team)</div>'
     +'<table style="width:100%;font-size:12.5px;border-collapse:collapse">'
     +row('Each goal scored',`+${SC.per_goal}`)+row('Win',`+${SC.win}`)+row('Draw',`+${SC.draw}`)+row('Clean sheet',`+${SC.clean_sheet}`)
-    +order.filter(k=>SB[k]).map(k=>row('Reach '+(LBL[k]||k)+' <span style="color:var(--muted)">bonus</span>',`+${SB[k]}`)).join('')
+    +''  /* stage progression is rewarded ONCE, via Survival (right) — POINTS has no separate "reach the next round" bonus */
     +'</table></div>'
     +'<div><div style="font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:3px">Survival (furthest stage)</div>'
     +'<table style="width:100%;font-size:12.5px;border-collapse:collapse">'
     +order.filter(k=>SV[k]).map(k=>row(LBL[k]||k,SV[k])).join('')
     +'</table></div></div>'
-    +'<div style="background:#0a1f15;border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-top:10px;font-size:12px"><b style="color:var(--gold)">Worked example.</b> Win a group game 2–0 → <b>+'+(2*(SC.per_goal||1))+'</b> goals, <b>+'+SC.win+'</b> win, <b>+'+SC.clean_sheet+'</b> clean sheet = <b>'+(2*(SC.per_goal||1)+SC.win+SC.clean_sheet)+' pts</b>'+(SB.QUARTER_FINALS?'. The same win in the quarter-final also adds the <b>+'+SB.QUARTER_FINALS+'</b> QF bonus':'')+'. Going all the way and lifting the trophy adds the <b>+'+(SB.WINNER||0)+'</b> champion bonus on top.</div>'
+    +'<div style="background:#0a1f15;border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-top:10px;font-size:12px"><b style="color:var(--gold)">Worked example.</b> Win a group game 2–0 → <b>+'+(2*(SC.per_goal||1))+'</b> goals, <b>+'+SC.win+'</b> win, <b>+'+SC.clean_sheet+'</b> clean sheet = <b>'+(2*(SC.per_goal||1)+SC.win+SC.clean_sheet)+' pts</b>. Points come purely from goals, wins and clean sheets. <b>Going deep is rewarded by Survival</b> (right): reaching the final is worth <b>'+(SV.FINAL||85)+'</b> and lifting the trophy <b>'+(SV.WINNER||135)+'</b> — by far the biggest prize.</div>'
     +bothEx
     +'<div style="color:var(--muted);font-size:11.5px;margin-top:10px">Bonuses count your <b>furthest</b> round only — they don\'t stack per round, and winning the tournament is worth by far the most. A knockout tie won on <b>penalties counts as a win</b> (the loser takes the loss). The <b>3rd-place play-off</b> earns points but no extra survival — both teams are already out at the semi. <b>Survival</b> takes your furthest stage\'s value and also ranks on teams still alive. <b>Both</b> = Points + Survival added together. A green <b>+N live</b> next to a score is the points your teams are earning from games <b>in play right now</b> — it&#39;s provisional and settles the moment the game ends (a disallowed goal takes it back off).</div>'
     +'</div>';
@@ -1082,7 +1496,7 @@ function renderOverview(d){
   const fx=d.fixtures||[], st=d.stats||{}, lb=d.leaderboards||{}, champ=d.champion||[];
   const done=(st.teams_remaining<=1 && st.matches_played>0);
   const live=fx.filter(m=>['IN_PLAY','PAUSED','LIVE','SUSPENDED'].includes(m.status));
-  const own=o=>(o&&o!=='—'&&o!=='-')?`<small>${o}</small>`:'';
+  const own=o=>(o&&o!=='—'&&o!=='-')?`<small>${esc(o)}</small>`:'';
   let html='';
   if(d.champion_decided){
     const c=d.champion_decided;
@@ -1102,7 +1516,7 @@ function renderOverview(d){
       <div class="wbnav">${multi?'<button class="warrow" id="winPrev">‹</button>':'<span></span>'}
         <div class="wbk">🏆 ${s.label} winner</div>
         ${multi?'<button class="warrow" id="winNext">›</button>':'<span></span>'}</div>
-      <div class="wbteam">${s.player}</div>
+      <div class="wbteam">${esc(s.player)}</div>
       <div class="wbwin" style="color:var(--gold)">${s.score}</div>${s.note?`<div style="color:var(--muted);font-size:11.5px;margin-top:5px;line-height:1.45;max-width:340px;margin-left:auto;margin-right:auto">${esc(s.note)}</div>`:''}${dots}</div>`;
   }
   // SUMMARY digest (mirrors the Discord 'post summary')
@@ -1115,7 +1529,7 @@ function renderOverview(d){
   html+='<div class="ovsec"><div class="ovh">🔴 Live now</div>';
   if(live.length){
     html+='<div class="livegrid">'+live.map(m=>`<div class="livecard"><span class="livedot"></span>LIVE${m.minute?" "+m.minute+"'":""}${m.stage&&m.stage!=='GROUP_STAGE'?' · '+(STAGE_LABEL[m.stage]||m.stage):''}
-      <div class="lmatch"><span>${flag(m.home)}${m.home}${own(m.homeOwner)}</span><span class="lsc">${m.homeScore??0}–${m.awayScore??0}</span><span class="lr">${flag(m.away)}${m.away}${own(m.awayOwner)}</span></div></div>`).join('')+'</div>';
+      <div class="lmatch"><span>${flag(m.home)}${esc(m.home)}${own(m.homeOwner)}</span><span class="lsc">${m.homeScore??0}–${m.awayScore??0}</span><span class="lr">${flag(m.away)}${esc(m.away)}${own(m.awayOwner)}</span></div>${liveBreakLine(m)}</div>`).join('')+'</div>';
   } else {
     html+='<div class="empty">No games in play right now — live scores appear here the moment a match kicks off.</div>';
   }
@@ -1141,7 +1555,7 @@ function renderOverview(d){
         const where=m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):('Group '+(m.group||'?'));
         const kn=koNote(m);
         return `<div class="mdcard${liveN?' mdlive':''}${fin?' mdfin':''}"><div class="mdmeta">${where} · ${tag}${kn?' · '+kn:''}</div>
-          <div class="mdteams"><span>${flag(m.home)}${m.home}${own(m.homeOwner)}</span><span class="mdsc">${sc}</span><span class="mdr">${flag(m.away)}${m.away}${own(m.awayOwner)}</span></div></div>`;
+          <div class="mdteams"><span>${flag(m.home)}${esc(m.home)}${own(m.homeOwner)}</span><span class="mdsc">${sc}</span><span class="mdr">${flag(m.away)}${esc(m.away)}${own(m.awayOwner)}</span></div></div>`;
       }).join('')+'</div></div>';
     }
   }
@@ -1168,6 +1582,13 @@ function renderOverview(d){
     +(st.top_scorer_player?`<div class="statcard"><div class="l">MOST GOALS · PLAYER</div><div class="v">${st.top_scorer_player} <small>${st.top_scorer_player_goals}</small></div></div>`:'')
     +'</div></div>';
   document.getElementById('ovBody').innerHTML=html;
+  // keep any expanded live breakdowns open across the 30s auto-refresh (click fires BEFORE the native toggle,
+  // so det.open is the OLD state). Property assignment, not addEventListener — renderOverview runs often.
+  const _ovb=document.getElementById('ovBody');
+  if(_ovb) _ovb.onclick=(e)=>{ const sm=e.target.closest&&e.target.closest('summary'); if(!sm) return;
+    const det=sm.parentElement; if(!det||!det.classList.contains('livebd')) return;
+    const k=det.getAttribute('data-bd'); if(!k) return;
+    if(det.open) LIVEBD.delete(k); else LIVEBD.add(k); };
   // carousel arrows
   const wp=document.getElementById('winPrev'), wn=document.getElementById('winNext');
   if(wp) wp.onclick=()=>{ const n=winSlides(d).length; WINSLIDE=(WINSLIDE-1+n)%n; renderOverview(d); };
@@ -1194,7 +1615,7 @@ function winOddsRows(d,mode){
     const lbk = mode==='pts'?'points':(mode==='both'?'hybrid':'survival');
     const rows=(d.leaderboards||{})[lbk]||[]; const max=Math.max(1,...rows.map(r=>r.score||0));
     return '<div style="color:var(--muted);font-size:12.5px;margin:0 0 8px">Tournament over — this is the <b>final result</b>.</div>'
-      +rows.map((r,i)=>`<div class="oddrow"><div class="nm">${i===0?'🏆 ':''}${r.name}</div><div class="oddbar"><i style="width:${Math.round(100*(r.score||0)/max)}%;${i===0?'':'opacity:.55'}"></i></div><div class="pct" style="color:${i===0?'var(--gold)':'var(--ink)'}">${r.score}</div></div>`).join('');
+      +rows.map((r,i)=>`<div class="oddrow"><div class="nm">${i===0?'🏆 ':''}${esc(r.name)}</div><div class="oddbar"><i style="width:${Math.round(100*(r.score||0)/max)}%;${i===0?'':'opacity:.55'}"></i></div><div class="pct" style="color:${i===0?'var(--gold)':'var(--ink)'}">${r.score}</div></div>`).join('');
   }
   if(mode==='surv' || mode==='survival'){
     const c=(d.champion||[]); if(!c.length) return '<div class="empty">Odds appear once the draw is in.</div>';
@@ -1243,6 +1664,8 @@ function renderBettingStats(d){
   const card=(label,o,fmt,colour)=> '<div class="statcard"><div class="l">'+label+'</div><div class="v" style="color:'+(colour||'var(--ink)')+'">'+(o?esc(o.player):'—')+'</div><div class="l">'+(o?fmt(o):'—')+'</div></div>';
   let h='<h4 style="font-family:\'Anton\';font-weight:400;color:var(--gold);text-transform:uppercase;font-size:15px;margin:22px 0 8px">💷 Betting</h4>';
   h+=bestBetsHTML(d);
+  const punter=S.slice().sort((a,b)=>b.net-a.net).find(x=>x.bets>0 && x.net>0);   // most net betting profit
+  if(punter) h+='<div style="margin:6px 0 10px;padding:10px 12px;border:1px solid var(--gold);border-radius:10px;background:#1b1606;font-size:13.5px;color:var(--ink)">🏆 <b>Punter of the Tournament:</b> '+esc(punter.player)+' — <b style="color:var(--gold)">+'+punter.net+'</b> net from betting.</div>';
   h+='<div class="statgrid">'
     + card('MOST POINTS WAGERED', L.most_wagered, o=>o.staked+' staked over '+o.bets+' bet'+(o.bets===1?'':'s'))
     + card('BIGGEST WINNER', L.most_won, o=>'+'+o.won+' points won','var(--gold)')
@@ -1289,7 +1712,7 @@ function renderOdds(d){
   document.getElementById('oddsBody').innerHTML='<div style="color:var(--muted);font-size:13px;margin:4px 0 8px">Live chance each player owns the World Cup winner (from bookmaker odds, updates as teams go out):</div>'+
     champ.map(c=>`<div class="oddrow"><div class="nm">${c.name}</div><div class="oddbar"><i style="width:${Math.round(100*c.odds/max)}%"></i></div><div class="pct">${c.odds}%</div></div>`).join('');
   const smax=Math.max(1,...str.map(s=>s.strength));
-  document.getElementById('strengthBody').innerHTML=str.map(s=>`<div class="oddrow"><div class="nm">${s.name}</div><div class="oddbar"><i style="width:${Math.round(100*s.strength/smax)}%;background:linear-gradient(90deg,var(--t3),var(--t1))"></i></div><div class="pct" style="width:auto;color:var(--ink)">${s.strength}${s.favourites?` · ${s.favourites}★`:''}</div></div>`).join('');
+  document.getElementById('strengthBody').innerHTML=str.map(s=>`<div class="oddrow"><div class="nm">${esc(s.name)}</div><div class="oddbar"><i style="width:${Math.round(100*s.strength/smax)}%;background:linear-gradient(90deg,var(--t3),var(--t1))"></i></div><div class="pct" style="width:auto;color:var(--ink)">${s.strength}${s.favourites?` · ${s.favourites}★`:''}</div></div>`).join('');
   ensureSim(); renderSim(SIMSORT);
   renderChart(d);
 }
@@ -1306,7 +1729,28 @@ function buildHistory(d){
   if(!players.length) return [];
   const fin=(d.fixtures||[]).filter(m=>isDone(m.status)&&m.homeScore!=null&&m.awayScore!=null)
     .slice().sort((a,b)=>String(a.utcDate||'').localeCompare(String(b.utcDate||'')));
+  // ---- "teams still in" over time (matches the Survival leaderboard's alive_teams) ----
+  // A team's status only ever goes alive -> out, so we pin that one transition to a snapshot index:
+  //  • a knockout loser drops at the KO match it lost; • a group-stage casualty drops when the KO stage
+  //  begins (the first KO match), exactly as the server flags it. Teams currently still alive never drop.
+  const curStatus={}; (d.players||[]).forEach(p=>(p.teams||[]).forEach(t=>{ curStatus[t.name]=t.status; }));
+  let firstKoSi=Infinity; const lostKoSi={};
+  fin.forEach((m,i)=>{ const si=i+1;
+    if(m.stage&&m.stage!=='GROUP_STAGE'){
+      if(si<firstKoSi) firstKoSi=si;
+      const sd=m.winner||(m.homeScore>m.awayScore?'HOME':(m.awayScore>m.homeScore?'AWAY':'DRAW'));
+      const loser=sd==='HOME'?m.away:(sd==='AWAY'?m.home:null);
+      if(loser&&(loser in owner)) lostKoSi[loser]=si;
+    }
+  });
+  const outIdx={}; for(const tm in owner){
+    outIdx[tm]=(curStatus[tm]!=='out')?Infinity:(tm in lostKoSi?lostKoSi[tm]:firstKoSi);
+  }
+  const aliveAt=si=>{ const A={}; players.forEach(p=>A[p]=0); for(const tm in owner){ if(outIdx[tm]>si) A[owner[tm]]++; } return A; };
   const base={}, reached={}, hist=[];
+  // baseline: everyone on zero before a ball is kicked, so the line has a "start" anchor and the chart draws
+  // as soon as the very first match finishes (x-axis is labelled start -> now). Survival starts at full squad size.
+  { const a0=aliveAt(0); hist.push({m:0, p:Object.fromEntries(players.map(p=>[p,{pts:0,srv:0,hyb:0,alv:a0[p]}]))}); }
   fin.forEach((m,i)=>{
     const side=m.winner||(m.homeScore>m.awayScore?'HOME':(m.awayScore>m.homeScore?'AWAY':'DRAW'));
     [[m.home,m.homeScore,m.awayScore,'HOME'],[m.away,m.awayScore,m.homeScore,'AWAY']].forEach(([tm,sc,co,which])=>{
@@ -1324,17 +1768,30 @@ function buildHistory(d){
     for(const tm in owner){ let bonus=0,surv=0; const rs=reached[tm];
       if(rs) rs.forEach(s=>{ bonus=Math.max(bonus,SB[s]||0); surv=Math.max(surv,SV[s]||0); });
       P[owner[tm]]+=(base[tm]||0)+bonus; S[owner[tm]]+=surv; }
-    hist.push({m:i+1, p:Object.fromEntries(players.map(p=>[p,{pts:P[p],srv:S[p],hyb:P[p]+S[p]}]))});
+    const A=aliveAt(i+1);
+    hist.push({m:i+1, p:Object.fromEntries(players.map(p=>[p,{pts:P[p],srv:S[p],hyb:P[p]+S[p],alv:A[p]}]))});
   });
+  // Snap the "now" point to the authoritative leaderboard totals so the chart's latest value matches the headline
+  // standings — but SUBTRACT live in-play provisional points. Those are volatile (they appear at kickoff and
+  // vanish if the game turns), so baking them into a settled-history line makes points "appear then go missing".
+  // Settled betting (a won/lost bet) is permanent, so it stays. Live is shown separately by the "+N live" chip.
+  if(hist.length>=2){
+    const lbP=new Map((((d.leaderboards||{}).points)||[]).map(r=>[r.name,r]));
+    const lbH=new Map((((d.leaderboards||{}).hybrid)||[]).map(r=>[r.name,r]));
+    const last=hist[hist.length-1].p;
+    const stable=r=>Math.max(0,Math.round(((r.score||0)-(r.live||0))*100)/100);   // drop the live "+N" so the line is settled-only
+    players.forEach(p=>{ if(last[p]){ const rp=lbP.get(p),rh=lbH.get(p);
+      if(rp) last[p].pts=stable(rp); if(rh) last[p].hyb=stable(rh); } });
+  }
   return hist;
 }
 function renderChart(d){
   const el=document.getElementById('chartBody'); if(!el) return;
   const hist=buildHistory(d).filter(h=>h&&h.p);
-  if(hist.length<2){ el.innerHTML='<div class="empty">Fills in as matches are played — one point per match. Come back once the tournament is under way.</div>'; return; }
+  if(hist.length<2){ el.innerHTML='<div class="empty">Fills in as matches are played — points and survival per round. Come back once the tournament is under way.</div>'; return; }
   const names=Object.keys(hist[hist.length-1].p);
   const n=hist.length, pos=(CHARTVIEW==='pos');
-  const key = CHARTMETRIC==='both'?'hyb':(CHARTMETRIC==='surv'?'srv':'pts');
+  const key = CHARTMETRIC==='both'?'hyb':(CHARTMETRIC==='surv'?'alv':'pts');   // survival view tracks teams-still-in
   const series={}; names.forEach(nm=>series[nm]=[]);
   hist.forEach(h=>{
     if(pos){
@@ -1382,8 +1839,16 @@ function simWinOdds(d,N){
   const SC=(d.scoring&&d.scoring.points)||{}, SV=(d.scoring&&d.scoring.survival)||{};
   const pg=SC.per_goal||1, pw=SC.win||3, pdr=SC.draw||1, pc=SC.clean_sheet||1, SB=SC.stage_bonus||{};
   const players=[...new Set(teamArr.map(t=>t.owner))].filter(o=>o&&o!=='—'&&o!=='-');
+  // current betting net per player (their leaderboard total minus their teams' match points) — the bit the
+  // forecast was missing. The sweepstake is won on the leaderboard, which includes settled bets, so we carry
+  // each player's locked-in betting result into the simulation. Future bets can't be known, so this is fixed.
+  const bnet={}; (d.players||[]).forEach(p=>{ const fb=(p.teams||[]).reduce((s,t)=>s+(t.points||0),0); bnet[p.name]=(p.points||0)-fb; });
   if(!players.length) return null;
   const wS={},wP={},wB={},sumPts={}; players.forEach(p=>{wS[p]=0;wP[p]=0;wB[p]=0;sumPts[p]=0;});
+  // Credit a simulation win using the SAME tie-break as the leaderboard (most teams still in), and split a
+  // genuine dead-heat (identical score AND identical teams-in) equally — so ties never bias to array order.
+  const award=(wins,cmp)=>{ const ranked=players.slice().sort(cmp), top=ranked[0];
+    const lead=ranked.filter(p=>cmp(p,top)===0), share=1/lead.length; lead.forEach(p=>wins[p]+=share); };
   // deterministic seed from the actual state, so identical data always gives identical odds
   // (no run-to-run wobble) and the forecast only moves once a real result changes the state.
   let seed=(((d.stats&&d.stats.matches_played)||0)*100003 + teamArr.length)>>>0;
@@ -1453,10 +1918,12 @@ function simWinOdds(d,N){
     const svp=n=>SV[by[n].out?by[n].outStage:stageReached[n]]||0;
     const P={},PT={},AL={}; players.forEach(p=>{P[p]=0;PT[p]=0;AL[p]=0;});
     teamArr.forEach(t=>{const o=t.owner; if(PT[o]===undefined)return; PT[o]+=pts[t.name]; P[o]+=svp(t.name); if(alive[t.name])AL[o]++;});
+    players.forEach(p=>{ PT[p]+=(bnet[p]||0); });   // points/both carry betting; survival (wS) stays bet-free
     players.forEach(p=>sumPts[p]+=PT[p]);
-    wP[players.slice().sort((a,b)=>PT[b]-PT[a])[0]]++;
-    wS[players.slice().sort((a,b)=>AL[b]-AL[a]||P[b]-P[a])[0]]++;
-    wB[players.slice().sort((a,b)=>(PT[b]+P[b])-(PT[a]+P[a]))[0]]++;
+    const ez=x=>Math.abs(x)<1e-9?0:x;
+    award(wP, (a,b)=> ez(PT[b]-PT[a]) || (AL[b]-AL[a]));                 // points: teams-in breaks the tie
+    award(wS, (a,b)=> (AL[b]-AL[a]) || ez(P[b]-P[a]));                   // survival: teams-in, then survival pts
+    award(wB, (a,b)=> ez((PT[b]+P[b])-(PT[a]+P[a])) || (AL[b]-AL[a]));   // both: teams-in breaks the tie
   }
   return players.map(p=>({name:p,surv:100*wS[p]/N,pts:100*wP[p]/N,both:100*wB[p]/N,proj:sumPts[p]/N})).sort((a,b)=>b.both-a.both);
 }
@@ -1492,7 +1959,7 @@ function renderSim(sortKey){
   const rows=SIMRES.slice().sort((a,b)=>(b[sk]||0)-(a[sk]||0));
   const head='<tr style="color:var(--muted);text-align:left"><th style="padding:6px 8px">Player</th>'+
     cols.map(c=>`<th class="simh" data-k="${c.k}" style="cursor:pointer;padding:6px 8px;${c.k===sk?'color:var(--gold)':''}">${c.label}${c.k===sk?' ↓':' ↕'}</th>`).join('')+'</tr>';
-  const body=rows.map(r=>`<tr style="border-top:1px solid var(--line)"><td style="padding:7px 8px;font-weight:600">${r.name}</td>`+
+  const body=rows.map(r=>`<tr style="border-top:1px solid var(--line)"><td style="padding:7px 8px;font-weight:600">${esc(r.name)}</td>`+
     cols.map(c=>c.k==='proj'?`<td style="padding:7px 8px">${Math.round(r.proj)}</td>`:`<td style="padding:7px 8px;${c.k===sk?'color:var(--gold);font-weight:700':''}">${r[c.k].toFixed(1)}%</td>`).join('')+'</tr>').join('');
   document.getElementById('simBody').innerHTML='<table style="width:100%;border-collapse:collapse;font-family:Sora;font-size:14px">'+head+body+'</table>';
   document.querySelectorAll('.simh').forEach(h=>h.onclick=()=>renderSim(h.dataset.k));
@@ -1503,8 +1970,13 @@ function renderSim(sortKey){
     : 'A current forecast from 1,500 simulations — results so far locked in, eliminated teams out, only remaining games simulated. Tap a column header to sort.';
 }
 let STATUS={};
+let SESSION={};   // Discord login state for this browser: {logged_in, player, oauth}
 async function refreshStatus(){
   try{ const s=await fetch('/api/status').then(r=>r.json()); if(s&&typeof s==='object'&&s.players!==undefined) STATUS=s; }catch(e){ /* keep last good STATUS so the tabs don't flicker */ }
+  try{ const w=await fetch('/api/whoami').then(r=>r.json()); if(w&&typeof w==='object') SESSION=w; }catch(e){ /* keep last good SESSION */ }
+  try{ window.__betMidStr = STATUS.group_mid ? new Date(STATUS.group_mid*1000).toLocaleDateString(undefined,{day:'numeric',month:'short'}) : ''; }catch(e){ window.__betMidStr=''; }
+  try{ window.__stageCaps = Array.isArray(STATUS.stage_caps)?STATUS.stage_caps:null;
+       window.__stageCapStr = window.__stageCaps ? window.__stageCaps.map(function(s){ return s.label+' — max '+s.cap+(s.from?(' (from '+s.from+')'):''); }).join(' · ') : ''; }catch(e){ window.__stageCapStr=''; }
   const bt=document.getElementById('betsTab'); if(bt) bt.style.display=STATUS.wagering_enabled?'':'none';
   const m=STATUS.scoring_mode||DATA.default_mode||'hybrid';
   const ml={points:'Points',survival:'Survival',hybrid:'Points + survival'}[m]||m;
@@ -1527,6 +1999,10 @@ async function refreshStatus(){
   const caps=STATUS.wager_caps||{}; const mr=document.getElementById('setMaxReturn'), ma=document.getElementById('setMaxAcca');
   if(mr) mr.value=(typeof caps.max_return==='number'&&caps.max_return>0)?caps.max_return:'';
   if(ma) ma.value=caps.max_acca_legs||3;
+  const mpb=document.getElementById('setMaxPending'), mac=document.getElementById('setMaxAccas');
+  if(mpb) mpb.value=(typeof caps.max_pending==='number')?caps.max_pending:'';
+  if(mac) mac.value=(typeof caps.max_active_accas==='number')?caps.max_active_accas:'';
+  if(typeof _fillVoidWho==='function') _fillVoidWho();
   const dh=document.getElementById('setDigestHour'); if(dh) dh.value=(STATUS.digest_hour!=null?STATUS.digest_hour:9);
   const ep=document.getElementById('botEndpoint'); if(ep) ep.textContent=(STATUS.site_url||location.origin)+'/api/discord_interactions';
   if(STATUS.bot_ready){ const ba=document.getElementById('setBotApp'), bt=document.getElementById('setBotToken');
@@ -1642,7 +2118,7 @@ function renderPinList(pins,linked){
   const el=document.getElementById('pinList'); if(!el) return;
   if(!pins||!Object.keys(pins).length){ el.innerHTML=''; return; }
   linked=linked||{};
-  el.innerHTML='<div style="color:var(--muted);font-size:12px;margin-bottom:4px">Send each person their code privately — or DM it via the bot (needs them linked with /notifyme + bot token set). <b>Forgot a code?</b> Tap <b>Reset</b> for just that person (others keep theirs), or they can DM themselves <code>/mypin</code> in Discord. 🔗 = their Discord is linked for betting.</div>'
+  el.innerHTML='<div style="color:var(--muted);font-size:12px;margin-bottom:4px">Send each person their code privately — or tap <b>DM via bot</b> (works once they\u2019ve linked their Discord via <b>Connect Discord</b> or <code>/notifyme</code>, and you\u2019ve set the bot token; the bot can only DM people whose DMs are open). <b>Forgot a code?</b> Tap <b>Reset</b> for just that person (others keep theirs), or they can DM themselves <code>/mypin</code> in Discord. 🔗 = their Discord is linked for betting.</div>'
     +Object.entries(pins).map(([p,c])=>{const lk=!!linked[p];
       return '<div style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:4px;gap:8px;flex-wrap:wrap"><span>'+(lk?'🔗 ':'')+esc(p)+'</span><code style="letter-spacing:2px;color:var(--gold)">'+esc(c)+'</code><span style="display:flex;gap:6px"><button class="mini dmpin" data-p="'+esc(p)+'">DM via bot</button><button class="mini resetpin" data-p="'+esc(p)+'">Reset</button>'+(lk?'<button class="mini unlinkbet" data-p="'+esc(p)+'" style="border-color:#b3343a;color:#ff9a9a">Unlink</button>':'')+'</span></div>';}).join('');
   el.querySelectorAll('.dmpin').forEach(b=>b.onclick=async()=>{
@@ -1684,7 +2160,12 @@ document.getElementById('setWagerLock').onclick=()=>_saveWager({wager_locked:doc
 document.getElementById('setSaveCaps').onclick=()=>{
   const mrv=(document.getElementById('setMaxReturn').value||'').trim();
   const mav=parseInt(document.getElementById('setMaxAcca').value,10);
-  _saveWager({max_return:(mrv===''?'':mrv), max_acca_legs:(isNaN(mav)?3:mav)}, (mrv===''?'No cap on winnings':'Winnings capped at '+mrv)+'; accumulators up to '+(isNaN(mav)?3:Math.max(2,Math.min(10,mav)))+' legs.');
+  const mpv=(document.getElementById('setMaxPending').value||'').trim();
+  const mcv=(document.getElementById('setMaxAccas').value||'').trim();
+  const betsTxt=(mpv===''?'8':mpv)+' open bets';
+  const accaTxt=(mcv===''?'2':mcv)+' open accas'+((mcv==='0')?' (accas off)':'');
+  _saveWager({max_return:(mrv===''?'':mrv), max_acca_legs:(isNaN(mav)?3:mav), max_pending_bets:mpv, max_active_accas:mcv},
+             (mrv===''?'No cap on winnings':'Winnings capped at '+mrv)+'; accumulators up to '+(isNaN(mav)?3:Math.max(2,Math.min(10,mav)))+' legs; each person '+betsTxt+' · '+accaTxt+'.');
 };
 async function _pins(regen){
   const m=document.getElementById('setWagerMsg'); m.textContent='Working…';
@@ -1696,6 +2177,98 @@ async function _pins(regen){
 }
 document.getElementById('setGenPins').onclick=()=>_pins(false);
 document.getElementById('setRegenPins').onclick=()=>{ if(confirm('Regenerate ALL passcodes? Everyone will need their new code.')) _pins(true); };
+// ---- Cancel bets (admin) ----
+function _fillVoidWho(){
+  const sel=document.getElementById('setVoidWho'); if(!sel) return;
+  const players=(DATA&&DATA.players?DATA.players:[]).map(p=>p&&p.name?p.name:p).filter(Boolean);
+  if(players.length && sel.options.length!==players.length){
+    sel.innerHTML=players.map(p=>'<option>'+esc(p)+'</option>').join('');
+  }
+}
+function _betRowLabel(w){
+  if(Array.isArray(w.legs)&&w.legs.length) return '🎰 Accumulator ('+w.legs.length+' legs)';
+  const sel=w.selection==='DRAW'?'the draw':(w.pick_label||w.selection||'a result');
+  return esc(String(sel));
+}
+async function _loadBets(){
+  const who=document.getElementById('setVoidWho').value; const m=document.getElementById('setVoidMsg');
+  const box=document.getElementById('voidList'); if(!who){ m.textContent='Pick a player first.'; return; }
+  m.textContent='Loading '+who+'\u2019s open bets…'; box.innerHTML='';
+  try{
+    const all=await fetch('/api/wagers?player='+encodeURIComponent(who)).then(r=>r.json());
+    const open=(Array.isArray(all)?all:(all.wagers||[])).filter(w=>w.status==='pending'&&!w.credit);
+    if(!open.length){ box.innerHTML='<div style="color:var(--muted)">No open bets for '+esc(who)+'.</div>'; m.textContent=''; return; }
+    box.innerHTML=open.map(w=>'<div style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:4px;gap:8px;flex-wrap:wrap"><span>'+_betRowLabel(w)+' · stake <b>'+(w.stake)+'</b>'+(w.return?(' → returns '+w.return):'')+'</span><button class="mini voidone" data-id="'+esc(w.id)+'" style="border-color:#b3343a;color:#ff9a9a">Cancel &amp; refund</button></div>').join('')
+      +'<button class="mini voidall" style="margin-top:6px;border-color:#b3343a;color:#ff9a9a">Cancel ALL '+esc(who)+'\u2019s open bets ('+open.length+')</button>';
+    box.querySelectorAll('.voidone').forEach(b=>b.onclick=()=>_void({id:b.dataset.id}, 'that bet'));
+    box.querySelector('.voidall').onclick=()=>{ if(confirm('Cancel ALL of '+who+'\u2019s open bets and refund the stakes?')) _void({player:who}, 'all '+who+'\u2019s open bets'); };
+    m.textContent='';
+  }catch(e){ m.textContent='Could not load bets.'; }
+}
+async function _void(target, what){
+  const m=document.getElementById('setVoidMsg'); m.textContent='Cancelling '+what+'…';
+  try{ const j=await fetch('/api/wager_void',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({admin_key:ADMINKEY},target))}).then(r=>r.json());
+    if(j.need_key){ ADMINKEY=''; m.textContent='Session expired — reopen Settings and unlock again.'; }
+    else if(j.ok){ m.textContent='Cancelled '+j.voided+' bet'+(j.voided===1?'':'s')+', refunded '+j.stake_refunded+' point'+(j.stake_refunded===1?'':'s')+'.'; _loadBets(); refreshStatus(); load(); }
+    else m.textContent=j.error||'Could not cancel.';
+  }catch(e){ m.textContent='Could not reach the server.'; }
+}
+document.getElementById('setLoadBets').onclick=_loadBets;
+document.getElementById('setLogoutAll').onclick=async()=>{
+  if(!confirm('Log EVERYONE out of Discord login? They\u2019ll each need to log in again. Passcodes are unaffected.')) return;
+  const m=document.getElementById('setVoidMsg'); m.textContent='Logging everyone out…';
+  try{ const j=await fetch('/api/logout_all',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:ADMINKEY})}).then(r=>r.json());
+    if(j.need_key){ ADMINKEY=''; m.textContent='Session expired — reopen Settings and unlock again.'; }
+    else m.textContent=j.ok?'Done — everyone has been logged out of Discord login.':(j.error||'Could not do that.');
+  }catch(e){ m.textContent='Could not reach the server.'; }
+};
+// ---- Accounts & access (admin) ----
+function _acctMsg(t){ const m=document.getElementById('acctMsg'); if(m) m.textContent=t; }
+async function _acctShow(){
+  const box=document.getElementById('acctList'), bl=document.getElementById('acctBlocked');
+  _acctMsg('Loading linked accounts…'); if(box) box.innerHTML=''; if(bl) bl.innerHTML='';
+  try{
+    const j=await fetch('/api/wager_links_admin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({admin_key:ADMINKEY})}).then(r=>r.json());
+    if(j.need_key){ ADMINKEY=''; _acctMsg('Session expired — reopen Settings and unlock again.'); return; }
+    if(!j.ok){ _acctMsg(j.error||'Could not load accounts.'); return; }
+    if(!j.links||!j.links.length){ box.innerHTML='<div style="color:var(--muted)">Nobody has linked a Discord account yet (everyone\u2019s on passcodes).</div>'; }
+    else{
+      box.innerHTML=j.links.map(L=>{
+        const warn = (L.member===false) ? ' <span style="color:#ff9a9a">⚠ not in your Discord</span>' : (L.member===true ? ' <span style="color:#7ee787">✓ in server</span>' : '');
+        return '<div style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:4px;gap:8px;flex-wrap:wrap"><span><b>'+esc(L.player)+'</b> ← <code style="font-size:11px">'+esc(L.discord_id)+'</code>'+warn+'</span><span style="display:flex;gap:6px"><button class="mini acctUnlink" data-id="'+esc(L.discord_id)+'">Unlink</button><button class="mini acctBlock" data-id="'+esc(L.discord_id)+'" style="border-color:#b3343a;color:#ff9a9a">Block</button></span></div>';
+      }).join('');
+      box.querySelectorAll('.acctUnlink').forEach(b=>b.onclick=()=>_acctUnlink(b.dataset.id));
+      box.querySelectorAll('.acctBlock').forEach(b=>b.onclick=()=>_acctBlock(b.dataset.id,'block'));
+    }
+    _renderBlocked(j.blocked||[]);
+    _acctMsg(j.gate ? 'Members-only claiming is ON — only people in your Discord can claim.' : 'Members-only claiming is OFF (set a bot token + server ID to enable).');
+  }catch(e){ _acctMsg('Could not reach the server.'); }
+}
+function _renderBlocked(list){
+  const bl=document.getElementById('acctBlocked'); if(!bl) return;
+  if(!list.length){ bl.innerHTML='<span style="color:var(--muted)">No blocked accounts.</span>'; return; }
+  bl.innerHTML='<b>Blocked:</b> '+list.map(id=>'<span style="display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:6px;padding:2px 6px;margin:2px"><code style="font-size:11px">'+esc(id)+'</code><button class="mini acctUnblock" data-id="'+esc(id)+'" style="padding:0 6px">unblock</button></span>').join('');
+  bl.querySelectorAll('.acctUnblock').forEach(b=>b.onclick=()=>_acctBlock(b.dataset.id,'unblock'));
+}
+async function _acctUnlink(did){
+  if(!confirm('Unlink this Discord account? It frees the name so it can be claimed again.')) return;
+  _acctMsg('Unlinking…');
+  try{ const j=await fetch('/api/wager_unlink',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({discord_id:did,admin_key:ADMINKEY})}).then(r=>r.json());
+    if(j.need_key){ ADMINKEY=''; _acctMsg('Session expired — unlock again.'); return; }
+    _acctMsg(j.ok?('Unlinked '+(j.removed||0)+' account(s).'):'Could not unlink.'); _acctShow();
+  }catch(e){ _acctMsg('Could not reach the server.'); }
+}
+async function _acctBlock(did,action){
+  if(action==='block' && !confirm('Block this Discord account from claiming any name? It also unlinks them now.')) return;
+  _acctMsg(action==='block'?'Blocking…':'Unblocking…');
+  try{ const j=await fetch('/api/wager_block',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({discord_id:did,action:action,admin_key:ADMINKEY})}).then(r=>r.json());
+    if(j.need_key){ ADMINKEY=''; _acctMsg('Session expired — unlock again.'); return; }
+    if(!j.ok){ _acctMsg(j.error||'Could not do that.'); return; }
+    _acctMsg(action==='block'?'Blocked.':'Unblocked.'); _acctShow();
+  }catch(e){ _acctMsg('Could not reach the server.'); }
+}
+document.getElementById('acctShow').onclick=_acctShow;
+document.getElementById('acctBlockBtn').onclick=()=>{ const v=(document.getElementById('acctBlockId').value||'').trim(); if(!/^[0-9]+$/.test(v)){ _acctMsg('Enter the numeric Discord account ID.'); return; } _acctBlock(v,'block'); document.getElementById('acctBlockId').value=''; };
 document.getElementById('setSaveInvite').onclick=async()=>{
   const m=document.getElementById('setInviteMsg'); const inv=document.getElementById('setInvite').value.trim();
   if(inv && !inv.startsWith('https://')){ m.textContent='Invite must start with https:// .'; return; }
@@ -1729,13 +2302,14 @@ function renderDiscord(){
   const b=document.getElementById('discordBody'); if(!b) return;
   let h='';
   if(STATUS.invite){
-    h+='<p style="margin:0 0 12px;font-size:13px;color:var(--ink);opacity:.85">Join the group server to get every kickoff, goal, half-time, full-time, knockout and lead change in the channel — plus the round-by-round draw and the daily summary. Type <code>/notifyme &lt;your name&gt;</code> in the server and the bot will <b>@you</b> on your own teams&#39; events.</p>';
-    h+='<a class="mini cta" href="'+esc(STATUS.invite)+'" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;padding:10px 16px;font-size:14px">💬 Join the group chat</a>';
+    h+='<p style="margin:0 0 12px;font-size:13px;color:var(--ink);opacity:.85">Join the group server to get every kickoff, goal, half-time, full-time, knockout and lead change in the channel — plus the round-by-round draw and the daily summary. Type <code>/notifyme &lt;your name&gt;</code> in the server and the bot will <b>DM you</b> on your own teams&#39; events — or <code>/notifyme all</code> to be DMed every game.</p>';
+    h+='<a class="mini cta" href="/join" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;padding:10px 16px;font-size:14px">💬 Join the group chat</a>';
+    h+='<p style="margin:8px 0 12px;font-size:12px;color:var(--muted)">Share this link — it always points at the latest invite, even if you refresh the Discord one: <b style="color:var(--ink)">'+esc(location.host)+'/join</b></p>';
   } else {
     h+='<p style="margin:0 0 12px;font-size:13px;color:var(--muted)">No Discord invite link has been added yet'+(STATUS.discord?' — alerts are posting to a channel, but there\'s no public join link.':'.')+'</p>';
   }
   h+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">';
-  h+='<div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:8px"><b style="color:var(--ink)">What posts here:</b> kickoffs, goals, half-time, full-time (with extra time &amp; penalties), knockouts, lead changes &amp; rivalries, the draw (round-by-round + final squads), the end-of-tournament wrap-up, and an optional daily summary. With <code>/notifyme</code> you also get personally @-pinged on your teams&#39; events.</div>';
+  h+='<div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:8px"><b style="color:var(--ink)">What posts here:</b> kickoffs, goals, half-time, full-time (with extra time &amp; penalties), knockouts, lead changes &amp; rivalries, the draw (round-by-round + final squads), the end-of-tournament wrap-up, and an optional daily summary. With <code>/notifyme</code> the bot also <b>DMs you</b> on your teams&#39; events (<code>/notifyme all</code> for every game); if your DMs are closed it falls back to an @-ping here.</div>';
   h+='<button class="mini" id="discordSetupBtn">⚙ Discord setup — webhook, invite &amp; bot</button>';
   h+='</div>';
   b.innerHTML=h;
@@ -1819,7 +2393,9 @@ function renderAlerts(){
   if(pTest) pTest.onclick=async()=>{ const who=notifyMe(); const m=document.getElementById('alMsg'); if(!who){m.textContent='Pick your name first.';return;}
     m.textContent='Sending…';
     try{ const j=await fetch('/api/push_test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:who})}).then(r=>r.json());
-      m.textContent=j.ok?'Sent — check your notifications.':('Couldn\'t send: '+(j.error||'try again')); }catch(e){ m.textContent='Couldn\'t send.'; } };
+      if(j.ok&&!j.failed) m.textContent='Sent — check your notifications.';
+      else if(j.ok) m.textContent='Sent to '+j.sent+' device(s); '+j.failed+' failed: '+(j.errors||[]).join(' · ');
+      else m.textContent='Couldn\'t send: '+((j.errors&&j.errors.length)?j.errors.join(' · '):(j.error||'try again')); }catch(e){ m.textContent='Couldn\'t send.'; } };
   const en=document.getElementById('alEnable');
   if(en) en.onclick=async()=>{ try{ await Notification.requestPermission(); }catch(e){} renderAlerts(); };
   const tb=document.getElementById('alTest');

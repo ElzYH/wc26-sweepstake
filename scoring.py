@@ -492,6 +492,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                     ch = wager.live_strength(teams.get(f["home"], {}).get("composite", 0), f["home"], matches)
                     ca = wager.live_strength(teams.get(f["away"], {}).get("composite", 0), f["away"], matches)
                     f["odds"] = wager.match_odds(ch, ca)
+                    f["ouOdds"] = wager.goals_odds(ch, ca)        # Over/Under prices per line (0.5..8.5)
                     f["matchId"] = wager.match_id(m)
                     f["maxStake"] = wager.stage_max_stake(f.get("stage"))
             data["wager_stats"] = wager.stats(wagers)

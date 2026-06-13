@@ -571,6 +571,7 @@ let BETPIN_DRAFT=null;  // what's typed in the passcode box this session — pre
 // Idempotency: one nonce per in-flight bet, reused if a placement is retried after a dropped
 // connection (so the server dedupes instead of double-betting), regenerated only on success.
 let BETNONCE=null, ACCANONCE=null;
+const OULINE={};            // per-match selected Over/Under line (matchId -> '2.5'); the dropdown sets it
 let ALLWAGERS=[];           // all pending bets/accas (any player) — powers the leaderboard + live-game breakdowns
 const LBBD=new Set();       // which leaderboard rows are expanded (by player), kept across the 30s refresh
 function _nonce(){
@@ -579,6 +580,24 @@ function _nonce(){
 }
 function betPin(p){ try{ return localStorage.getItem('wc26_betpin_'+p)||''; }catch(e){ return ''; } }
 function setBetPin(p,v){ try{ if(v) localStorage.setItem('wc26_betpin_'+p,v); else localStorage.removeItem('wc26_betpin_'+p); }catch(e){} }
+function samePick(p, mid, sel, market, line){   // are two picks the exact same selection? (market + line matter for O/U)
+  return !!(p && p.matchId===mid && (p.market||'result')===(market||'result') && p.sel===sel && String(p.line==null?'':p.line)===String(line==null?'':line));
+}
+function ouLineFor(mid){ return OULINE[mid] || '2.5'; }   // default to the most common line
+function ouRowHTML(m){
+  if(!m.ouOdds) return '';
+  const ln=ouLineFor(m.matchId), leg=m.ouOdds[ln];
+  if(!leg) return '';
+  const opts=Object.keys(m.ouOdds).sort((a,b)=>parseFloat(a)-parseFloat(b))
+    .map(k=>'<option value="'+k+'"'+(k===ln?' selected':'')+'>'+k+'</option>').join('');
+  const mkOU=(sel,lbl)=>{ const o=leg[sel]; if(!o) return '';
+    const on=ACCAMODE?ACCA.some(l=>samePick(l,m.matchId,sel,'ou',ln)):samePick(BETPICK,m.matchId,sel,'ou',ln);
+    return '<button class="betodd'+(on?' on':'')+'" data-mid="'+m.matchId+'" data-sel="'+sel+'" data-market="ou" data-line="'+ln+'" data-frac="'+o.frac+'">'+lbl+' <b>'+o.frac+'</b></button>'; };
+  return '<div style="display:flex;gap:6px;margin-top:6px;align-items:stretch">'
+    +'<span style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)">Goals'
+    +'<select class="ouline" data-mid="'+esc(m.matchId)+'" style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 6px;font-size:13px;font-family:Sora,sans-serif">'+opts+'</select></span>'
+    +mkOU('OVER','Over')+mkOU('UNDER','Under')+'</div>';
+}
 function renderBets(){
   const el=document.getElementById('betsBody'); if(!el) return;
   if(!STATUS.wagering_enabled){ el.innerHTML='<div class="empty">Betting isn\'t switched on for this sweepstake.</div>'; return; }
@@ -650,27 +669,29 @@ function renderBets(){
   } else if(fbet.open && fbMine){
     h+='<div style="margin:0 0 12px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;color:var(--muted)">🎁 You\'ve claimed today\'s free points — they\'re in your balance above. Bet them on any game. The next drop is another day.</div>';
   }
-  h+='<div style="color:var(--muted);font-size:12px;margin:0 0 10px">Tap a game to bet · tap it again to remove'+(accasOn?' · tap a second game to build a 🎰 accumulator':'')+'.</div>';
+  h+='<div style="color:var(--muted);font-size:12px;margin:0 0 10px">Tap a game to bet · tap it again to remove'+(accasOn?' · tap a second game to build a 🎰 accumulator':'')+'. Each game also has an <b>Over/Under goals</b> market — pick a goals line and back Over or Under.</div>';
   if(ACCAMODE) h+='<div style="color:var(--muted);font-size:12.5px;margin:0 0 10px">🎰 Building an accumulator — odds multiply, but <b>every</b> leg must win. Up to '+maxLegs+' legs, and up to '+((caps.max_active_accas)||2)+' accas running at once.'+(retCap?(' Max return: <b>'+retCap+'</b>.'):'')+'</div>';
   if(!fx.length) h+='<div class="empty">No upcoming games to bet on right now — check back before kick-off.</div>';
   else h+='<div class="mdgrid">'+fx.map(m=>{
     const ko=m.stage&&m.stage!=='GROUP_STAGE';
     const when=new Date(m.utcDate).toLocaleString(undefined,{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
     const mk=(k,lbl)=>{ const o=m.odds[k]; if(!o) return '';
-      const on=ACCAMODE?ACCA.some(l=>l.matchId===m.matchId&&l.sel===k):(BETPICK&&BETPICK.matchId===m.matchId&&BETPICK.sel===k);
-      return `<button class="betodd${on?' on':''}" data-mid="${m.matchId}" data-sel="${k}" data-frac="${o.frac}">${esc(lbl)} <b>${o.frac}</b></button>`; };
+      const on=ACCAMODE?ACCA.some(l=>l.matchId===m.matchId&&(l.market||'result')==='result'&&l.sel===k)
+                       :(BETPICK&&BETPICK.matchId===m.matchId&&(BETPICK.market||'result')==='result'&&BETPICK.sel===k);
+      return `<button class="betodd${on?' on':''}" data-mid="${m.matchId}" data-sel="${k}" data-market="result" data-frac="${o.frac}">${esc(lbl)} <b>${o.frac}</b></button>`; };
     const homeAway='<div style="display:flex;gap:6px">'+mk('HOME',m.home)+mk('AWAY',m.away)+'</div>';   // home left, away right
     const drawRow=(!ko && m.odds.DRAW)?('<div style="display:flex;margin-top:6px">'+mk('DRAW','Draw')+'</div>'):'';   // draw below, full width
+    const ouRow=ouRowHTML(m);                                                          // Over/Under row (line dropdown + two prices)
     return `<div class="mdcard"><div class="mdmeta">${ko?(STAGE_LABEL[m.stage]||m.stage):'Group '+(m.group||'?')} · ${esc(when)}</div>
       <div class="mdteams" style="margin-bottom:8px"><span>${flag(m.home)}${esc(m.home)}</span><span style="color:var(--muted)">v</span><span class="mdr">${flag(m.away)}${esc(m.away)}</span></div>
-      <div class="betodds" style="display:block">${homeAway}${drawRow}</div></div>`;
+      <div class="betodds" style="display:block">${homeAway}${drawRow}${ouRow}</div></div>`;
   }).join('')+'</div>';
   if(ACCAMODE && ACCA.length){
     let dec=1; ACCA.forEach(l=>{const [n,d2]=l.frac.split('/').map(Number); dec*=(1+n/d2);});
     const accaCap=Math.min(headroom, Math.min.apply(null,ACCA.map(l=>{const f=fx.find(m=>m.matchId===l.matchId); return f&&f.maxStake?f.maxStake:caps.max_stake;})));
     h+='<div class="betcta" style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
       +'<div style="font-weight:600;margin-bottom:8px">🎰 '+ACCA.length+'-fold accumulator <span style="color:var(--muted);font-weight:400">· max stake '+accaCap+'</span></div>'
-      +ACCA.map((l,i)=>{const fxp=fx.find(m=>m.matchId===l.matchId); const who=l.sel==='HOME'?(fxp?fxp.home:'home'):(l.sel==='AWAY'?(fxp?fxp.away:'away'):'Draw');
+      +ACCA.map((l,i)=>{const fxp=fx.find(m=>m.matchId===l.matchId); const who=(l.market||'result')==='ou'?((l.sel==='OVER'?'Over':'Under')+' '+l.line+' '+(fxp?'('+esc(fxp.home)+' v '+esc(fxp.away)+')':'')):(l.sel==='HOME'?(fxp?fxp.home:'home'):(l.sel==='AWAY'?(fxp?fxp.away:'away'):'Draw'));
         return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>'+esc(who)+' <span style="color:var(--gold)">'+l.frac+'</span></span><button class="accarm" data-i="'+i+'" style="background:none;border:none;color:#ff7a7a;cursor:pointer">✕</button></div>';}).join('')
       +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;border-top:1px solid var(--line);padding-top:8px"><input id="accaStake" type="number" min="'+caps.min_stake+'" max="'+Math.min(accaCap,avail)+'" step="0.01" placeholder="stake (pts)" style="width:120px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:16px">'
       +'<span id="accaReturn" style="color:var(--muted);font-size:13px">combined ~'+(Math.round(dec*100)/100)+'×</span>'
@@ -678,9 +699,11 @@ function renderBets(){
   }
   if(!ACCAMODE && BETPICK){
     const fxp=fx.find(m=>m.matchId===BETPICK.matchId);
-    if(fxp){ const o=fxp.odds[BETPICK.sel], who=BETPICK.sel==='HOME'?fxp.home:(BETPICK.sel==='AWAY'?fxp.away:'Draw'); const smax=Math.min(fxp.maxStake||caps.max_stake, headroom);
+    if(fxp){ const isOU=(BETPICK.market||'result')==='ou';
+      const who=isOU?((BETPICK.sel==='OVER'?'Over':'Under')+' '+BETPICK.line+' goals ('+esc(fxp.home)+' v '+esc(fxp.away)+')'):(BETPICK.sel==='HOME'?fxp.home:(BETPICK.sel==='AWAY'?fxp.away:'Draw'));
+      const fracDisp=BETPICK.frac; const smax=Math.min(fxp.maxStake||caps.max_stake, headroom);
       h+='<div class="betcta" style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
-        +'<div style="font-size:13.5px;margin-bottom:8px">Bet on <b>'+esc(who)+'</b> @ <b style="color:var(--gold)">'+o.frac+'</b> <span style="color:var(--muted)">· max '+smax+'</span></div>'
+        +'<div style="font-size:13.5px;margin-bottom:8px">Bet on <b>'+esc(who)+'</b> @ <b style="color:var(--gold)">'+fracDisp+'</b> <span style="color:var(--muted)">· max '+smax+'</span></div>'
         +(smax<=0?'<div style="color:#ffb86b;font-size:13px">You\'ve hit the open-bet limit — wait for a bet to settle.</div>':('<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="betStake" type="number" min="'+caps.min_stake+'" max="'+Math.min(smax,avail)+'" step="0.01" placeholder="stake (pts)" style="width:120px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:16px">'
         +'<span id="betReturn" style="color:var(--muted);font-size:13px"></span>'
         +'<button id="betPlace" class="mini cta">Place bet</button></div><div style="color:var(--muted);font-size:11.5px;margin-top:6px">Once placed, this bet is final — it can\'t be cancelled.</div>'))+'</div>';
@@ -764,30 +787,33 @@ function renderBets(){
       else box.textContent=j.error||'Could not unlink.';
     }catch(e){ box.textContent='Could not reach the server.'; }
   };
+  el.querySelectorAll('.ouline').forEach(s=>s.onchange=()=>{ OULINE[s.dataset.mid]=s.value; BETMSG=''; renderBets(); });
   el.querySelectorAll('.betodd').forEach(b=>b.onclick=()=>{
     const mid=b.dataset.mid, sel=b.dataset.sel, frac=b.dataset.frac;
+    const market=b.dataset.market||'result', line=(b.dataset.line!=null && b.dataset.line!=='')?parseFloat(b.dataset.line):null;
+    const pick=()=>({matchId:mid,sel:sel,frac:frac,market:market,line:line});
     if(ACCAMODE){
       const ix=ACCA.findIndex(l=>l.matchId===mid);
       if(ix>=0){
-        if(ACCA[ix].sel===sel) ACCA.splice(ix,1);                 // re-tap a leg -> remove it
-        else ACCA[ix]={matchId:mid,sel:sel,frac:frac};            // same game, other outcome -> switch that leg
+        if(samePick(ACCA[ix],mid,sel,market,line)) ACCA.splice(ix,1);   // re-tap the exact leg -> remove it
+        else ACCA[ix]=pick();                                           // same game, different pick -> switch that leg
       } else {
         if(ACCA.length>=maxLegs){ BETMSG='An accumulator can have at most '+maxLegs+' legs.'; renderBets(); return; }
-        ACCA.push({matchId:mid,sel:sel,frac:frac});               // a new game -> add a leg
+        ACCA.push(pick());                                              // a new game -> add a leg
       }
       if(ACCA.length===1){ BETPICK=ACCA[0]; ACCA=[]; ACCAMODE=false; }   // down to one -> it's just a single again
-      else if(ACCA.length===0){ ACCAMODE=false; }                 // emptied -> nothing selected
+      else if(ACCA.length===0){ ACCAMODE=false; }                       // emptied -> nothing selected
       BETMSG=''; renderBets();
     } else {
-      if(BETPICK && BETPICK.matchId===mid && BETPICK.sel===sel){
-        BETPICK=null;                                             // re-tap the single -> remove it
+      if(samePick(BETPICK,mid,sel,market,line)){
+        BETPICK=null;                                                   // re-tap the single -> remove it
       } else if(BETPICK && BETPICK.matchId===mid){
-        BETPICK={matchId:mid,sel:sel,frac:frac};                  // same game, other outcome -> switch
+        BETPICK=pick();                                                 // same game, other outcome/line -> switch
       } else if(BETPICK && accasOn){
-        ACCA=[BETPICK,{matchId:mid,sel:sel,frac:frac}];           // a second game -> auto-accumulator
+        ACCA=[BETPICK,pick()];                                          // a second game -> auto-accumulator
         ACCAMODE=true; BETPICK=null;
       } else {
-        BETPICK={matchId:mid,sel:sel,frac:frac};                  // first pick (or accas off -> just switch)
+        BETPICK=pick();                                                 // first pick (or accas off -> just switch)
       }
       BETMSG=''; renderBets();
     }
@@ -837,7 +863,7 @@ async function placeAcca(){
   if(!ACCANONCE) ACCANONCE=_nonce();
   try{
     const j=await fetch('/api/place_acca',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({player:BETPLAYER,legs:ACCA.map(l=>({matchId:l.matchId,selection:l.sel})),stake:stake,pin:pin,nonce:ACCANONCE})}).then(r=>r.json());
+      body:JSON.stringify({player:BETPLAYER,legs:ACCA.map(l=>({matchId:l.matchId,selection:l.sel,market:l.market||'result',line:l.line})),stake:stake,pin:pin,nonce:ACCANONCE})}).then(r=>r.json());
     if(j.ok){ ACCANONCE=null; setBetPin(BETPLAYER,pin); BETPIN_DRAFT=null; BETMSG='✓ Acca placed: '+stake+' on a '+j.wager.legs.length+'-fold (returns '+j.wager.return+' if it all wins).'; ACCA=[]; await load(); renderBets(); }
     else if(j.bad_pin){ setBetPin(BETPLAYER,''); BETMSG='Wrong passcode for '+BETPLAYER+'.'; renderBets(); }
     else { BETMSG=j.error||'Could not place that acca.'; renderBets(); }
@@ -982,7 +1008,7 @@ async function placeBet(){
   if(!BETNONCE) BETNONCE=_nonce();                       // reused if this placement is retried after a network drop
   try{
     const j=await fetch('/api/place_wager',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({player:BETPLAYER,matchId:BETPICK.matchId,selection:BETPICK.sel,stake:stake,pin:pin,nonce:BETNONCE})}).then(r=>r.json());
+      body:JSON.stringify({player:BETPLAYER,matchId:BETPICK.matchId,selection:BETPICK.sel,market:BETPICK.market||'result',line:BETPICK.line,stake:stake,pin:pin,nonce:BETNONCE})}).then(r=>r.json());
     if(j.ok){ BETNONCE=null; setBetPin(BETPLAYER,pin); BETPIN_DRAFT=null; BETMSG='✓ Bet placed: '+stake+' @ '+j.wager.frac+' (returns '+j.wager.return+' if it wins).'; BETPICK=null; await load(); renderBets(); }
     else if(j.bad_pin){ setBetPin(BETPLAYER,''); BETMSG='Wrong passcode for '+BETPLAYER+'. Check with the organiser.'; renderBets(); }
     else { BETMSG=j.error||'Could not place that bet.'; renderBets(); }
@@ -1466,8 +1492,9 @@ function renderScoringRules(d){
     const betLine=(STATUS.wagering_enabled && _pl.wager_net)?(' Their points already include a betting '+(_pl.wager_net>0?'win of +'+_pl.wager_net:'loss of '+_pl.wager_net)+'.'):'';
     bothEx='<div style="background:#0a1f15;border:1px solid var(--gold);border-radius:10px;padding:9px 11px;margin-top:8px;font-size:12px"><b style="color:var(--gold)">“Both” right now (live example).</b> '+esc(_pl.name)+' has <b>'+_pl.points+' points</b> and <b>'+_pl.survival+' survival</b>, so their <b>Both</b> total is <b>'+_pl.points+' + '+_pl.survival+' = '+_pl.hybrid+'</b>. That\u2019s why their Both number looks bigger than their Points one \u2014 the gap is purely their Survival value from owning teams that are still in (or went deep).'+betLine+'</div>';
   }
-  const LBL={LAST_32:'Round of 32',LAST_16:'Round of 16',QUARTER_FINALS:'Quarter-final',SEMI_FINALS:'Semi-final',FINAL:'Final',WINNER:'Champion'};
+  const LBL={LAST_32:'Round of 32',LAST_16:'Round of 16',QUARTER_FINALS:'Quarter-final',SEMI_FINALS:'Semi-final',THIRD_PLACE:'3rd-place win',FINAL:'Final',WINNER:'Champion'};
   const order=['LAST_32','LAST_16','QUARTER_FINALS','SEMI_FINALS','FINAL','WINNER'];
+  const pOrder=['LAST_32','LAST_16','QUARTER_FINALS','SEMI_FINALS','THIRD_PLACE','FINAL','WINNER'];
   const row=(k,v)=>`<tr><td style="padding:3px 0">${k}</td><td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600">${v}</td></tr>`;
   el.innerHTML=
     '<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:10px 0">'
@@ -1476,13 +1503,14 @@ function renderScoringRules(d){
     +'<div><div style="font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:3px">Points (per team)</div>'
     +'<table style="width:100%;font-size:12.5px;border-collapse:collapse">'
     +row('Each goal scored',`+${SC.per_goal}`)+row('Win',`+${SC.win}`)+row('Draw',`+${SC.draw}`)+row('Clean sheet',`+${SC.clean_sheet}`)
-    +''  /* stage progression is rewarded ONCE, via Survival (right) — POINTS has no separate "reach the next round" bonus */
+    +(Object.keys(SB).length?('<tr><td colspan="2" style="padding:7px 0 2px;color:var(--muted);font-size:11px">Plus a one-off bonus for the furthest knockout round reached:</td></tr>'
+        +pOrder.filter(k=>SB[k]).map(k=>row(LBL[k]||k,`+${SB[k]}`)).join('')):'')
     +'</table></div>'
     +'<div><div style="font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:3px">Survival (furthest stage)</div>'
     +'<table style="width:100%;font-size:12.5px;border-collapse:collapse">'
     +order.filter(k=>SV[k]).map(k=>row(LBL[k]||k,SV[k])).join('')
     +'</table></div></div>'
-    +'<div style="background:#0a1f15;border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-top:10px;font-size:12px"><b style="color:var(--gold)">Worked example.</b> Win a group game 2–0 → <b>+'+(2*(SC.per_goal||1))+'</b> goals, <b>+'+SC.win+'</b> win, <b>+'+SC.clean_sheet+'</b> clean sheet = <b>'+(2*(SC.per_goal||1)+SC.win+SC.clean_sheet)+' pts</b>. Points come purely from goals, wins and clean sheets. <b>Going deep is rewarded by Survival</b> (right): reaching the final is worth <b>'+(SV.FINAL||85)+'</b> and lifting the trophy <b>'+(SV.WINNER||135)+'</b> — by far the biggest prize.</div>'
+    +'<div style="background:#0a1f15;border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-top:10px;font-size:12px"><b style="color:var(--gold)">Worked example.</b> Win a group game 2–0 → <b>+'+(2*(SC.per_goal||1))+'</b> goals, <b>+'+SC.win+'</b> win, <b>+'+SC.clean_sheet+'</b> clean sheet = <b>'+(2*(SC.per_goal||1)+SC.win+SC.clean_sheet)+' pts</b>. Then <b>each knockout round your team reaches adds a one-off points bonus on top</b>'+(SB.LAST_16?' (Round of 16 +'+SB.LAST_16+', up to Champion +'+(SB.WINNER||85)+')':'')+' — so going deep boosts your Points <i>and</i> your Survival. <b>Survival</b> (right) is a separate, bigger reward purely for how far teams go.</div>'
     +bothEx
     +'<div style="color:var(--muted);font-size:11.5px;margin-top:10px">Bonuses count your <b>furthest</b> round only — they don\'t stack per round, and winning the tournament is worth by far the most. A knockout tie won on <b>penalties counts as a win</b> (the loser takes the loss). The <b>3rd-place play-off</b> earns points but no extra survival — both teams are already out at the semi. <b>Survival</b> takes your furthest stage\'s value and also ranks on teams still alive. <b>Both</b> = Points + Survival added together. A green <b>+N live</b> next to a score is the points your teams are earning from games <b>in play right now</b> — it&#39;s provisional and settles the moment the game ends (a disallowed goal takes it back off).</div>'
     +'</div>';

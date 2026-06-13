@@ -77,6 +77,18 @@ if python3 test_results.py >/dev/null; then echo "  ok"; else echo "  FAIL"; pyt
 say "Wagering engine tests (odds, payout, caps, pre-kickoff lock, settlement, balances)"
 if python3 test_wager.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_wager.py | tail -14; FAIL=1; fi
 
+say "Over/Under goals odds model (Poisson pricing, realism, margin, monotonicity, hostile inputs)"
+if python3 test_ou_odds.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_ou_odds.py | tail -20; FAIL=1; fi
+
+say "Over/Under placement (line/selection validation, kickoff lock, caps, return cap; result bets unchanged)"
+if python3 test_ou_place.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_ou_place.py | tail -24; FAIL=1; fi
+
+say "Over/Under settlement (final-goals golden vectors, push-free, pens excluded, void/hostile scores; result settle intact)"
+if python3 test_ou_settle.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_ou_settle.py | tail -24; FAIL=1; fi
+
+say "Over/Under accumulators (O/U legs, mixed with 1X2, combined odds, partial/void/losing-leg settle; 1X2 accas unchanged)"
+if python3 test_ou_acca.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_ou_acca.py | tail -24; FAIL=1; fi
+
 say "Betting QA (void lifecycle, mid-game/last-min void, accas, sequencing, free-points)"
 if python3 qa_betting.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_betting.py | tail -20; FAIL=1; fi
 

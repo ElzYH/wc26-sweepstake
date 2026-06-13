@@ -14,6 +14,7 @@ This module is pure (no I/O) and isolated: scoring/server only apply it when wag
 AND wagers exist, so it is a complete no-op by default.
 """
 import calendar
+import math
 import time
 import uuid
 
@@ -105,6 +106,75 @@ def match_odds(comp_home, comp_away):
         num, den = _nearest_fraction(1.0 / implied)
         out[sel] = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
     return out
+
+
+# ---- Over/Under total-goals market (Poisson model, priced like the 1X2 book) -------------------
+GOALS_BASE = 2.6              # expected total goals for an evenly-matched game (~World Cup average)
+GOALS_GAP_COEF = 1.2          # mismatches trend a little higher-scoring (the favourite runs the score up)
+GOALS_LAMBDA_MIN = 1.6        # clamp the match goal expectation to a sane band so no line is mispriced
+GOALS_LAMBDA_MAX = 4.2
+OU_OVERROUND = 1.13          # a touch more margin than the 1X2 book (1.08) -> O/U returns trimmed ~3-4%,
+                             #   which also keeps multi-leg O/U accas from paying out silly amounts
+OU_LINES = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5]   # half-lines only -> a bet can never push
+
+
+def _finite_comp(x):
+    """Coerce a composite to a sane non-negative float (NaN / inf / negative / junk -> neutral 40)."""
+    try:
+        x = float(x)
+    except (TypeError, ValueError):
+        return 40.0
+    if x != x or x in (float("inf"), float("-inf")) or x < 0:
+        return 40.0
+    return x
+
+
+def expected_goals(comp_home, comp_away):
+    """Match total-goals expectation (Poisson mean) from team strengths. Even game -> GOALS_BASE;
+    a bigger strength gap nudges it up. Clamped to [GOALS_LAMBDA_MIN, GOALS_LAMBDA_MAX]."""
+    ch = _finite_comp(comp_home) + 1
+    ca = _finite_comp(comp_away) + 1
+    pw = ch / (ch + ca)
+    edge = abs(pw - 0.5)                       # 0 (even) .. 0.5 (total mismatch)
+    lam = GOALS_BASE + GOALS_GAP_COEF * edge
+    return max(GOALS_LAMBDA_MIN, min(GOALS_LAMBDA_MAX, lam))
+
+
+def _poisson_cdf(n, lam):
+    """P(X <= n) for a Poisson(lam), summed iteratively so factorials never overflow."""
+    if n < 0:
+        return 0.0
+    term = math.exp(-lam)                      # k = 0 term
+    cdf = term
+    for k in range(1, n + 1):
+        term *= lam / k
+        cdf += term
+    return min(1.0, cdf)
+
+
+def goals_odds(comp_home, comp_away, lines=None):
+    """Over/Under odds for each total-goals line, same dict shape + margin as match_odds().
+    Returns {'2.5': {'OVER': {...}, 'UNDER': {...}}, ...}. A line L = n+0.5 settles on total goals:
+    OVER wins if total >= n+1, UNDER wins if total <= n (half-lines, so never a push)."""
+    lam = expected_goals(comp_home, comp_away)
+    out = {}
+    for L in (lines or OU_LINES):
+        n = int(L)                              # floor of the half-line, e.g. 2.5 -> 2
+        p_under = _poisson_cdf(n, lam)          # total <= n
+        p_over = 1.0 - p_under                  # total >= n+1
+        leg = {}
+        for sel, p in (("OVER", p_over), ("UNDER", p_under)):
+            p = min(0.999, max(1e-6, p))
+            implied = min(MAX_PROB, p * OU_OVERROUND)
+            num, den = _nearest_fraction(1.0 / implied)
+            leg[sel] = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
+        out[_line_key(L)] = leg
+    return out
+
+
+def _line_key(L):
+    """Stable string key for a line: '2.5' (kept as given; halves only)."""
+    return ("%g" % float(L))
 
 
 FORM_SWING = 0.12             # tournament form can move a team's strength by at most ±12% (FIFA ranking still dominates)
@@ -343,19 +413,31 @@ def applied_points(base_points, player, wagers):
     return max(0.0, round(base_points + leaderboard_net(player, wagers) - leaderboard_held(player, wagers), 2))
 
 
-def place(wagers, player, match, selection, stake, settled_points, comp_home, comp_away, now=None, group_mid_ts=None):
+def place(wagers, player, match, selection, stake, settled_points, comp_home, comp_away, now=None, group_mid_ts=None, market="result", line=None):
     """
     Validate and append a pending wager. Returns (ok, wager_or_error_string).
     `wagers` is mutated only on success. The server prices the match here (odds can't be spoofed by the client).
+    market="result" -> 1X2 (HOME/DRAW/AWAY). market="ou" -> Over/Under total goals (selection OVER/UNDER, `line` a half-line).
     """
     if not player or player in ("—", "-"):
         return False, "Pick which player is betting first."
-    if selection not in SELECTIONS:
-        return False, "Pick home, draw or away."
     if not isinstance(match, dict):
         return False, "That game could not be found."
-    if selection == "DRAW" and match.get("stage") not in (None, "GROUP_STAGE"):
-        return False, "No draw bets on knockout games — pick the side to go through."
+    market = (str(market or "result")).lower()
+    if market == "ou":
+        if selection not in ("OVER", "UNDER"):
+            return False, "Pick Over or Under."
+        try:
+            line = float(line)
+        except (TypeError, ValueError):
+            return False, "Pick a goals line."
+        if line not in OU_LINES:
+            return False, "That goals line isn't offered."
+    else:
+        if selection not in SELECTIONS:
+            return False, "Pick home, draw or away."
+        if selection == "DRAW" and match.get("stage") not in (None, "GROUP_STAGE"):
+            return False, "No draw bets on knockout games — pick the side to go through."
     if not can_bet_on(match, now):
         return False, "Betting on that game is closed — it has kicked off or finished."
     try:
@@ -389,7 +471,12 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
     if stake > brem + 1e-9:
         return False, ("Your staking budget left this round is %g of %d points — stake that or less. "
                        "It tops back up when your bets win (never above %d) and resets next round." % (brem, STAGE_BUDGET, STAGE_BUDGET))
-    odds = match_odds(comp_home, comp_away).get(selection)
+    if market == "ou":
+        odds = goals_odds(comp_home, comp_away).get(_line_key(line), {}).get(selection)
+    else:
+        odds = match_odds(comp_home, comp_away).get(selection)
+    if not odds:
+        return False, "Couldn't price that bet — try again."
     ret = potential_return(stake, odds["num"], odds["den"])
     if MAX_RETURN is not None and ret > MAX_RETURN + 1e-9:
         return False, "That would return %g — the cap is %g per bet. Lower your stake." % (ret, MAX_RETURN)
@@ -398,6 +485,9 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
          "utcDate": match.get("utcDate"), "selection": selection, "stake": stake, "epoch": epoch,
          "num": odds["num"], "den": odds["den"], "frac": odds["frac"], "return": ret,
          "status": "pending", "placed_at": int(now if now is not None else time.time())}
+    if market == "ou":
+        w["market"] = "ou"
+        w["line"] = line
     wagers.append(w)
     return True, w
 
@@ -431,10 +521,41 @@ def place_free(wagers, player, match, selection, comp_home, comp_away, now=None)
     return True, w
 
 
+def _match_total(match):
+    """Final total goals for a finished match, or None if no valid score. Penalties never count
+    (a shootout isn't goals); a knockout's score is its 90+ET total, which is what the tracker shows."""
+    hs, as_ = match.get("homeScore"), match.get("awayScore")
+    if hs is None or as_ is None:
+        return None
+    try:
+        hs = float(hs); as_ = float(as_)
+    except (TypeError, ValueError):
+        return None
+    if hs != hs or as_ != as_ or hs in (float("inf"), float("-inf")) or as_ in (float("inf"), float("-inf")) or hs < 0 or as_ < 0:
+        return None
+    return hs + as_
+
+
+def _ou_result(line, selection, total):
+    """'won'/'lost' for an Over/Under bet, or None if it can't be settled yet. Half-lines only -> never a push."""
+    try:
+        line = float(line)
+    except (TypeError, ValueError):
+        return None
+    if total is None or selection not in ("OVER", "UNDER"):
+        return None
+    over = total > line
+    return "won" if (over if selection == "OVER" else not over) else "lost"
+
+
 def _leg_result(leg, match):
     status = match.get("status")
     if status in VOID_STATUSES:
         return "void"
+    if leg.get("market") == "ou":                    # Over/Under leg settles on total goals, not the winner
+        if status not in ("FINISHED", "AWARDED"):
+            return None
+        return _ou_result(leg.get("line"), leg.get("selection"), _match_total(match))
     side = _winner_side(match)
     if status not in ("FINISHED", "AWARDED") or side is None:
         return None
@@ -490,6 +611,18 @@ def settle(wagers, match, now=None):
             continue
         if status in VOID_STATUSES:
             w["status"] = "void"; w["return"] = _num(w.get("stake")); w["settled_at"] = ts; n += 1; continue
+        if w.get("market") == "ou":                  # Over/Under single: settle on final total goals (pens excluded)
+            if status not in ("FINISHED", "AWARDED"):
+                continue
+            r = _ou_result(w.get("line"), w.get("selection"), _match_total(match))
+            if r is None:
+                continue                             # no valid score yet -> leave pending
+            if r == "won":
+                w["status"] = "won"
+            else:
+                w["status"] = "lost"; w["return"] = 0
+            w["result"] = r
+            w["settled_at"] = ts; n += 1; continue
         if status not in ("FINISHED", "AWARDED") or side is None:
             continue
         if side == "DRAW" and _norm_stage(w.get("stage")) != "GROUP_STAGE":
@@ -520,7 +653,8 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
     if len(selections) == 1:                       # a 1-leg acca is just a normal single
         s = selections[0]
         return place(wagers, player, s["match"], s["selection"], stake, settled_points,
-                     s["comp_home"], s["comp_away"], now, group_mid_ts)
+                     s["comp_home"], s["comp_away"], now, group_mid_ts,
+                     market=s.get("market", "result"), line=s.get("line"))
     ids = [match_id(s["match"]) for s in selections]
     if len(set(ids)) != len(ids):
         return False, "You can't pick the same game twice in one accumulator."
@@ -561,16 +695,33 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
     legs = []
     dec = 1.0
     for s in selections:
-        if s.get("selection") not in SELECTIONS:
-            return False, "Pick home, draw or away for every leg."
         if not can_bet_on(s.get("match"), now):
             return False, "One of those games has kicked off or finished — accas must be all upcoming."
-        if (s["match"].get("stage") not in (None, "GROUP_STAGE")) and s["selection"] == "DRAW":
-            return False, "Knockout legs can't be a draw — pick the side to go through."
-        o = match_odds(s["comp_home"], s["comp_away"])[s["selection"]]
-        legs.append({"matchId": match_id(s["match"]), "selection": s["selection"],
-                     "home": s["match"].get("home"), "away": s["match"].get("away"),
-                     "stage": s["match"].get("stage"), "num": o["num"], "den": o["den"], "frac": o["frac"]})
+        mk = (str(s.get("market") or "result")).lower()
+        if mk == "ou":
+            if s.get("selection") not in ("OVER", "UNDER"):
+                return False, "Pick Over or Under for every goals leg."
+            try:
+                ln = float(s.get("line"))
+            except (TypeError, ValueError):
+                return False, "Pick a goals line for every goals leg."
+            if ln not in OU_LINES:
+                return False, "That goals line isn't offered."
+            o = goals_odds(s["comp_home"], s["comp_away"]).get(_line_key(ln), {}).get(s["selection"])
+            if not o:
+                return False, "Couldn't price one of those goals legs — try again."
+            legs.append({"matchId": match_id(s["match"]), "selection": s["selection"], "market": "ou", "line": ln,
+                         "home": s["match"].get("home"), "away": s["match"].get("away"),
+                         "stage": s["match"].get("stage"), "num": o["num"], "den": o["den"], "frac": o["frac"]})
+        else:
+            if s.get("selection") not in SELECTIONS:
+                return False, "Pick home, draw or away for every leg."
+            if (s["match"].get("stage") not in (None, "GROUP_STAGE")) and s["selection"] == "DRAW":
+                return False, "Knockout legs can't be a draw — pick the side to go through."
+            o = match_odds(s["comp_home"], s["comp_away"])[s["selection"]]
+            legs.append({"matchId": match_id(s["match"]), "selection": s["selection"],
+                         "home": s["match"].get("home"), "away": s["match"].get("away"),
+                         "stage": s["match"].get("stage"), "num": o["num"], "den": o["den"], "frac": o["frac"]})
         dec *= o["decimal"]
     ret = round(stake * dec, 2)
     if MAX_RETURN is not None and ret > MAX_RETURN + 1e-9:
