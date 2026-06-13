@@ -62,7 +62,37 @@ ck("a best/worst bets container exists", 'id="betHall"' in HTML and 'id="betHall
 ck("best/worst excludes free-points credit rows", "filter(w=>!w.credit&&(w.status==='won'||w.status==='lost'))" in HTML, None)
 ck("push test failures are surfaced to the user", "j.errors" in HTML and "failed" in HTML, None)
 
-# ---- live breakdown is now a collapsible per-player total (dedup + betting folded in) ----
+# ---- leaderboard: combined total chip (live+bets) on the LEFT, with a where-from breakdown ----
+print("\n== leaderboard combined total + breakdown ==")
+ck("the two chips are merged into one combined total chip on the left", 'class="lbtot"' in HTML and "(p.live||0)+(p.bet_potential||0)" in HTML, None)
+ck("each row has a where-from breakdown panel", 'class="lbbd"' in HTML and "function lbBreakdown(p)" in HTML, None)
+ck("the breakdown names live games and open bets", "Right now (live)" in HTML and "If your open bets land" in HTML, None)
+ck("leaderboard breakdowns stay open across the 30s refresh", "LBBD.add(nm)" in HTML and "LBBD.delete(nm)" in HTML and "LBBD.has(p.name)" in HTML, None)
+ck("the live-game dropdown lists everyone's bets on that game", "function betsOnMatch(m)" in HTML and "bet'+(gbets.length===1?''" in HTML, None)
+ck("all pending wagers are fetched for the breakdowns", "ALLWAGERS=(wj.wagers||[]).filter" in HTML, None)
+try:
+    import subprocess as _sp4
+    _lp = re.search(r"(function liveParts\(scored, conceded\)\{.*?\n\})", HTML, re.S).group(1)
+    def _grab(nm):
+        s = HTML.index("function " + nm); i = HTML.index("{", s); depth = 0
+        for j in range(i, len(HTML)):
+            if HTML[j] == "{": depth += 1
+            elif HTML[j] == "}":
+                depth -= 1
+                if depth == 0: return HTML[s:j + 1]
+    _fns = "\n".join(_grab(n) for n in ["betPickName", "betProfit", "betLabel", "betsOnMatch", "liveGamesOf", "lbBreakdown"])
+    _js = ("const esc=s=>String(s);\n" + _lp + "\n" + _fns + """
+    let DATA={fixtures:[{home:'Japan',away:'Spain',homeOwner:'Louis',awayOwner:'Erol',homeScore:1,awayScore:0,status:'IN_PLAY',matchId:'M'}]};
+    let ALLWAGERS=[{player:'Louis',matchId:'M',home:'Japan',away:'Spain',selection:'HOME',frac:'2/1',stake:5,return:15,status:'pending'},
+      {player:'Erol',legs:[{home:'Japan',away:'Spain',selection:'AWAY',frac:'3/1',matchId:'M'},{home:'A',away:'B',selection:'HOME',frac:'1/1',matchId:'O'}],stake:3,return:24,status:'pending'}];
+    const lb=lbBreakdown({name:'Louis'}); const mb=betsOnMatch({matchId:'M'}).map(w=>w.player);
+    console.log(JSON.stringify({liveShown:lb.includes('Japan vs Spain'),betShown:lb.includes('If your open bets land'),matchBets:mb}));""")
+    open("/tmp/_lb2.js", "w").write(_js)
+    _r = json.loads(_sp4.run(["node", "/tmp/_lb2.js"], capture_output=True, text=True).stdout.strip())
+    ck("leaderboard breakdown shows the player's live game + bet", _r["liveShown"] and _r["betShown"], _r)
+    ck("a game's bet list catches both singles and accas", _r["matchBets"] == ["Louis", "Erol"], _r)
+except Exception as _e:
+    ck("leaderboard/match-bet cross-check ran", False, str(_e)[:140])
 print("\n== live breakdown dropdown ==")
 ck("the live breakdown is a collapsible <details> per player", "<details class=\"livebd\"" in HTML and "const LIVEBD=new Set();" in HTML, None)
 ck("expanded breakdowns survive the 30s refresh (state kept in LIVEBD)", "LIVEBD.has(key)" in HTML and "LIVEBD.delete(k)" in HTML and "LIVEBD.add(k)" in HTML, None)
@@ -72,7 +102,7 @@ try:
     _lp = re.search(r"(function liveParts\(scored, conceded\)\{.*?\n\})", HTML, re.S).group(1)
     _s = HTML.index("const LIVEBD=new Set();"); _e = HTML.index("return html?('<div class=\"livebd-wrap\">'+html+'</div>'):'';", _s); _e = HTML.index("\n}", _e) + 2
     _lb = HTML[_s:_e]
-    _js = ("const esc=s=>String(s);\nlet DATA={scoring:{points:{per_goal:1,win:3,draw:1,clean_sheet:1}},"
+    _js = ("const esc=s=>String(s);\nlet ALLWAGERS=[];\nlet DATA={scoring:{points:{per_goal:1,win:3,draw:1,clean_sheet:1}},"
            "leaderboards:{points:[{name:'Louis',bet_potential:3.34}]}};\n" + _lp + "\n" + _lb +
            "\nconst o=liveBreakLine({home:'Japan',away:'Brazil',homeOwner:'Louis',awayOwner:'Louis',homeScore:0,awayScore:0,matchId:'X'});"
            "console.log(JSON.stringify({n:(o.match(/<details/g)||[]).length, has734:o.includes('+7.34'), bets:o.includes('your open bets')}));")
@@ -97,7 +127,6 @@ ck("the tabs scrollbar rule was removed", ".tabs::-webkit-scrollbar" not in HTML
 ck("the groups pool note is OUTSIDE the grid (own element, not a grid cell)", 'id="groupsPoolNote"' in HTML and "poolNote+d.groups" not in HTML, None)
 ck("on phone the controls sit left (don't run off-page)", ".ctrls{margin-left:0;width:auto;justify-content:flex-start}" in HTML, None)
 ck("on phone the menu opens from the left", ".menu{left:0;right:auto;min-width:210px}" in HTML, None)
-ck("the bets chip is now LEFT of the score on the leaderboard", re.search(r'class="pscore">\$\{\(p\.bet_potential>0[^`]*`<span class="betdelta"', HTML) is not None, None)
 ck("the chips are smaller (9.5px)", ".betdelta{font-family:'Sora',sans-serif;font-size:9.5px" in HTML and ".livedelta{font-family:'Sora',sans-serif;font-size:9.5px" in HTML, None)
 ck("a stable /join link is advertised on the tracker", '/join' in HTML and "always points at the latest invite" in HTML, None)
 ck("the Join button points at the stable /join redirect", 'href="/join"' in HTML, None)
@@ -135,8 +164,7 @@ except Exception as _e:
     ck("chart now-point cross-check ran", False, str(_e)[:140])
 
 # ---- potential betting points: visible but never added to the score ----
-ck("leaderboard rows show a potential-bets chip", 'class="betdelta"' in HTML and "+${p.bet_potential}" in HTML, None)
-ck("the chip explains it only counts when a bet settles", "counts only when a bet settles" in HTML, None)
+ck("leaderboard rows fold bet potential into the combined total", 'class="lbtot"' in HTML and "(p.live||0)+(p.bet_potential||0)" in HTML, None)
 ck("player cards carry the open-bets potential line", "if they all win" in HTML and "only counts when a bet settles" in HTML, None)
 ck("a .betdelta style exists (gold, distinct from the green live chip)", ".betdelta{" in HTML.replace(" ", "") and "var(--gold)" in HTML.split(".betdelta{",1)[1][:200], None)
 

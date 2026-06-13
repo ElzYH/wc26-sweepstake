@@ -53,6 +53,11 @@
   .pscore{font-family:'Anton';font-size:30px;color:var(--gold)}
   .livedelta{font-family:'Sora',sans-serif;font-size:9.5px;font-weight:700;color:#fff;background:#1f8f4e;border-radius:5px;padding:1px 5px;margin-left:5px;vertical-align:middle}
   .betdelta{font-family:'Sora',sans-serif;font-size:9.5px;font-weight:700;color:#1a1205;background:var(--gold);border-radius:5px;padding:1px 5px;margin-right:5px;vertical-align:middle}
+  .lbtot{font-family:'Sora',sans-serif;font-size:10px;font-weight:800;color:#1a1205;background:var(--gold);border-radius:6px;padding:2px 7px;margin-right:7px;vertical-align:middle;cursor:pointer;user-select:none;white-space:nowrap}
+  .lbbd{margin:-2px 0 10px 44px;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:10px;padding:7px 11px;font-size:12px;color:var(--muted)}
+  .lbbd-h{font-weight:700;color:var(--ink);margin:5px 0 2px;font-size:11.5px}
+  .lbbd-h:first-child{margin-top:0}
+  .lbbd-row{display:flex;justify-content:space-between;gap:12px;padding:2px 0;line-height:1.4}
   .betpill{font-family:'Sora',sans-serif;font-size:11px;font-weight:700;border-radius:6px;padding:1px 7px;margin-left:6px;vertical-align:middle}
   .betpill.win{color:#0a1f12;background:#7ee787}
   .betpill.loss{color:#fff;background:#b3343a}
@@ -566,6 +571,8 @@ let BETPIN_DRAFT=null;  // what's typed in the passcode box this session — pre
 // Idempotency: one nonce per in-flight bet, reused if a placement is retried after a dropped
 // connection (so the server dedupes instead of double-betting), regenerated only on success.
 let BETNONCE=null, ACCANONCE=null;
+let ALLWAGERS=[];           // all pending bets/accas (any player) — powers the leaderboard + live-game breakdowns
+const LBBD=new Set();       // which leaderboard rows are expanded (by player), kept across the 30s refresh
 function _nonce(){
   try{ if(crypto&&crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
   return 'n-'+Date.now()+'-'+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2);
@@ -1030,6 +1037,9 @@ async function load(){
   try{ const r=await fetch('tracker_data.json?'+Date.now());
        if(r.ok){ DATA=await r.json(); FETCH_AT=Date.now(); ok=!!(DATA&&DATA.players&&DATA.players.length); } }
   catch(e){ ok=false; }
+  try{ const wr=await fetch('/api/wagers?'+Date.now());           // all open bets, so the breakdowns can name games + bets
+       if(wr.ok){ const wj=await wr.json(); ALLWAGERS=(wj.wagers||[]).filter(w=>w.status==='pending'&&!w.credit); } }
+  catch(e){ /* breakdowns just fall back to live-only if this fails */ }
   const gate=document.getElementById('gate'), tabs=document.querySelector('.tabs');
   const secs=['overview','live','lb','players','h2h','groups','bracket','fixtures','odds','bets'];
   if(!ok){ gate.style.display='block'; tabs.style.display='none';
@@ -1069,6 +1079,41 @@ function liveParts(scored, conceded){
 }
 // One small line under a live match: who's earning what right now, and why.
 const LIVEBD=new Set();   // which live breakdowns the user has expanded (key = match|player), kept across 30s refreshes
+function betPickName(w){ return w.selection==='HOME'?w.home:(w.selection==='AWAY'?w.away:'Draw'); }
+function betProfit(w){ return Math.round(((w.return||0)-(w.stake||0))*100)/100; }
+function betLabel(w){   // short human description of a bet/acca + its upside
+  if(w.legs&&w.legs.length){
+    const legs=w.legs.map(lg=>esc(lg.selection==='HOME'?lg.home:(lg.selection==='AWAY'?lg.away:'Draw'))).join(' + ');
+    return w.stake+' on a '+w.legs.length+'-fold ('+legs+') → +'+betProfit(w)+' if it lands';
+  }
+  return w.stake+' on '+esc(betPickName(w))+' @ '+esc(w.frac)+' → +'+betProfit(w)+' if it wins';
+}
+function betsOnMatch(m){   // every pending bet/acca (any player) that touches this match
+  return ALLWAGERS.filter(w=> w.matchId===m.matchId || (w.legs&&w.legs.some(lg=>lg.matchId===m.matchId)));
+}
+function liveGamesOf(name){   // the in-play games this player owns a team in, with the live points breakdown
+  return (DATA.fixtures||[]).filter(m=>['IN_PLAY','PAUSED','LIVE','SUSPENDED'].includes(m.status)).flatMap(m=>{
+    const out=[];
+    if(m.homeOwner===name){ const b=liveParts(m.homeScore??0,m.awayScore??0); out.push({tm:m.home,opp:m.away,sc:(m.homeScore??0)+'–'+(m.awayScore??0),parts:b.parts,pts:b.pts}); }
+    if(m.awayOwner===name){ const b=liveParts(m.awayScore??0,m.homeScore??0); out.push({tm:m.away,opp:m.home,sc:(m.homeScore??0)+'–'+(m.awayScore??0),parts:b.parts,pts:b.pts}); }
+    return out;
+  });
+}
+function lbBreakdown(p){   // leaderboard row dropdown: where this player's live + potential points come from
+  const live=liveGamesOf(p.name), bets=ALLWAGERS.filter(w=>w.player===p.name);
+  let h='';
+  if(live.length){
+    h+='<div class="lbbd-h">⚡ Right now (live)</div>'+live.map(g=>
+      '<div class="lbbd-row"><span>'+esc(g.tm)+' vs '+esc(g.opp)+' ('+g.sc+')</span><span>+'+g.pts
+      +(g.parts.length?' <span style="opacity:.7">· '+g.parts.map(x=>esc(x[0])+' '+x[1]).join(', ')+'</span>':'')+'</span></div>').join('');
+  }
+  if(bets.length){
+    h+='<div class="lbbd-h">🎲 If your open bets land</div>'+bets.map(w=>
+      '<div class="lbbd-row"><span>'+betLabel(w)+'</span></div>').join('');
+  }
+  if(!h) h='<div class="lbbd-row"><span>Nothing in play and no open bets right now.</span></div>';
+  return h;
+}
 function liveBreakLine(m){
   // Group this match's OWNED teams by player (one person can own both sides -> combine, no more "Louis +2 · Louis +2").
   const byP={};
@@ -1095,6 +1140,15 @@ function liveBreakLine(m){
   });
   const un=[[m.homeOwner,m.home],[m.awayOwner,m.away]].filter(s=>!s[0]||s[0]==='—'||s[0]==='-').map(s=>esc(s[1]));
   if(un.length) html+='<div class="lbd-pool">'+un.join(' & ')+(un.length===1?' is':' are')+' unowned (pool) — scores for no one</div>';
+  // everyone's open bets on THIS game (singles on either team + any acca with a leg here)
+  const gbets=betsOnMatch(m);
+  if(gbets.length){
+    const key='bets|'+(m.matchId||(m.home+'_'+m.away));
+    const rows=gbets.map(w=>'<div class="lbd-row"><span><b>'+esc(w.player)+'</b></span><span>'+betLabel(w)+'</span></div>').join('');
+    html+='<details class="livebd" data-bd="'+esc(key)+'"'+(LIVEBD.has(key)?' open':'')+'>'
+      +'<summary>🎲 <b>'+gbets.length+' bet'+(gbets.length===1?'':'s')+'</b> on this game <span class="lbd-cap">— tap to see who</span></summary>'
+      +'<div class="lbd-body">'+rows+'</div></details>';
+  }
   return html?('<div class="livebd-wrap">'+html+'</div>'):'';
 }
 function liveClockText(status, minute, liveSec, pens){
@@ -1228,13 +1282,21 @@ function render(d){
     // Only a genuine dead-heat — same score AND same teams-in — is shown as joint/"tied".
     const rank=1+board.filter(q=> q.score>p.score || (!isSurv && q.score===p.score && (q.alive_teams||0)>al)).length;
     const tied=!isSurv && board.some((q,j)=> j!==i && q.score===p.score && (q.alive_teams||0)===al);
+    const xtra=Math.round(((p.live||0)+(p.bet_potential||0))*100)/100;       // live + open-bet upside, combined
+    const canBreak=(lbm==='points'||lbm==='hybrid') && xtra>0;
     return `
     <div class="row ${rank===1&&p.score>0?'lead':''}">
       <div class="rank">${rank}</div>
       <div><div class="pname">${esc(p.name)}${tied?' <span class="tiebadge">tied</span>':''}</div><div class="palive">${p.alive_teams}/${p.total_teams} teams still in</div></div>
-      <div class="pscore">${(p.bet_potential>0 && (lbm==='points'||lbm==='hybrid'))?`<span class="betdelta" title="what their open bets would add if they ALL win — counts only when a bet settles">+${p.bet_potential}</span>`:''}${disp(p.score)}<span> ${unit}</span>${(p.live>0 && (lbm==='points'||lbm==='hybrid'))?`<span class="livedelta" title="points from games in play right now">+${p.live}</span>`:''}</div>
-    </div>`;}).join('')
+      <div class="pscore">${canBreak?`<span class="lbtot" data-lbp="${esc(p.name)}" title="live points + open-bet upside — tap for where it comes from">+${xtra} ▾</span>`:''}${disp(p.score)}<span> ${unit}</span></div>
+    </div>${canBreak?`<div class="lbbd" data-lbp="${esc(p.name)}"${LBBD.has(p.name)?'':' hidden'}>${lbBreakdown(p)}</div>`:''}`;}).join('')
     + (board.length>1?`<div class="tbcap">${tbrule}</div>`:'');
+  // expand/collapse a row's "where could these points come from" breakdown; state kept across the 30s refresh
+  const _lbb=document.getElementById('lbBody');
+  if(_lbb) _lbb.onclick=(e)=>{ const c=e.target.closest&&e.target.closest('.lbtot'); if(!c) return;
+    const nm=c.getAttribute('data-lbp');
+    _lbb.querySelectorAll('.lbbd').forEach(pan=>{ if(pan.getAttribute('data-lbp')!==nm) return;
+      if(pan.hasAttribute('hidden')){ pan.removeAttribute('hidden'); LBBD.add(nm); } else { pan.setAttribute('hidden',''); LBBD.delete(nm); } }); };
   // player cards
   document.getElementById('playersBody').innerHTML=d.players.map(p=>`
     <div class="pcard"><h3>${esc(p.name)}<span class="pts">${p.points} pts${p.live>0?` <span style="color:#fff;background:#1f8f4e;border-radius:6px;padding:1px 6px;font-size:.82em">+${p.live} live</span>`:''} · ${p.alive_teams}/${p.total_teams} in</span></h3>
