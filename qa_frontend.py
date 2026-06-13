@@ -66,7 +66,7 @@ ck("push test failures are surfaced to the user", "j.errors" in HTML and "failed
 print("\n== scoring explanation matches the code (points include round bonuses) ==")
 ck("the Points table lists the furthest-round bonus", "furthest knockout round reached" in HTML and "pOrder.filter(k=>SB[k])" in HTML, None)
 ck("the false 'points have no round bonus' text is gone", "POINTS has no separate" not in HTML and "Points come purely from goals" not in HTML, None)
-ck("the worked example says round bonuses add to points", "each knockout round your team reaches adds a one-off points bonus" in HTML, None)
+ck("the worked example shows points include the furthest-round bonus", "one-off bonus for your team" in HTML and "furthest</i> round only" in HTML, None)
 print("\n== Over/Under betting UI (Stage 5) ==")
 ck("the match card renders an O/U row via ouRowHTML", "function ouRowHTML(m)" in HTML and "ouRow=ouRowHTML(m)" in HTML, None)
 ck("O/U buttons carry market + line data attributes", 'data-market="ou"' in HTML and "data-line=\"'+ln+'\"" in HTML, None)
@@ -384,6 +384,8 @@ ck("O/U half-line is never level", provResult({selection:"OVER",market:"ou",line
   ck("acca won leg + live winner -> win", accaLiveStatus(W([{matchId:"x",selection:"HOME",result:"won"},{matchId:"m1",selection:"HOME"}]), fixOf, liveS) === "win");
   ck("acca with a not-yet-started leg -> level", accaLiveStatus(W([{matchId:"m1",selection:"HOME"},{matchId:"zzz",selection:"HOME"}]), fixOf, liveS) === "level");
   ck("acca with nothing live/lost -> null", accaLiveStatus(W([{matchId:"zzz",selection:"HOME"}]), fixOf, liveS) === null);
+  ck("acca banked leg + not-yet-started leg -> level (headline reflects the win)", accaLiveStatus(W([{matchId:"x",selection:"HOME",result:"won"},{matchId:"zzz",selection:"HOME"}]), fixOf, liveS) === "level");
+  ck("acca all legs banked -> win", accaLiveStatus(W([{matchId:"x",selection:"HOME",result:"won"},{matchId:"y",selection:"HOME",result:"won"}]), fixOf, liveS) === "win");
 }
 
 // ---- buildHistory(): points/position/survival time series ----

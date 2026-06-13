@@ -21,8 +21,8 @@ except Exception:
 
 SCORING = {
     "per_goal": 1, "win": 3, "draw": 1, "clean_sheet": 1,
-    "stage_bonus": {"LAST_32": 4, "LAST_16": 6, "QUARTER_FINALS": 9,
-                    "SEMI_FINALS": 12, "THIRD_PLACE": 14, "FINAL": 30, "WINNER": 85},
+    "stage_bonus": {"LAST_32": 4, "LAST_16": 7, "QUARTER_FINALS": 11,
+                    "SEMI_FINALS": 16, "THIRD_PLACE": 20, "FINAL": 50, "WINNER": 100},
 }
 SURVIVAL_VALUE = {"LAST_32": 18, "LAST_16": 26, "QUARTER_FINALS": 34,
                   "SEMI_FINALS": 44, "FINAL": 85, "WINNER": 135}

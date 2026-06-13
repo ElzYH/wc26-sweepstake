@@ -113,17 +113,17 @@ KO = [M("k1", "Brazil", "Serbia", 1, 0, stage="LAST_16"),
       M("k4", "Brazil", "France", 2, 0, stage="FINAL")]
 td = run({"Erol": ["Brazil"], "James": ["France"]}, KO)
 b = team_in(td, "Erol", "Brazil")
-ck("furthest stage bonus is WINNER(85), NOT stacked across rounds", b["points"] == (1+3+1) + (2+3) + (1+3+1) + (2+3+1) + 85, b)
+ck("furthest stage bonus is WINNER, NOT stacked across rounds", b["points"] == (1+3+1) + (2+3) + (1+3+1) + (2+3+1) + scoring.SCORING["stage_bonus"]["WINNER"], b)
 ck("champion team status is alive at WINNER stage", b["status"] == "alive" and b["stage"] == "WINNER", b)
 ck("survival for champion is WINNER value (135)", b["survival"] == 135, b)
 # a beaten finalist: furthest FINAL bonus(30), survival FINAL(85)
 f = team_in(td, "James", "France")
-ck("losing finalist gets FINAL points bonus (30), not WINNER", any(s == 30 for s in [30]) and f["points"] >= 30, f)
+ck("losing finalist gets FINAL points bonus, not WINNER", f["points"] == scoring.SCORING["stage_bonus"]["FINAL"], f)
 ck("losing finalist survival is FINAL (85), not WINNER", f["survival"] == 85, f)
 # 3rd place: winner gets bronze POINTS bonus but NO survival
 td = run({"Erol": ["Brazil"], "James": ["France"]},
          [M("tp", "Brazil", "France", 2, 1, stage="THIRD_PLACE")])
-ck("3rd-place winner gets THIRD_PLACE points bonus (14)", team_in(td, "Erol", "Brazil")["points"] == (2+3) + 14, team_in(td, "Erol", "Brazil"))
+ck("3rd-place winner gets THIRD_PLACE points bonus", team_in(td, "Erol", "Brazil")["points"] == (2+3) + scoring.SCORING["stage_bonus"]["THIRD_PLACE"], team_in(td, "Erol", "Brazil"))
 ck("3rd-place gives NO survival value", team_in(td, "Erol", "Brazil")["survival"] == 0, team_in(td, "Erol", "Brazil"))
 # penalties: a KO drawn on the pitch but won on pens counts as a win + advances
 td = run({"Erol": ["Brazil"], "James": ["Serbia"]},

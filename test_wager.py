@@ -113,6 +113,18 @@ def run():
     ok, _ = wager.place([], "Erol", fx(status="TIMED", utc=PAST), "HOME", 5, settled_points=99, comp_home=80, comp_away=40)
     ck("can't bet after kickoff time even if status lags", not ok)
 
+    # --- a game that kicks off past midnight stays bettable until its REAL kickoff (calendar day is irrelevant) ---
+    late_now = wager._utc_ts("2026-06-17T22:30:00Z")            # 22:30 on the 17th
+    ck("a 03:00-next-day game is bettable at 22:30 the night before",
+       wager.can_bet_on({"status": "TIMED", "utcDate": "2026-06-18T03:00:00Z"}, now=late_now))
+    ck("...and is closed once that 03:00 kickoff passes",
+       not wager.can_bet_on({"status": "TIMED", "utcDate": "2026-06-18T03:00:00Z"},
+                            now=wager._utc_ts("2026-06-18T03:00:01Z")))
+    ok, _ = wager.place([], "Erol", {"home": "Brazil", "away": "Serbia", "stage": "GROUP_STAGE",
+                                     "utcDate": "2026-06-18T03:00:00Z", "status": "TIMED"},
+                        "HOME", 5, settled_points=99, comp_home=80, comp_away=40, now=late_now)
+    ck("can place on a past-midnight game before it starts", ok)
+
     # --- max simultaneous open bets ---
     many = []
     for i in range(wager.MAX_PENDING):

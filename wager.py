@@ -655,9 +655,9 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
         return place(wagers, player, s["match"], s["selection"], stake, settled_points,
                      s["comp_home"], s["comp_away"], now, group_mid_ts,
                      market=s.get("market", "result"), line=s.get("line"))
-    ids = [match_id(s["match"]) for s in selections]
-    if len(set(ids)) != len(ids):
-        return False, "You can't pick the same game twice in one accumulator."
+    keys = [(match_id(s["match"]), s.get("market", "result")) for s in selections]
+    if len(set(keys)) != len(keys):
+        return False, "Only one result bet and one goals (over/under) bet per game in an accumulator."
     try:
         stake = round(float(stake), 2)
     except (TypeError, ValueError):
