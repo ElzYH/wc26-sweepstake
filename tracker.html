@@ -33,8 +33,11 @@
   .dot-live{display:inline-block;width:8px;height:8px;border-radius:50%;background:#39d98a;margin-right:6px;
     animation:pulse 1.6s infinite}
   @keyframes pulse{50%{opacity:.3}}
-  .tabs{display:flex;gap:8px;margin:22px 0 18px;flex-wrap:wrap;justify-content:center}
-  .tab{flex:0 0 auto;white-space:nowrap;font-family:'Sora';font-weight:700;font-size:14px;padding:9px 18px;border-radius:999px;cursor:pointer;
+  .tabs{display:flex;gap:8px;margin:22px 0 18px;flex-wrap:nowrap;overflow-x:auto;
+    scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:3px}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{flex:0 0 auto;white-space:nowrap;font-family:'Sora';font-weight:700;
+    font-size:clamp(12px,2.5vw,14px);padding:clamp(7px,1.6vw,9px) clamp(12px,2.9vw,18px);border-radius:999px;cursor:pointer;
     background:#10301f;border:1px solid var(--line);color:var(--ink)}
   .tab.on{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205;border-color:var(--gold)}
   section{display:none}section.on{display:block}
@@ -258,8 +261,7 @@
     .ctrls{margin-left:0;width:auto;justify-content:flex-start}
     #menuBtn{width:auto;text-align:center;padding:7px 14px}
     .menu{left:0;right:auto;min-width:210px}
-    .tabs{gap:6px;margin:16px 0 14px;justify-content:center}
-    .tabs .tab{padding:7px 12px;font-size:13px}
+    .tabs{margin:16px 0 14px}
     th,td{padding:6px 7px;font-size:11.5px}
     caption{font-size:15px;padding:10px 12px 5px}
     .match{grid-template-columns:1fr 44px 1fr;gap:7px;padding:9px 11px}
@@ -507,7 +509,7 @@
     <div class="h2hsel"><select id="h2hA"></select><span class="vs">vs</span><select id="h2hB"></select></div>
     <div id="h2hBody"></div>
   </section>
-  <section id="groups"><div class="grid" id="groupsBody"></div></section>
+  <section id="groups"><div id="groupsPoolNote" style="font-size:12px;color:var(--muted);margin:0 0 12px"></div><div class="grid" id="groupsBody"></div></section>
   <section id="bracket"><div class="modesel" id="koRounds"></div><div id="bracketBody"></div></section>
   <section id="fixtures"><div class="fx" id="fixturesBody"></div></section>
   <section id="bets"><div id="betsBody"></div></section>
@@ -1212,8 +1214,9 @@ function render(d){
   // groups
   const gb=document.getElementById('groupsBody');
   const poolTeams=[...new Set(d.groups.flatMap(g=>g.table.filter(r=>!r.owner||r.owner==='—'||r.owner==='-').map(r=>r.team)))];
-  const poolNote=poolTeams.length?('<div style="font-size:12px;color:var(--muted);margin:0 0 10px">🎱 <b style="color:var(--ink)">Pool teams (no owner):</b> '+poolTeams.map(esc).join(', ')+' — their points count for <b>no one</b>. Playing them is like playing anyone else: you only ever earn points for your own team.</div>'):'';
-  gb.innerHTML = d.groups.length? poolNote+d.groups.map(g=>`
+  const poolNoteEl=document.getElementById('groupsPoolNote');
+  if(poolNoteEl) poolNoteEl.innerHTML = poolTeams.length?('🎱 <b style="color:var(--ink)">Pool teams (no owner):</b> '+poolTeams.map(esc).join(', ')+' — they score for <b>no one</b>. You only ever earn your own team\'s points.'):'';
+  gb.innerHTML = d.groups.length? d.groups.map(g=>`
     <table><caption>${/^group/i.test(g.group)?g.group:"Group "+g.group}</caption>
       <tr><th>#</th><th>Team</th><th>Owner</th><th>Pld</th><th>GD</th><th>Pts</th></tr>
       ${g.table.map(r=>`<tr class="${r.position<=2?'qual':''}">

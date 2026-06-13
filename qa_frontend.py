@@ -64,7 +64,7 @@ ck("push test failures are surfaced to the user", "j.errors" in HTML and "failed
 
 # ---- pool teams: every surface says they score for no one ----
 ck("the live breakdown flags an unowned (pool) side", "unowned (pool) — those points count for no one" in HTML, None)
-ck("group tables carry the pool-teams note", "Pool teams (no owner):" in HTML and "you only ever earn points for your own team" in HTML, None)
+ck("group tables carry the pool-teams note", "Pool teams (no owner):" in HTML and "You only ever earn your own team" in HTML, None)
 ck("the rules panel explains the pool", "The pool (leftover teams):" in HTML and "score for <b>no one</b>" in HTML, None)
 _setup = open(os.path.join(REPO, "setup.html")).read() if os.path.exists(os.path.join(REPO, "setup.html")) else ""
 ck("setup explains both leftover options plainly", "belong to no one and score points for no one" in _setup, None)
@@ -73,7 +73,10 @@ ck("setup explains both leftover options plainly", "belong to no one and score p
 print("\n== iOS betting fix + layout + join link ==")
 ck("the broken noFloat/scrollBy keyboard hack is gone", "noFloat" not in HTML and "scrollBy" not in HTML, None)
 ck("stake inputs are 16px (iOS won't zoom)", HTML.count("padding:8px 10px;font-size:16px") == 2 and "padding:8px 10px;font-size:14px" not in HTML, None)
-ck("tabs row is centred", ".tabs{display:flex;gap:8px;margin:22px 0 18px;flex-wrap:wrap;justify-content:center}" in HTML, None)
+ck("tabs are a single scrollable line (no ugly wrap)", ".tabs{display:flex;gap:8px;margin:22px 0 18px;flex-wrap:nowrap;overflow-x:auto;" in HTML.replace("\n", "").replace("    ", ""), None)
+ck("tab pills scale smoothly with viewport (clamp)", "font-size:clamp(12px,2.5vw,14px)" in HTML.replace(" ", ""), None)
+ck("the tabs scrollbar is hidden for neatness", ".tabs::-webkit-scrollbar{display:none}" in HTML, None)
+ck("the groups pool note is OUTSIDE the grid (own element, not a grid cell)", 'id="groupsPoolNote"' in HTML and "poolNote+d.groups" not in HTML, None)
 ck("on phone the controls sit left (don't run off-page)", ".ctrls{margin-left:0;width:auto;justify-content:flex-start}" in HTML, None)
 ck("on phone the menu opens from the left", ".menu{left:0;right:auto;min-width:210px}" in HTML, None)
 ck("the bets chip is now LEFT of the score on the leaderboard", re.search(r'class="pscore">\$\{\(p\.bet_potential>0[^`]*`<span class="betdelta"', HTML) is not None, None)
@@ -83,6 +86,12 @@ ck("the Join button points at the stable /join redirect", 'href="/join"' in HTML
 
 # ---- leaner copy: the giant get-alerts paragraph is gone ----
 ck("the get-alerts help is trimmed (no Home-Screen wall of text)", "On iPhone you must first add the site to your Home Screen (Share" not in HTML, None)
+
+# ---- Discord welcome (short, not the whole /help) ----
+_srv = open(os.path.join(REPO, "server.py")).read()
+ck("a first-interaction welcome DM exists", "_maybe_welcome(uid)" in _srv and "WELCOME_TEXT" in _srv, None)
+ck("the welcome is short — a few commands, not the full help", _srv.count("WELCOME_TEXT = (") == 1 and 0 < _srv.split("WELCOME_TEXT = (", 1)[1].split(")", 1)[0].count("`/") <= 7, None)
+ck("the welcome only greets each user once (persisted)", "WELCOMED_FILE" in _srv and "if uid in seen" in _srv, None)
 
 # ---- potential betting points: visible but never added to the score ----
 ck("leaderboard rows show a potential-bets chip", 'class="betdelta"' in HTML and "+${p.bet_potential}" in HTML, None)

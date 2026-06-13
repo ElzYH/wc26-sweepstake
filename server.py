@@ -582,6 +582,41 @@ def _save_push(d):
     _atomic_write_json(PUSH_FILE, d)
 
 
+WELCOMED_FILE = "welcomed.json"               # ["uid", ...] — Discord users we've already greeted (DM once)
+def _maybe_welcome(uid):
+    """First time a person ever uses the bot, DM them a short welcome with the few key commands.
+    The bot is interactions-only (no gateway), so 'joined the server' isn't observable — first
+    command is the closest reliable signal. Once per user, best-effort, never blocks the reply."""
+    if not uid:
+        return
+    try:
+        with _lock:
+            try:
+                with open(WELCOMED_FILE) as f:
+                    seen = json.load(f)
+            except Exception:
+                seen = []
+            if uid in seen:
+                return
+            seen.append(uid)
+            _atomic_write_json(WELCOMED_FILE, seen)
+        _bot_dm(uid, WELCOME_TEXT)
+    except Exception as e:
+        log("welcome DM failed:", e)
+
+
+WELCOME_TEXT = (
+    "👋 **Welcome to the WC26 Sweepstake!**\n"
+    "A few things you can do right here:\n"
+    "• `/leaderboard` — who's winning\n"
+    "• `/myteams` — the teams you were drawn\n"
+    "• `/fixtures` — what's coming up\n"
+    "• `/notifyme` — I'll DM you when your teams play & score\n"
+    "• `/bet` — place a bet (first link up: tracker → 💷 Bets → **Connect Discord**, then `/linkdiscord`)\n"
+    "Type `/help` any time for the full list. Good luck! 🍀"
+)
+
+
 try:
     import wager as wager_mod                 # optional wagering engine
 except Exception:
@@ -1667,6 +1702,7 @@ def _bet_team_choices(partial=""):
 
 def discord_command(name, opts, uid=None, interaction_id=None):
     """Build a read-only reply for a slash command. No admin actions."""
+    _maybe_welcome(uid)                 # greet a brand-new user once, with the few key commands
     d = _load_tracker() or {}
     mode = _active_mode()
     label = "survival" if mode == "survival" else "pts"

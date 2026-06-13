@@ -104,6 +104,27 @@ if "No player" not in server.discord_command("myteams", {"player": "definitely-n
 else:
     print("[mid-tournament] /myteams handles an unknown player OK")
 
+# welcome DM: a brand-new Discord user is greeted once (short list), repeat users are not re-greeted
+_wd = []
+_orig_botdm = server._bot_dm
+server._bot_dm = lambda uid, text: (_wd.append((uid, text)) or (True, None))
+try:
+    if os.path.exists(server.WELCOMED_FILE):
+        os.remove(server.WELCOMED_FILE)
+except Exception:
+    pass
+server.discord_command("leaderboard", {}, uid="newcomer1")
+server.discord_command("fixtures", {}, uid="newcomer1")      # same user again -> no second welcome
+server.discord_command("help", {}, uid="newcomer2")          # different user -> welcomed
+server._bot_dm = _orig_botdm
+_greets = [d for d in _wd if "Welcome" in d[1]]
+if len(_greets) != 2:
+    fails.append(("welcome", "expected 2 greetings (one per new user), got %d" % len(_greets)))
+elif not ("/leaderboard" in _greets[0][1] and "/help" in _greets[0][1] and _greets[0][1].count("`/") <= 7):
+    fails.append(("welcome", "welcome text wrong or too long: %r" % _greets[0][1][:80]))
+else:
+    print("[mid-tournament] first-interaction welcome DM fires once per user (short list) OK")
+
 # spot-check the live minute reached /fixtures
 fx = server.discord_command("fixtures", {})
 if "67'" not in fx:
