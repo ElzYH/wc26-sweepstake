@@ -1088,22 +1088,30 @@ def _vapid_key():
 
 
 def _webpush_one(sub, title, body):
-    """Send one push. Returns True to keep the subscription, False if it's dead (expired)."""
+    """Send one push. Returns (keep, err): keep=False means the subscription is dead (prune it);
+    err is None on success, otherwise a short human-readable reason.
+    TTL matters: pywebpush defaults to TTL=0 ("deliver this instant or drop"), and iPhones that are
+    locked/asleep silently lose TTL-0 pushes — so we give every push a 6-hour shelf life."""
     cfg = load_config()
     try:
         webpush(subscription_info=sub, data=json.dumps({"title": title, "body": body}),
-                vapid_private_key=_vapid_key(),
+                vapid_private_key=_vapid_key(), ttl=21600, headers={"Urgency": "high"},
                 vapid_claims={"sub": cfg.get("vapid_sub", "mailto:admin@bbmsweepstake.co.uk")})
-        return True
+        return True, None
     except WebPushException as e:
         code = getattr(getattr(e, "response", None), "status_code", None)
+        detail = ""
+        try:
+            detail = (getattr(e, "response", None).text or "")[:120]
+        except Exception:
+            pass
         if code in (404, 410):
-            return False                  # subscription gone — prune it
+            return False, "subscription expired (pruned)"
         log("webpush failed:", code, e)
-        return True
+        return True, "push service said %s %s" % (code if code is not None else "?", detail)
     except Exception as e:
         log("webpush error:", e)
-        return True
+        return True, str(e)[:160]
 
 
 def push_player(player, etype, title, body):
@@ -1116,7 +1124,8 @@ def push_player(player, etype, title, body):
         if not _entry_wants(e, etype):    # this device opted out of this event type
             keep.append(e)
             continue
-        if _webpush_one(_entry_sub(e), title, body):
+        keep_it, _err = _webpush_one(_entry_sub(e), title, body)
+        if keep_it:
             keep.append(e)
         else:
             changed = True
@@ -3507,13 +3516,27 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/push_test":               # OPEN: server sends a real push to this player's devices
             player = str(body.get("player", "")).strip()
             if not push_enabled():
-                return self._send(400, json.dumps({"ok": False, "error": "push not enabled"}))
+                why = "the push library isn't installed on the server" if not HAVE_WEBPUSH else "the server has no push keys yet"
+                return self._send(400, json.dumps({"ok": False, "error": why}))
             lst = _load_push().get(player)
             if not lst:
                 return self._send(400, json.dumps({"ok": False, "error": "no devices subscribed yet"}))
+            sent, errors, keep, changed = 0, [], [], False
             for e in lst:                          # a test ignores per-event choices
-                _webpush_one(_entry_sub(e), "WC26 Sweepstake", "✅ Push alerts are working, %s!" % player)
-            return self._send(200, json.dumps({"ok": True}))
+                keep_it, err = _webpush_one(_entry_sub(e), "WC26 Sweepstake", "✅ Push alerts are working, %s!" % player)
+                if err is None:
+                    sent += 1
+                else:
+                    errors.append(err)
+                if keep_it:
+                    keep.append(e)
+                else:
+                    changed = True
+            if changed:                            # prune dead devices found by the test
+                with _lock:
+                    subs = _load_push(); subs[player] = keep; _save_push(subs)
+            return self._send(200, json.dumps({"ok": sent > 0, "sent": sent,
+                                               "failed": len(errors), "errors": errors[:3]}))
         if path == "/api/push_unsubscribe":        # OPEN: remove this device
             ep = str(body.get("endpoint", "")).strip()
             if ep:

@@ -9,6 +9,7 @@ __pycache__/
 backups/
 .DS_Store
 .idea/
+.venv/
 config.json
 .env
 odds_*.txt

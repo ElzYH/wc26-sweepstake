@@ -250,6 +250,30 @@ ck("re-settling after full-time doesn't change it (idempotent under churn)", w[0
 _W.settle(w, M("m1", "Brazil", "Serbia", 0, 3, status="FINISHED", winner="AWAY"))
 ck("a post-settlement score correction does NOT flip a settled bet", w[0]["status"] == "won", w[0]["status"])
 
+# ---- bet_potential: "+N if your bets land" must equal the REAL score delta when they do ----
+print("\n== bet_potential (potential betting points on the leaderboard) ==")
+import scoring as _SCO, tempfile as _tfp
+_bd = _tfp.mkdtemp()
+json.dump({"teams": [{"name": "BP1", "composite": 50, "group": "A"}, {"name": "BP2", "composite": 50, "group": "A"}]}, open(os.path.join(_bd, "teams.json"), "w"))
+json.dump({"players": [{"name": "PA", "teams": [{"name": "BP1"}]}, {"name": "PB", "teams": [{"name": "BP2"}]}]}, open(os.path.join(_bd, "draw.json"), "w"))
+json.dump({"matches": [{"home": "BP1", "away": "BP2", "homeScore": 2, "awayScore": 0, "status": "FINISHED", "stage": "GROUP_STAGE", "utcDate": "2026-06-10T17:00:00Z", "matchId": 1}]}, open(os.path.join(_bd, "results.json"), "w"))
+def _bp_run(_wl):
+    _o = os.path.join(_bd, "out.json")
+    _SCO.compute(os.path.join(_bd, "teams.json"), os.path.join(_bd, "draw.json"), os.path.join(_bd, "results.json"), _o, "hybrid", wagers=_wl)
+    _j = json.load(open(_o))
+    return {p["name"]: p for p in _j["players"]}, {r["name"]: r for r in _j["leaderboards"]["points"]}
+_BW = [{"id": "a", "player": "PA", "stake": 10, "return": 35, "status": "pending", "matchId": 9},
+       {"id": "b", "player": "PA", "stake": 5, "return": 20, "status": "pending", "free": True, "matchId": 9},
+       {"id": "c", "player": "PB", "stake": 3, "return": 6, "status": "lost", "matchId": 8}]
+_pl, _lb = _bp_run(_BW)
+_pl2, _ = _bp_run([dict(w, status=("won" if w["status"] == "pending" else w["status"])) for w in _BW])
+_delta = round(_pl2["PA"]["points"] - _pl["PA"]["points"], 1)
+ck("potential equals the real score delta when every open bet wins (cushion-aware)", _pl["PA"]["bet_potential"] == _delta, (_pl["PA"]["bet_potential"], _delta))
+ck("a player with no open bets shows zero potential", _pl["PB"]["bet_potential"] == 0, _pl["PB"]["bet_potential"])
+ck("the potential is surfaced on the leaderboard rows", _lb["PA"].get("bet_potential") == _pl["PA"]["bet_potential"], _lb["PA"])
+ck("potential is display-only: the actual score is unchanged by having open bets", _pl["PA"]["points"] < _pl2["PA"]["points"], (_pl["PA"]["points"], _pl2["PA"]["points"]))
+shutil.rmtree(_bd, ignore_errors=True)
+
 shutil.rmtree(TMP, ignore_errors=True)
 if FAILS:
     print("\nDEEP SCORING QA FAILED (%d): %s" % (len(FAILS), ", ".join(FAILS)))

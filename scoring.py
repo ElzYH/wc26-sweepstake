@@ -264,6 +264,9 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
     if wagers is not None and wager is not None:
         try:
             pdel = wager.player_deltas(wagers)
+            # what-if list: every open bet flipped to won (returns were locked at placement) — used to show
+            # "+N if your bets land" on the leaderboard WITHOUT ever adding it to the real score
+            hyp = [(dict(w, status="won") if (isinstance(w, dict) and w.get("status") == "pending" and not w.get("credit")) else w) for w in wagers]
             for p in players_out:
                 p["points_settled"] = round(p["points"] - p.get("live", 0), 1)   # finished-game points, before bets — the bettable balance
                 d = pdel.get(p["name"], {})
@@ -274,6 +277,9 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                 p["wager_held"] = held_disp
                 p["bets_open"] = d.get("pending_count", 0)
                 p["bettable"] = wager.available_points(p["name"], p["points_settled"], wagers)  # earned + free bonus + winnings - held
+                hnet = wager.leaderboard_net(p["name"], hyp)
+                hheld = wager.leaderboard_held(p["name"], hyp)
+                p["bet_potential"] = max(0.0, round((hnet - hheld) - (lnet - held_lb), 1))   # score-if-all-bets-win minus score-now
                 if lnet or held_lb:
                     newp = max(0.0, round(p["points"] + lnet - held_lb, 1))
                     p["points"] = newp
@@ -287,12 +293,12 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
             return [{"name": p["name"], "score": p["alive_teams"], "alive_teams": p["alive_teams"],
                      "live": p["live"], "total_teams": p["total_teams"],
                      "wager_held": p.get("wager_held", 0), "wager_net": p.get("wager_net", 0),
-                     "bets_open": p.get("bets_open", 0), "points_settled": p.get("points_settled")} for p in rows]
+                     "bets_open": p.get("bets_open", 0), "points_settled": p.get("points_settled"), "bet_potential": p.get("bet_potential", 0)} for p in rows]
         rows = sorted(players_out, key=lambda p: (-p[key], -p["alive_teams"]))
         return [{"name": p["name"], "score": p[key], "alive_teams": p["alive_teams"],
                  "live": p["live"], "total_teams": p["total_teams"],
                  "wager_held": p.get("wager_held", 0), "wager_net": p.get("wager_net", 0),
-                 "bets_open": p.get("bets_open", 0), "points_settled": p.get("points_settled")} for p in rows]
+                 "bets_open": p.get("bets_open", 0), "points_settled": p.get("points_settled"), "bet_potential": p.get("bet_potential", 0)} for p in rows]
 
     # live "odds to own the champion" from bookmaker implied probabilities, alive-aware
     def implied(name):

@@ -51,6 +51,7 @@
   .palive{color:var(--muted);font-size:12px;letter-spacing:.06em}
   .pscore{font-family:'Anton';font-size:30px;color:var(--gold)}
   .livedelta{font-family:'Sora',sans-serif;font-size:11px;font-weight:700;color:#fff;background:#1f8f4e;border-radius:6px;padding:1px 7px;margin-left:8px;vertical-align:middle}
+  .betdelta{font-family:'Sora',sans-serif;font-size:11px;font-weight:700;color:#1a1205;background:var(--gold);border-radius:6px;padding:1px 7px;margin-left:8px;vertical-align:middle}
   .betpill{font-family:'Sora',sans-serif;font-size:11px;font-weight:700;border-radius:6px;padding:1px 7px;margin-left:6px;vertical-align:middle}
   .betpill.win{color:#0a1f12;background:#7ee787}
   .betpill.loss{color:#fff;background:#b3343a}
@@ -131,6 +132,12 @@
   .lcscore{font-family:'Anton';font-size:24px}
   .fxrow{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 13px}
   .fxt{font-size:13.5px;font-weight:500}.fxt small{color:var(--muted);font-weight:400}
+  /* symmetric "team v team": names mirror around a fixed centre column, like the live-match rows */
+  .fxteams{display:grid;grid-template-columns:1fr 38px 1fr;gap:4px;align-items:center;flex:1;min-width:0;font-size:13.5px;font-weight:500}
+  .fxteams .th{text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fxteams .tc{text-align:center;color:var(--muted);font-weight:400}
+  .fxteams .ta{text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fxteams .ta small{color:var(--muted);font-weight:400}
   .fxmeta{color:var(--muted);font-size:11.5px;text-align:right;white-space:nowrap}
   .modesel{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
   .modecap{color:var(--muted);font-size:12.5px;line-height:1.5;margin:-6px 0 14px;padding:9px 12px;background:#08180f;border:1px solid var(--line);border-radius:9px}
@@ -169,8 +176,8 @@
   .menu{display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:30;flex-direction:column;gap:5px;
     background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px;min-width:200px;box-shadow:0 14px 34px #0009}
   .menu.open{display:flex}
-  .menu .mini{width:100%;text-align:left}
-  .mini{font-family:'Sora';font-weight:700;font-size:12px;padding:7px 13px;border-radius:999px;cursor:pointer;background:#10301f;border:1px solid var(--line);color:var(--ink)}
+  .menu .mini{width:100%;text-align:center}
+  .mini{font-family:'Sora';font-weight:700;font-size:12px;padding:7px 13px;border-radius:999px;cursor:pointer;background:#10301f;border:1px solid var(--line);color:var(--ink);text-align:center}
   .mini:hover{background:#143a26}
   .ctrls .cta{background:var(--gold);border-color:var(--gold);color:#04140d}
   .ctrls .cta:hover{filter:brightness(1.07);background:var(--gold)}
@@ -224,7 +231,8 @@
   .mdcard.mdlive{border-color:var(--live);box-shadow:0 0 0 1px var(--live) inset}
   .mdcard.mdfin{opacity:.72}
   .mdmeta{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
-  .mdteams{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13.5px;font-weight:600}
+  .mdteams{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;font-size:13.5px;font-weight:600}
+  .mdteams>span:nth-child(2){text-align:center}
   .mdteams span small{display:block;color:var(--muted);font-weight:500;font-size:10.5px}
   .mdsc{font-family:'Anton';color:var(--gold);font-size:16px;flex:0 0 auto}
   .mdr{text-align:right}
@@ -237,6 +245,7 @@
      tabs) so it can never appear on another page. No JS — pure CSS sticky, safe on iOS Safari / iPad. */
   .betcta{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:25;
     box-shadow:0 8px 30px rgba(0,0,0,.55),0 -2px 12px rgba(0,0,0,.30)}
+  .betcta.noFloat{position:static;box-shadow:none}  /* while typing a stake: iOS keyboard + sticky strands the bar mid-screen */
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
   .lmatch{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin-top:8px;
     color:var(--ink);font-weight:600;font-size:14px;letter-spacing:0}
@@ -246,9 +255,9 @@
   .simh:hover{text-decoration:underline}
   @media(max-width:560px){
     body{padding:18px 13px 60px}
-    .ctrls{margin-left:0;width:100%}
-    #menuBtn{width:100%;text-align:center;padding:9px 13px}
-    .menu{left:0;right:0}
+    .ctrls{margin-left:0;width:100%;justify-content:flex-end}
+    #menuBtn{width:auto;text-align:center;padding:7px 14px}
+    .menu{left:auto;right:0;min-width:210px}
     .tabs{gap:6px;margin:16px 0 14px}
     .tabs .tab{padding:7px 12px;font-size:13px}
     th,td{padding:6px 7px;font-size:11.5px}
@@ -323,6 +332,7 @@
     <p><b>🔔 Get alerts:</b> tap it in the ⋯ menu, pick your name, and turn on alerts for your teams — goals, kick-offs, half-time, knockouts, lead changes and rivalries (when you overtake another player). Tick exactly which of those you want. If the daily summary is on, you'll also get your fixtures for the day each morning. On iPhone you must first add the site to your Home Screen (Share → Add to Home Screen) and open it from that icon; on a laptop just allow notifications. You can also join the group Discord, where the same alerts post for everyone.</p>
     <p><b>Discord bot:</b> in the group server, type <code>/</code> to pull live data — <code>/leaderboard</code>, <code>/summary</code>, <code>/odds</code>, <code>/fixtures</code>, <code>/myteams</code>, <code>/help</code>. It's read-only; nobody can change the draw from Discord.</p>
     <p><b>The draw — Fair vs Weighted:</b> Fair spreads the strongest teams evenly so everyone gets a balanced mix (within each strength band it's still random, so it's fair but not predictable). Weighted is luck-of-the-draw — a bigger team gives better odds but you might land several strong or several weak ones. On the Reveal page, <b>Run draw on the server</b> does the draw on the server and keeps going even if you close the tab — everyone can watch it live.</p>
+    <p><b>The pool (leftover teams):</b> when 48 teams don't split evenly, the spares go to the pool. Pool teams belong to <b>no one</b> and score points for <b>no one</b> — they're just kept visible so you can follow them. Playing against one is a normal game: you earn your own team's points as usual. If a pool team wins the whole thing, nobody gets the glory.</p>
   </div>
   <div class="panel" id="setPanel" style="display:none">
     <h4>Settings — add live scores later</h4>
@@ -568,7 +578,7 @@ function renderBets(){
   const SEL={HOME:'home',DRAW:'draw',AWAY:'away'};
   let h='';
   h+='<div class="ovsec"><div class="ovh">💷 Place a bet</div>';
-  h+='<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--muted);line-height:1.55"><b style="color:#ffd97a">Everyone starts with 5 free betting points</b> — bet with them straight away. They\'re bet-only: <b>only winnings reach the leaderboard</b>, and losing them costs you nothing. After that you stake the points you\'ve <b style="color:var(--ink)">already earned</b> (settled games only) on any upcoming game. Win at the listed odds and the points are <b>added to your total once that game ends</b>; lose and your stake is gone. While a game is live your stake is held — nothing is credited until it finishes. Odds are fractional and <b>lock when you place</b>, bets close at kick-off, and <b style="color:#ffd97a">all bets are final — once placed they can\'t be changed, cancelled or cashed out.</b><br><b style="color:var(--ink)">Accumulator:</b> back up to '+maxLegs+' games in one bet — the odds multiply, but <b>every</b> leg must win; if a single leg loses, the whole acca loses and pays nothing.<br>You can never go below zero'+(retCap?(', and a bet can return at most <b>'+retCap+'</b> points'):' — there\'s no cap on winnings')+'.</div>';
+  h+='<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--muted);line-height:1.6"><b style="color:#ffd97a">You start with 5 free points</b> — losing them costs nothing, and winnings are yours. After that you bet with points you\'ve already earned.<br>Win and the winnings join your total when the game ends; lose and the stake is gone. <b style="color:#ffd97a">All bets are final</b> — odds lock when you place, and bets close at kick-off.<br><b style="color:var(--ink)">Tap two or more games</b> to build a 🎰 accumulator: the odds multiply, but every leg must win.'+(retCap?(' Max return on any bet is <b>'+retCap+'</b> points.'):'')+' You can never go below zero.</div>';
   // prominent: the per-bet ceiling + the LIVE amount this player can stake right now (drops as bets open, recovers as they settle)
   h+='<div style="margin:12px 0;display:flex;gap:10px;flex-wrap:wrap">'
     +'<div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px"><div style="color:var(--muted);font-size:11.5px;letter-spacing:.04em">MAX PER BET</div><div style="font-family:\'Anton\';font-size:26px;line-height:1.1">'+caps.max_stake+'</div><div style="color:var(--muted);font-size:11px">ceiling for one bet · rises each round (65 in the final)</div></div>'
@@ -614,7 +624,7 @@ function renderBets(){
     h+='<div style="margin:0 0 12px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;color:var(--muted)">🎁 You\'ve claimed today\'s free points — they\'re in your balance above. Bet them on any game. The next drop is another day.</div>';
   }
   h+='<div style="color:var(--muted);font-size:12px;margin:0 0 10px">Tap a game to bet · tap it again to remove'+(accasOn?' · tap a second game to build a 🎰 accumulator':'')+'.</div>';
-  if(ACCAMODE) h+='<div style="color:var(--muted);font-size:12.5px;margin:0 0 10px">Pick up to '+maxLegs+' upcoming games — the odds multiply and <b>all</b> must win (one loss = the whole acca pays nothing). Tap an odds button to add a leg. You can have up to <b>'+((caps.max_active_accas)||2)+'</b> accumulators running at once (single bets are unlimited).'+(retCap?(' Max return on any bet is <b>'+retCap+'</b> points.'):'')+' '+(maxLegs!==3?'(The organiser set the leg limit to '+maxLegs+'.)':'')+'</div>';
+  if(ACCAMODE) h+='<div style="color:var(--muted);font-size:12.5px;margin:0 0 10px">🎰 Building an accumulator — odds multiply, but <b>every</b> leg must win. Up to '+maxLegs+' legs, and up to '+((caps.max_active_accas)||2)+' accas running at once.'+(retCap?(' Max return: <b>'+retCap+'</b>.'):'')+'</div>';
   if(!fx.length) h+='<div class="empty">No upcoming games to bet on right now — check back before kick-off.</div>';
   else h+='<div class="mdgrid">'+fx.map(m=>{
     const ko=m.stage&&m.stage!=='GROUP_STAGE';
@@ -625,7 +635,7 @@ function renderBets(){
     const homeAway='<div style="display:flex;gap:6px">'+mk('HOME',m.home)+mk('AWAY',m.away)+'</div>';   // home left, away right
     const drawRow=(!ko && m.odds.DRAW)?('<div style="display:flex;margin-top:6px">'+mk('DRAW','Draw')+'</div>'):'';   // draw below, full width
     return `<div class="mdcard"><div class="mdmeta">${ko?(STAGE_LABEL[m.stage]||m.stage):'Group '+(m.group||'?')} · ${esc(when)}</div>
-      <div class="mdteams" style="margin-bottom:8px"><span>${flag(m.home)}${m.home}</span><span style="color:var(--muted)">v</span><span class="mdr">${flag(m.away)}${m.away}</span></div>
+      <div class="mdteams" style="margin-bottom:8px"><span>${flag(m.home)}${esc(m.home)}</span><span style="color:var(--muted)">v</span><span class="mdr">${flag(m.away)}${esc(m.away)}</span></div>
       <div class="betodds" style="display:block">${homeAway}${drawRow}</div></div>`;
   }).join('')+'</div>';
   if(ACCAMODE && ACCA.length){
@@ -653,6 +663,7 @@ function renderBets(){
   // your bets
   h+='<div class="ovsec"><div class="ovh">Your bets</div><div id="myBets"><div class="empty">Loading…</div></div></div>';
   h+='<div class="ovsec"><div class="ovh">Everyone\'s open bets</div><div id="allBets"><div class="empty">Loading…</div></div></div>';
+  h+='<div class="ovsec" id="betHallWrap" style="display:none"><div class="ovh">Best &amp; worst bets so far</div><div id="betHall"></div></div>';
   el.innerHTML=h;
   const ws=document.getElementById('betWho'); if(ws) ws.onchange=()=>{ BETPLAYER=ws.value; BETPICK=null; ACCA=[]; ACCAMODE=false; BETMSG=''; BETPIN_DRAFT=null; renderBets(); loadMyBets(); };
   const dlb=document.getElementById('discordLoginBtn'); if(dlb) dlb.onclick=()=>{ location.href='/api/discord_login'; };
@@ -726,6 +737,12 @@ function renderBets(){
       else box.textContent=j.error||'Could not unlink.';
     }catch(e){ box.textContent='Could not reach the server.'; }
   };
+  // iOS Safari: while the on-screen keyboard is up, a sticky bar gets stranded mid-screen. Make the
+  // bar sit still while a stake is being typed, and nudge a repaint when the keyboard closes.
+  // (Property assignment, not addEventListener — renderBets() runs often and must not stack handlers.)
+  el.onfocusin=(e)=>{ const c=e.target&&e.target.closest&&e.target.closest('.betcta'); if(c) c.classList.add('noFloat'); };
+  el.onfocusout=(e)=>{ const c=e.target&&e.target.closest&&e.target.closest('.betcta');
+    if(c) setTimeout(()=>{ c.classList.remove('noFloat'); window.scrollBy(0,1); window.scrollBy(0,-1); },250); };
   el.querySelectorAll('.betodd').forEach(b=>b.onclick=()=>{
     const mid=b.dataset.mid, sel=b.dataset.sel, frac=b.dataset.frac;
     if(ACCAMODE){
@@ -879,9 +896,30 @@ async function loadAllBets(){
     const open=(j.wagers||[]).filter(w=>w.status==='pending');
     const live=new Set((DATA.fixtures||[]).filter(f=>f.status==='IN_PLAY'||f.status==='PAUSED').map(f=>f.matchId));
     const fixById=new Map((DATA.fixtures||[]).map(f=>[f.matchId,f]));
-    if(!open.length){ box.innerHTML='<div class="empty">No open bets right now.</div>'; return; }
-    open.sort((a,b)=>(b.placed_at||0)-(a.placed_at||0));
-    box.innerHTML=open.map(w=>betCardHTML(w,{showPlayer:true,live:live,fixById:fixById})).join('');
+    if(!open.length){ box.innerHTML='<div class="empty">No open bets right now.</div>'; }
+    else{
+      open.sort((a,b)=>(b.placed_at||0)-(a.placed_at||0));
+      box.innerHTML=open.map(w=>betCardHTML(w,{showPlayer:true,live:live,fixById:fixById})).join('');
+    }
+    // best & worst settled bets (top 3 each) — biggest net wins, biggest losses
+    const hw=document.getElementById('betHallWrap'), hb=document.getElementById('betHall');
+    if(hw&&hb){
+      const pickOf=w=>w.legs?(w.legs.length+'-fold acca'):(w.selection==='HOME'?w.home:(w.selection==='AWAY'?w.away:'Draw'));
+      const settled=(j.wagers||[]).filter(w=>!w.credit&&(w.status==='won'||w.status==='lost'));
+      const wins=settled.filter(w=>w.status==='won').map(w=>({w,net:(w.return||0)-(w.stake||0)})).sort((a,b)=>b.net-a.net).slice(0,3);
+      const losses=settled.filter(w=>w.status==='lost').map(w=>({w,net:-(w.stake||0)})).sort((a,b)=>a.net-b.net).slice(0,3);
+      const row=(e,good)=>'<div style="display:flex;justify-content:space-between;gap:8px;font-size:12.5px;padding:3px 0">'
+        +'<span><b>'+esc(e.w.player||'')+'</b> — '+esc(pickOf(e.w))+' <span style="color:var(--gold)">'+(e.w.frac||'')+'</span> <span style="color:var(--muted)">(staked '+(e.w.stake||0)+')</span></span>'
+        +'<span style="font-weight:700;color:'+(good?'var(--t2)':'#ff6b6b')+'">'+(good?'+':'−')+Math.abs(Math.round(e.net*100)/100)+'</span></div>';
+      if(!wins.length&&!losses.length){ hw.style.display='none'; }
+      else{
+        hw.style.display='';
+        hb.innerHTML='<div class="mdcard" style="display:grid;gap:2px">'
+          +(wins.length?('<div style="font-size:11.5px;color:var(--muted);margin-bottom:2px">🏆 Biggest wins</div>'+wins.map(e=>row(e,true)).join('')):'')
+          +(losses.length?('<div style="font-size:11.5px;color:var(--muted);margin:'+(wins.length?'8px':'0')+' 0 2px">💀 Biggest losses</div>'+losses.map(e=>row(e,false)).join('')):'')
+          +'</div>';
+      }
+    }
   }catch(e){ box.innerHTML='<div class="empty">Could not load bets.</div>'; }
 }
 async function claimFreePoints(){
@@ -1003,6 +1041,30 @@ let H2H_A=null, H2H_B=null;
 // Prefers the server's accurate elapsed seconds (liveSec, from real kickoff/half-time tracking) and ticks on
 // from there — re-anchored every refresh, with a hard cap so a backgrounded tab can't run the clock away.
 // Falls back to the feed minute (52'), then to 'LIVE' when the feed gives nothing. 'HT' while paused.
+// Provisional live points for one side of an in-play game — mirrors scoring.py's live branch exactly:
+// goals × per_goal, + clean sheet if the other side hasn't scored, + win if ahead / draw points if level.
+// Returns {pts, parts:[['draw',1],['clean sheet',1],...]} so the UI can show WHY (e.g. 0–0 = draw 1 + clean sheet 1).
+function liveParts(scored, conceded){
+  const SC=(DATA.scoring&&DATA.scoring.points)||{per_goal:1,win:3,draw:1,clean_sheet:1};
+  const parts=[]; let pts=0;
+  if(scored>0&&(SC.per_goal||0)>0){ const g=scored*SC.per_goal; parts.push([scored+(scored===1?' goal':' goals'),g]); pts+=g; }
+  if(conceded===0&&(SC.clean_sheet||0)>0){ parts.push(['clean sheet',SC.clean_sheet]); pts+=SC.clean_sheet; }
+  if(scored>conceded&&(SC.win||0)>0){ parts.push(['winning',SC.win]); pts+=SC.win; }
+  else if(scored===conceded&&(SC.draw||0)>0){ parts.push(['draw',SC.draw]); pts+=SC.draw; }
+  return {pts:Math.round(pts*100)/100, parts};
+}
+// One small line under a live match: who's earning what right now, and why.
+function liveBreakLine(m){
+  const sides=[[m.homeOwner,m.homeScore??0,m.awayScore??0,m.home],[m.awayOwner,m.awayScore??0,m.homeScore??0,m.away]];
+  const bits=sides.filter(s=>s[0]&&s[0]!=='—'&&s[0]!=='-').map(s=>{
+    const b=liveParts(s[1],s[2]);
+    return '<b>'+esc(s[0])+'</b> +'+b.pts+(b.parts.length?' <span style="opacity:.75">('+b.parts.map(p=>esc(p[0])+' '+p[1]).join(' · ')+')</span>':'');
+  });
+  const unowned=sides.filter(s=>!s[0]||s[0]==='—'||s[0]==='-').map(s=>esc(s[3]));
+  const poolNote=unowned.length?('<span style="opacity:.75">'+unowned.join(' & ')+(unowned.length===1?' is':' are')+' unowned (pool) — those points count for no one</span>'):'';
+  if(!bits.length&&!poolNote) return '';
+  return '<div style="margin-top:5px;font-size:11.5px;color:var(--muted)">'+(bits.length?('If it ends like this: '+bits.join(' &nbsp;·&nbsp; ')):'')+(bits.length&&poolNote?' &nbsp;·&nbsp; ':'')+poolNote+'</div>';
+}
 function liveClockText(status, minute, liveSec, pens){
   if(pens==='1'||pens===true) return 'PENS';                          // shootout in progress/decided while still live
   if(status==='PAUSED') return 'HT';
@@ -1052,13 +1114,13 @@ function renderLive(d){
   if(soon.length){
     h+='<div class="ovh" style="margin-top:18px">Kicking off next</div><div class="fx">'+soon.map(m=>{
       const stg=m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):(m.group?'Group '+m.group:'');
-      return `<div class="fxrow"><span class="fxt">${flag(m.home)}${esc(m.home)} v ${flag(m.away)}${esc(m.away)}</span><span class="fxmeta">${stg} · ${dayKey(m.utcDate)} ${fmtTime(m.utcDate)}</span></div>`;
+      return `<div class="fxrow"><span class="fxteams"><span class="th">${flag(m.home)}${esc(m.home)}</span><span class="tc">v</span><span class="ta">${flag(m.away)}${esc(m.away)}</span></span><span class="fxmeta">${stg} · ${dayKey(m.utcDate)} ${fmtTime(m.utcDate)}</span></div>`;
     }).join('')+'</div>';
   }
   if(earlier.length){
     h+='<div class="ovh" style="margin-top:18px">Earlier today</div><div class="fx">'+earlier.map(m=>{
       const ko=(m.aet||m.shootout)?` <small>(${m.aet?'a.e.t.':''}${m.shootout?(m.aet?', ':'')+'pens '+(m.penHome??0)+'–'+(m.penAway??0):''})</small>`:'';
-      return `<div class="fxrow"><span class="fxt">${flag(m.home)}${esc(m.home)} ${m.homeScore??0}–${m.awayScore??0} ${flag(m.away)}${esc(m.away)}${ko}</span><span class="fxmeta">${fmtTime(m.utcDate)}</span></div>`;
+      return `<div class="fxrow"><span class="fxteams"><span class="th">${flag(m.home)}${esc(m.home)}</span><span class="tc" style="color:var(--ink);font-weight:600">${m.homeScore??0}–${m.awayScore??0}</span><span class="ta">${flag(m.away)}${esc(m.away)}${ko}</span></span><span class="fxmeta">${fmtTime(m.utcDate)}</span></div>`;
     }).join('')+'</div>';
   }
   body.innerHTML=h;
@@ -1137,28 +1199,31 @@ function render(d){
     return `
     <div class="row ${rank===1&&p.score>0?'lead':''}">
       <div class="rank">${rank}</div>
-      <div><div class="pname">${p.name}${tied?' <span class="tiebadge">tied</span>':''}</div><div class="palive">${p.alive_teams}/${p.total_teams} teams still in</div></div>
-      <div class="pscore">${disp(p.score)}<span> ${unit}</span>${(p.live>0 && (lbm==='points'||lbm==='hybrid'))?`<span class="livedelta" title="points from games in play right now">+${p.live} live</span>`:''}</div>
+      <div><div class="pname">${esc(p.name)}${tied?' <span class="tiebadge">tied</span>':''}</div><div class="palive">${p.alive_teams}/${p.total_teams} teams still in</div></div>
+      <div class="pscore">${disp(p.score)}<span> ${unit}</span>${(p.live>0 && (lbm==='points'||lbm==='hybrid'))?`<span class="livedelta" title="points from games in play right now">+${p.live} live</span>`:''}${(p.bet_potential>0 && (lbm==='points'||lbm==='hybrid'))?`<span class="betdelta" title="what their open bets would add if they ALL win — counts only when a bet settles">+${p.bet_potential} bets</span>`:''}</div>
     </div>`;}).join('')
     + (board.length>1?`<div class="tbcap">${tbrule}</div>`:'');
   // player cards
   document.getElementById('playersBody').innerHTML=d.players.map(p=>`
-    <div class="pcard"><h3>${p.name}<span class="pts">${p.points} pts${p.live>0?` <span style="color:#fff;background:#1f8f4e;border-radius:6px;padding:1px 6px;font-size:.82em">+${p.live} live</span>`:''} · ${p.alive_teams}/${p.total_teams} in</span></h3>
+    <div class="pcard"><h3>${esc(p.name)}<span class="pts">${p.points} pts${p.live>0?` <span style="color:#fff;background:#1f8f4e;border-radius:6px;padding:1px 6px;font-size:.82em">+${p.live} live</span>`:''} · ${p.alive_teams}/${p.total_teams} in</span></h3>
+    ${p.bet_potential>0?`<div style="font-size:12px;color:var(--muted);margin:-2px 0 6px">🎲 ${p.bets_open||''} open bet${p.bets_open===1?'':'s'}${p.wager_held>0?` · ${p.wager_held} riding`:''} — would add <b style="color:var(--gold)">+${p.bet_potential}</b> if they all win <span style="opacity:.75">(only counts when a bet settles)</span></div>`:''}
       <div class="tl">${p.teams.map(t=>`
         <div class="trow ${t.status==='out'?'out':''}">
           <span class="dot" style="background:${TIER[t.tier]}"></span>
-          <span>${flag(t.name)}${t.name}<span class="stg"> · ${t.record} · ${STAGE_LABEL[t.stage]||t.stage}</span></span>
-          <span class="stg">G${t.group}</span>
-          <span class="tp" title="points ${t.name} has earned ${p.name}">${t.points}</span>
+          <span>${flag(t.name)}${esc(t.name)}<span class="stg"> · ${t.record} · ${STAGE_LABEL[t.stage]||t.stage}</span></span>
+          <span class="stg">G${esc(t.group)}</span>
+          <span class="tp" title="points ${esc(t.name)} has earned ${esc(p.name)}">${t.points}${t.live>0?` <span class="livedelta" title="includes +${t.live} from a game in play right now">+${t.live} live</span>`:''}</span>
         </div>`).join('')}</div>
     </div>`).join('');
   // groups
   const gb=document.getElementById('groupsBody');
-  gb.innerHTML = d.groups.length? d.groups.map(g=>`
+  const poolTeams=[...new Set(d.groups.flatMap(g=>g.table.filter(r=>!r.owner||r.owner==='—'||r.owner==='-').map(r=>r.team)))];
+  const poolNote=poolTeams.length?('<div style="font-size:12px;color:var(--muted);margin:0 0 10px">🎱 <b style="color:var(--ink)">Pool teams (no owner):</b> '+poolTeams.map(esc).join(', ')+' — their points count for <b>no one</b>. Playing them is like playing anyone else: you only ever earn points for your own team.</div>'):'';
+  gb.innerHTML = d.groups.length? poolNote+d.groups.map(g=>`
     <table><caption>${/^group/i.test(g.group)?g.group:"Group "+g.group}</caption>
       <tr><th>#</th><th>Team</th><th>Owner</th><th>Pld</th><th>GD</th><th>Pts</th></tr>
       ${g.table.map(r=>`<tr class="${r.position<=2?'qual':''}">
-        <td class="n">${r.position}</td><td>${flag(r.team)}${r.team}</td><td class="owner">${r.owner}</td>
+        <td class="n">${r.position}</td><td>${flag(r.team)}${esc(r.team)}</td><td class="owner">${esc(r.owner)}</td>
         <td class="n">${r.playedGames}</td><td class="n">${r.goalDifference>0?'+':''}${r.goalDifference}</td>
         <td class="n"><b>${r.points}</b></td></tr>`).join('')}
     </table>`).join('') : '<div class="empty">Group tables appear once the group stage kicks off (11 June).</div>';
@@ -1202,8 +1267,8 @@ function bracketCard(m){
   const foot=isLive?`<div class="blive"><span class="pd"></span>${liveClock(m)}</div>`:(done?'':`<div class="btime">${fmtTime(m.utcDate)}</div>`);
   const konote=koNote(m)?`<div class="bnote">${koNote(m)}</div>`:'';
   return `<div class="bcard">
-    <div class="brow ${hw?'win':''} ${done&&aw?'lose':''}"><span class="bteam">${flag(m.home)}${m.home}<small>${m.homeOwner}</small></span><span class="bsc">${sc(true)}</span></div>
-    <div class="brow ${aw?'win':''} ${done&&hw?'lose':''}"><span class="bteam">${flag(m.away)}${m.away}<small>${m.awayOwner}</small></span><span class="bsc">${sc(false)}</span></div>
+    <div class="brow ${hw?'win':''} ${done&&aw?'lose':''}"><span class="bteam">${flag(m.home)}${esc(m.home)}<small>${esc(m.homeOwner)}</small></span><span class="bsc">${sc(true)}</span></div>
+    <div class="brow ${aw?'win':''} ${done&&hw?'lose':''}"><span class="bteam">${flag(m.away)}${esc(m.away)}<small>${esc(m.awayOwner)}</small></span><span class="bsc">${sc(false)}</span></div>
     ${konote}
     ${wpBar3(m,isLive)}
     ${foot}
@@ -1226,7 +1291,7 @@ function winProb(h,a,hs,as_,inplay){
 function wpBar3(m,live){
   if(isDone(m.status)||!m.home||!m.away||(COMP[m.home]==null&&COMP[m.away]==null))return '';
   const p=winProb(m.home,m.away,m.homeScore,m.awayScore,live), R=x=>Math.round(x*100);
-  return `<div class="wp" title="${live?'live ':''}win chance — ${m.home} ${R(p.h)}% · draw ${R(p.d)}% · ${m.away} ${R(p.a)}%"><i style="width:${p.h*100}%;background:var(--t2)"></i><i style="width:${p.d*100}%;background:#3a4a40"></i><i style="width:${p.a*100}%;background:var(--gold)"></i></div><div class="wppct"><span>${R(p.h)}%</span><span style="text-align:center">draw ${R(p.d)}%</span><span style="text-align:right">${R(p.a)}%</span></div>`;
+  return `<div class="wp" title="${live?'live ':''}win chance — ${esc(m.home)} ${R(p.h)}% · draw ${R(p.d)}% · ${esc(m.away)} ${R(p.a)}%"><i style="width:${p.h*100}%;background:var(--t2)"></i><i style="width:${p.d*100}%;background:#3a4a40"></i><i style="width:${p.a*100}%;background:var(--gold)"></i></div><div class="wppct"><span>${R(p.h)}%</span><span style="text-align:center">draw ${R(p.d)}%</span><span style="text-align:right">${R(p.a)}%</span></div>`;
 }
 function matchRow(m){
   const live=m.status==='IN_PLAY'||m.status==='PAUSED';
@@ -1238,9 +1303,9 @@ function matchRow(m){
   const grp=(m.group||'').replace('GROUP_','').trim();
   const left=m.stage!=='GROUP_STAGE'?`${STAGE_LABEL[m.stage]||m.stage}`:(grp?`Group ${grp}`:'');
   return `<div>${left?`<div class="mstage">${left}</div>`:''}<div class="match">
-    <div class="t home">${flag(m.home)}${m.home||'TBD'}<span class="o">${m.homeOwner||''}</span></div>
+    <div class="t home">${flag(m.home)}${esc(m.home||'TBD')}<span class="o">${esc(m.homeOwner||'')}</span></div>
     <div class="mmid">${live?`<div class="sc">${score}</div>`+mid:mid}</div>
-    <div class="t away">${flag(m.away)}${m.away||'TBD'}<span class="o">${m.awayOwner||''}</span></div>
+    <div class="t away">${flag(m.away)}${esc(m.away||'TBD')}<span class="o">${esc(m.awayOwner||'')}</span></div>
   </div>${wpBar3(m,live)}</div>`;
 }
 
@@ -1279,7 +1344,7 @@ function leaderCells(lb,done){
   const sm=STATUS.scoring_mode||'hybrid';
   const cell=(label,mode,unit,showlive)=>{const w=(lb[mode]||[])[0];
     const lv=(showlive && !done && w && w.live>0)?`<div class="wlive"><i>▲</i> +${w.live} live</div>`:'';
-    return `<div class="wcard"><div class="l">${label} ${done?'WINNER 🏆':'LEADER'}</div><div class="nm">${w?w.name:'—'}</div><div class="sc">${w?w.score+' '+unit:''}</div>${lv}</div>`;};
+    return `<div class="wcard"><div class="l">${label} ${done?'WINNER 🏆':'LEADER'}</div><div class="nm">${w?esc(w.name):'—'}</div><div class="sc">${w?w.score+' '+unit:''}</div>${lv}</div>`;};
   if(sm==='points') return [cell('POINTS','points','pts',true)];
   if(sm==='survival') return [cell('SURVIVAL','survival','in',false)];
   return [cell('POINTS','points','pts',true),cell('BOTH','hybrid','total',true),cell('SURVIVAL','survival','in',false)];
@@ -1325,7 +1390,7 @@ function renderOverview(d){
   const fx=d.fixtures||[], st=d.stats||{}, lb=d.leaderboards||{}, champ=d.champion||[];
   const done=(st.teams_remaining<=1 && st.matches_played>0);
   const live=fx.filter(m=>['IN_PLAY','PAUSED','LIVE','SUSPENDED'].includes(m.status));
-  const own=o=>(o&&o!=='—'&&o!=='-')?`<small>${o}</small>`:'';
+  const own=o=>(o&&o!=='—'&&o!=='-')?`<small>${esc(o)}</small>`:'';
   let html='';
   if(d.champion_decided){
     const c=d.champion_decided;
@@ -1345,7 +1410,7 @@ function renderOverview(d){
       <div class="wbnav">${multi?'<button class="warrow" id="winPrev">‹</button>':'<span></span>'}
         <div class="wbk">🏆 ${s.label} winner</div>
         ${multi?'<button class="warrow" id="winNext">›</button>':'<span></span>'}</div>
-      <div class="wbteam">${s.player}</div>
+      <div class="wbteam">${esc(s.player)}</div>
       <div class="wbwin" style="color:var(--gold)">${s.score}</div>${s.note?`<div style="color:var(--muted);font-size:11.5px;margin-top:5px;line-height:1.45;max-width:340px;margin-left:auto;margin-right:auto">${esc(s.note)}</div>`:''}${dots}</div>`;
   }
   // SUMMARY digest (mirrors the Discord 'post summary')
@@ -1358,7 +1423,7 @@ function renderOverview(d){
   html+='<div class="ovsec"><div class="ovh">🔴 Live now</div>';
   if(live.length){
     html+='<div class="livegrid">'+live.map(m=>`<div class="livecard"><span class="livedot"></span>LIVE${m.minute?" "+m.minute+"'":""}${m.stage&&m.stage!=='GROUP_STAGE'?' · '+(STAGE_LABEL[m.stage]||m.stage):''}
-      <div class="lmatch"><span>${flag(m.home)}${m.home}${own(m.homeOwner)}</span><span class="lsc">${m.homeScore??0}–${m.awayScore??0}</span><span class="lr">${flag(m.away)}${m.away}${own(m.awayOwner)}</span></div></div>`).join('')+'</div>';
+      <div class="lmatch"><span>${flag(m.home)}${esc(m.home)}${own(m.homeOwner)}</span><span class="lsc">${m.homeScore??0}–${m.awayScore??0}</span><span class="lr">${flag(m.away)}${esc(m.away)}${own(m.awayOwner)}</span></div>${liveBreakLine(m)}</div>`).join('')+'</div>';
   } else {
     html+='<div class="empty">No games in play right now — live scores appear here the moment a match kicks off.</div>';
   }
@@ -1384,7 +1449,7 @@ function renderOverview(d){
         const where=m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):('Group '+(m.group||'?'));
         const kn=koNote(m);
         return `<div class="mdcard${liveN?' mdlive':''}${fin?' mdfin':''}"><div class="mdmeta">${where} · ${tag}${kn?' · '+kn:''}</div>
-          <div class="mdteams"><span>${flag(m.home)}${m.home}${own(m.homeOwner)}</span><span class="mdsc">${sc}</span><span class="mdr">${flag(m.away)}${m.away}${own(m.awayOwner)}</span></div></div>`;
+          <div class="mdteams"><span>${flag(m.home)}${esc(m.home)}${own(m.homeOwner)}</span><span class="mdsc">${sc}</span><span class="mdr">${flag(m.away)}${esc(m.away)}${own(m.awayOwner)}</span></div></div>`;
       }).join('')+'</div></div>';
     }
   }
@@ -1437,7 +1502,7 @@ function winOddsRows(d,mode){
     const lbk = mode==='pts'?'points':(mode==='both'?'hybrid':'survival');
     const rows=(d.leaderboards||{})[lbk]||[]; const max=Math.max(1,...rows.map(r=>r.score||0));
     return '<div style="color:var(--muted);font-size:12.5px;margin:0 0 8px">Tournament over — this is the <b>final result</b>.</div>'
-      +rows.map((r,i)=>`<div class="oddrow"><div class="nm">${i===0?'🏆 ':''}${r.name}</div><div class="oddbar"><i style="width:${Math.round(100*(r.score||0)/max)}%;${i===0?'':'opacity:.55'}"></i></div><div class="pct" style="color:${i===0?'var(--gold)':'var(--ink)'}">${r.score}</div></div>`).join('');
+      +rows.map((r,i)=>`<div class="oddrow"><div class="nm">${i===0?'🏆 ':''}${esc(r.name)}</div><div class="oddbar"><i style="width:${Math.round(100*(r.score||0)/max)}%;${i===0?'':'opacity:.55'}"></i></div><div class="pct" style="color:${i===0?'var(--gold)':'var(--ink)'}">${r.score}</div></div>`).join('');
   }
   if(mode==='surv' || mode==='survival'){
     const c=(d.champion||[]); if(!c.length) return '<div class="empty">Odds appear once the draw is in.</div>';
@@ -1534,7 +1599,7 @@ function renderOdds(d){
   document.getElementById('oddsBody').innerHTML='<div style="color:var(--muted);font-size:13px;margin:4px 0 8px">Live chance each player owns the World Cup winner (from bookmaker odds, updates as teams go out):</div>'+
     champ.map(c=>`<div class="oddrow"><div class="nm">${c.name}</div><div class="oddbar"><i style="width:${Math.round(100*c.odds/max)}%"></i></div><div class="pct">${c.odds}%</div></div>`).join('');
   const smax=Math.max(1,...str.map(s=>s.strength));
-  document.getElementById('strengthBody').innerHTML=str.map(s=>`<div class="oddrow"><div class="nm">${s.name}</div><div class="oddbar"><i style="width:${Math.round(100*s.strength/smax)}%;background:linear-gradient(90deg,var(--t3),var(--t1))"></i></div><div class="pct" style="width:auto;color:var(--ink)">${s.strength}${s.favourites?` · ${s.favourites}★`:''}</div></div>`).join('');
+  document.getElementById('strengthBody').innerHTML=str.map(s=>`<div class="oddrow"><div class="nm">${esc(s.name)}</div><div class="oddbar"><i style="width:${Math.round(100*s.strength/smax)}%;background:linear-gradient(90deg,var(--t3),var(--t1))"></i></div><div class="pct" style="width:auto;color:var(--ink)">${s.strength}${s.favourites?` · ${s.favourites}★`:''}</div></div>`).join('');
   ensureSim(); renderSim(SIMSORT);
   renderChart(d);
 }
@@ -1779,7 +1844,7 @@ function renderSim(sortKey){
   const rows=SIMRES.slice().sort((a,b)=>(b[sk]||0)-(a[sk]||0));
   const head='<tr style="color:var(--muted);text-align:left"><th style="padding:6px 8px">Player</th>'+
     cols.map(c=>`<th class="simh" data-k="${c.k}" style="cursor:pointer;padding:6px 8px;${c.k===sk?'color:var(--gold)':''}">${c.label}${c.k===sk?' ↓':' ↕'}</th>`).join('')+'</tr>';
-  const body=rows.map(r=>`<tr style="border-top:1px solid var(--line)"><td style="padding:7px 8px;font-weight:600">${r.name}</td>`+
+  const body=rows.map(r=>`<tr style="border-top:1px solid var(--line)"><td style="padding:7px 8px;font-weight:600">${esc(r.name)}</td>`+
     cols.map(c=>c.k==='proj'?`<td style="padding:7px 8px">${Math.round(r.proj)}</td>`:`<td style="padding:7px 8px;${c.k===sk?'color:var(--gold);font-weight:700':''}">${r[c.k].toFixed(1)}%</td>`).join('')+'</tr>').join('');
   document.getElementById('simBody').innerHTML='<table style="width:100%;border-collapse:collapse;font-family:Sora;font-size:14px">'+head+body+'</table>';
   document.querySelectorAll('.simh').forEach(h=>h.onclick=()=>renderSim(h.dataset.k));
@@ -2212,7 +2277,9 @@ function renderAlerts(){
   if(pTest) pTest.onclick=async()=>{ const who=notifyMe(); const m=document.getElementById('alMsg'); if(!who){m.textContent='Pick your name first.';return;}
     m.textContent='Sending…';
     try{ const j=await fetch('/api/push_test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:who})}).then(r=>r.json());
-      m.textContent=j.ok?'Sent — check your notifications.':('Couldn\'t send: '+(j.error||'try again')); }catch(e){ m.textContent='Couldn\'t send.'; } };
+      if(j.ok&&!j.failed) m.textContent='Sent — check your notifications.';
+      else if(j.ok) m.textContent='Sent to '+j.sent+' device(s); '+j.failed+' failed: '+(j.errors||[]).join(' · ');
+      else m.textContent='Couldn\'t send: '+((j.errors&&j.errors.length)?j.errors.join(' · '):(j.error||'try again')); }catch(e){ m.textContent='Couldn\'t send.'; } };
   const en=document.getElementById('alEnable');
   if(en) en.onclick=async()=>{ try{ await Notification.requestPermission(); }catch(e){} renderAlerts(); };
   const tb=document.getElementById('alTest');

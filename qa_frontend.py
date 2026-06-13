@@ -44,6 +44,66 @@ ck("the 'this bet is final' notice rides inside the single-bet sticky bar", "thi
 # tab-scoped: the bar is built inside renderBets() (#bets section), which is display:none on other tabs
 ck("the bar lives in the betting tab only (rendered in renderBets/#betsBody)", "function renderBets(" in JS and 'id="betsBody"' in HTML, None)
 ck("sections are display:none when inactive (so the bar can't show on other tabs)", re.search(r"section\{[^}]*display:none", HTML.replace(" ", "")) is not None, None)
+ck("the bar drops to static while typing (iOS keyboard fix)", ".betcta.noFloat{position:static" in HTML.replace(" ", ""), None)
+
+# ---- XSS regression: name-bearing fields must never be interpolated raw into templates ----
+print("\n== escaping regression (names always esc()'d) ==")
+_raw = re.findall(r"\$\{(?:m\.(?:home|away)(?:\|\|[^}]*)?|p\.name|t\.name|r\.(?:name|team|owner)|s\.(?:name|player)|m\.(?:home|away)Owner[^}]*)\}", HTML)
+ck("no raw name interpolations (all wrapped in esc())", len(_raw) == 0, _raw[:4])
+ck("both own() helpers escape the owner name", HTML.count("`<small>${esc(o)}</small>`") == 2, HTML.count("`<small>${esc(o)}</small>`"))
+
+# ---- symmetric team rows ----
+ck("fixture rows use the symmetric grid (.fxteams)", ".fxteams{display:grid;grid-template-columns:1fr38px1fr" in HTML.replace(" ", ""), None)
+ck("bet/live cards centre the 'v' (mdteams grid)", ".mdteams{display:grid;grid-template-columns:1frauto1fr" in HTML.replace(" ", ""), None)
+ck("buttons are centre-aligned (incl. menu items)", ".menu .mini{width:100%;text-align:center}" in HTML, None)
+ck("the phone menu button is compact, not full-width", "#menuBtn{width:auto" in HTML and "#menuBtn{width:100%" not in HTML, None)
+
+# ---- best & worst bets card ----
+ck("a best/worst bets container exists", 'id="betHall"' in HTML and 'id="betHallWrap"' in HTML, None)
+ck("best/worst excludes free-points credit rows", "filter(w=>!w.credit&&(w.status==='won'||w.status==='lost'))" in HTML, None)
+ck("push test failures are surfaced to the user", "j.errors" in HTML and "failed" in HTML, None)
+
+# ---- pool teams: every surface says they score for no one ----
+ck("the live breakdown flags an unowned (pool) side", "unowned (pool) — those points count for no one" in HTML, None)
+ck("group tables carry the pool-teams note", "Pool teams (no owner):" in HTML and "you only ever earn points for your own team" in HTML, None)
+ck("the rules panel explains the pool", "The pool (leftover teams):" in HTML and "score points for <b>no one</b>" in HTML, None)
+_setup = open(os.path.join(REPO, "setup.html")).read() if os.path.exists(os.path.join(REPO, "setup.html")) else ""
+ck("setup explains both leftover options plainly", "belong to no one and score points for no one" in _setup, None)
+
+# ---- potential betting points: visible but never added to the score ----
+ck("leaderboard rows show a '+N bets' potential chip", 'class="betdelta"' in HTML and "+${p.bet_potential} bets" in HTML, None)
+ck("the chip explains it only counts when a bet settles", "counts only when a bet settles" in HTML, None)
+ck("player cards carry the open-bets potential line", "if they all win" in HTML and "only counts when a bet settles" in HTML, None)
+ck("a .betdelta style exists (gold, distinct from the green live chip)", ".betdelta{" in HTML.replace(" ", "") and "var(--gold)" in HTML.split(".betdelta{",1)[1][:200], None)
+
+# ---- live points breakdown: the frontend explanation must match the server's scoring EXACTLY ----
+print("\n== live points breakdown (frontend mirrors scoring.py) ==")
+ck("a liveParts helper exists", "function liveParts(scored, conceded)" in HTML, None)
+ck("the live match card renders the breakdown line", "liveBreakLine(m)" in HTML, None)
+ck("player cards show a per-team live chip", "from a game in play right now" in HTML, None)
+try:
+    import json as _json, tempfile as _tf, subprocess as _sp
+    sys.path.insert(0, REPO)
+    import scoring as _scoring
+    _cases = [(0, 0), (1, 0), (0, 1), (2, 2), (3, 1), (0, 5)]
+    _server = []
+    for _hs, _as in _cases:
+        _d = _tf.mkdtemp()
+        _json.dump({"teams": [{"name": "TT1", "composite": 50, "group": "A"}, {"name": "TT2", "composite": 50, "group": "A"}]}, open(os.path.join(_d, "teams.json"), "w"))
+        _json.dump({"players": [{"name": "P1", "teams": [{"name": "TT1"}]}, {"name": "P2", "teams": [{"name": "TT2"}]}]}, open(os.path.join(_d, "draw.json"), "w"))
+        _json.dump({"matches": [{"home": "TT1", "away": "TT2", "homeScore": _hs, "awayScore": _as, "status": "IN_PLAY", "stage": "GROUP_STAGE", "utcDate": "2026-06-12T17:00:00Z", "matchId": 1}]}, open(os.path.join(_d, "results.json"), "w"))
+        _o = os.path.join(_d, "out.json")
+        _scoring.compute(os.path.join(_d, "teams.json"), os.path.join(_d, "draw.json"), os.path.join(_d, "results.json"), _o, "hybrid")
+        _jj = _json.load(open(_o))
+        _server.append(tuple([p for p in _jj["players"] if p["name"] == n][0]["live"] for n in ("P1", "P2")))
+    _src = re.search(r"(function liveParts\(scored, conceded\)\{.*?\n\})", HTML, re.S).group(1)
+    _njs = "const DATA={scoring:{points:{per_goal:1,win:3,draw:1,clean_sheet:1}}};\n" + _src + "\nconst cases=" + _json.dumps(_cases) + ";\nconsole.log(JSON.stringify(cases.map(([h,a])=>[liveParts(h,a).pts, liveParts(a,h).pts])));"
+    open("/tmp/_lp.js", "w").write(_njs)
+    _front = [tuple(x) for x in _json.loads(_sp.run(["node", "/tmp/_lp.js"], capture_output=True, text=True).stdout)]
+    ck("liveParts matches scoring.py live points on 6 scorelines (incl. 0-0 = draw + clean sheet = 2)",
+       _front == _server, (_front, _server))
+except Exception as _e:
+    ck("live-points cross-check ran", False, str(_e)[:140])
 
 # ---- bet-slip selection model: tap=select, re-tap=remove, 2nd game=auto-acca, down-to-1=single ----
 print("\n== bet-slip selection model (.betodd click) ==")
