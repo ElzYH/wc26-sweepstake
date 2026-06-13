@@ -912,16 +912,24 @@ def _bot_dm(user_id, text):
         return False, _discord_err(e)
 
 
+def _pick_label(w, draw="the draw"):
+    """Human label for a bet/leg in announcements — result (team/draw) or Over/Under goals."""
+    if (w.get("market") or "result") == "ou":
+        try:
+            return ("Over %g goals" if w.get("selection") == "OVER" else "Under %g goals") % float(w.get("line"))
+        except (TypeError, ValueError):
+            return "Over/Under goals"
+    return w["home"] if w.get("selection") == "HOME" else (w["away"] if w.get("selection") == "AWAY" else draw)
+
+
 def _announce_bet(player, w):
     """Post a placed bet to the group (Discord webhook + Telegram). Never reveals passcodes."""
     if w.get("legs"):
-        picks = " + ".join("%s (%s)" % ((lg["home"] if lg["selection"] == "HOME" else
-                                          (lg["away"] if lg["selection"] == "AWAY" else "draw")), lg["frac"])
-                           for lg in w["legs"])
+        picks = " + ".join("%s (%s)" % (_pick_label(lg, "draw"), lg["frac"]) for lg in w["legs"])
         line = "🎲 %s put %g on a %d-fold acca: %s — returns %g if it all lands." % (
             player, w["stake"], len(w["legs"]), picks, w["return"])
     else:
-        pick = w["home"] if w["selection"] == "HOME" else (w["away"] if w["selection"] == "AWAY" else "a draw")
+        pick = _pick_label(w, "a draw")
         if w.get("free"):
             line = "🎁 %s claimed a free bet on %s (%s v %s) at %s — returns %g if it wins (a loss costs nothing)." % (
                 player, pick, w["home"], w["away"], w["frac"], w["return"])
@@ -941,7 +949,7 @@ def _announce_bet(player, w):
 def _wager_desc(w):
     if w.get("legs"):
         return "%d-fold acca" % len(w["legs"])
-    return w["home"] if w["selection"] == "HOME" else (w["away"] if w["selection"] == "AWAY" else "the draw")
+    return _pick_label(w, "the draw")
 
 
 def _announce_wins(won):
@@ -1935,8 +1943,78 @@ def discord_command(name, opts, uid=None, interaction_id=None):
                                                or mv in ("%s v %s" % (x["home"], x["away"])).lower())), None)
         if not m:
             return "Couldn't find that match — start typing in the **match** box and pick from the list. `/games` shows what's on."
-        # validate the typed team is actually in that match
+
+        # ---- Over/Under total-goals bet (no team needed) ----
+        if result in ("over", "under", "o", "u"):
+            selection = "OVER" if result in ("over", "o") else "UNDER"
+            try:
+                line = float(opts.get("goals"))
+            except (TypeError, ValueError):
+                return "Pick a **goals** line for an over/under bet (e.g. 2.5)."
+            if line not in wager_mod.OU_LINES:
+                return "That goals line isn't offered — pick one from 0.5 to 8.5."
+            ou = (m.get("ouOdds") or {}).get(("%g" % line))
+            if not ou or selection not in ou:
+                return "Couldn't price that goals line right now — try `/games`."
+            o = ou[selection]
+            who = "%s %g goals (%s v %s)" % ("Over" if selection == "OVER" else "Under", line, m["home"], m["away"])
+            ret = wager_mod.potential_return(stake, o["num"], o["den"])
+            prow = next((p for p in (d.get("players") or []) if p.get("name") == player), {})
+            settled = prow.get("points_settled")
+            if settled is None:
+                settled = round((prow.get("points", 0) or 0) - (prow.get("live", 0) or 0), 1)
+            wl_now = load_wagers()
+            avail = wager_mod.available_points(player, settled, wl_now)
+            round_max = _current_round_max_stake()
+            held = wager_mod.player_deltas(wl_now).get(player, {}).get("pending_stake", 0.0)
+            can_stake = max(0.0, round(min(avail, round_max - held), 1))
+            if not confirm:
+                warn = ""
+                if stake > avail:
+                    warn = "\n⚠ That's more than your **%g** available points." % avail
+                elif stake > can_stake:
+                    warn = "\n⚠ Most you can stake right now is **%g** (round cap %g, %g already riding on open bets)." % (can_stake, round_max, held)
+                return ("🎲 **Bet preview** — %s v %s\nBacking **%s** at **%s**.\n"
+                        "Stake **%g** → returns **%g** if it wins (profit **%g**).\n"
+                        "💰 You have **%g** points · max stake this round **%g** · you can still stake **%g**.%s\n"
+                        "_Bets are final once placed — odds lock in when you confirm._\n"
+                        "Run the same command again with **confirm: True** to place it."
+                        % (m["home"], m["away"], who, o["frac"], stake, ret, round(ret - stake, 1),
+                           avail, round_max, can_stake, warn))
+            try:
+                results = json.load(open("results.json"))
+                teams = {t["name"]: t for t in json.load(open("teams.json"))["teams"]}
+            except Exception:
+                return "Couldn't load the data to place that bet."
+            raw = next((x for x in results.get("matches", []) if wager_mod.match_id(x) == m["matchId"]), None)
+            _M = results.get("matches", [])
+            ch = wager_mod.live_strength((teams.get(m["home"], {}) or {}).get("composite", 0), m["home"], _M)
+            ca = wager_mod.live_strength((teams.get(m["away"], {}) or {}).get("composite", 0), m["away"], _M)
+            with _lock:
+                wl = load_wagers()
+                dup = _dedup_wager(wl, player, interaction_id)
+                if dup is not None:
+                    ok, res = True, dup
+                else:
+                    ok, res = wager_mod.place(wl, player, raw, selection, stake, settled, ch, ca,
+                                              group_mid_ts=_group_mid_ts(), market="ou", line=line)
+                    if ok:
+                        if interaction_id:
+                            res["nonce"] = interaction_id
+                        save_wagers(wl)
+            if ok:
+                update_now(load_config())
+                _announce_bet(player, res)
+                _wl2 = load_wagers()
+                _left = max(0.0, round(min(wager_mod.available_points(player, settled, _wl2),
+                                           round_max - wager_mod.player_deltas(_wl2).get(player, {}).get("pending_stake", 0.0)), 1))
+                return ("✅ **Bet placed!** %g on **%s** @ %s — returns **%g** if it wins.\n"
+                        "💰 You can still stake **%g** this round. Good luck. _(Bets are final.)_"
+                        % (res["stake"], who, res["frac"], res["return"], _left))
+            return "❌ %s" % res
+        # validate the typed team is actually in that match (win/lose need a team; a draw doesn't)
         tl = team.lower()
+        team_is_home = None
         if tl and tl == m["home"].lower():
             team_is_home = True
         elif tl and tl == m["away"].lower():
@@ -1945,9 +2023,11 @@ def discord_command(name, opts, uid=None, interaction_id=None):
             team_is_home = True
         elif tl and tl in m["away"].lower():
             team_is_home = False
-        else:
-            return "**%s** isn't in that match (**%s** v **%s**). Type one of those two teams." % (team or "?", m["home"], m["away"])
-        team_name = m["home"] if team_is_home else m["away"]
+        elif tl:
+            return "**%s** isn't in that match (**%s** v **%s**). Type one of those two teams." % (team, m["home"], m["away"])
+        if team_is_home is None and result in ("win", "lose", "w", "l", "winner", "loss", "lost"):
+            return "Which team? Add **team:** (one of **%s** / **%s**) for a win/lose bet — or use **result: over/under** with a **goals** line." % (m["home"], m["away"])
+        team_name = (m["home"] if team_is_home else m["away"]) if team_is_home is not None else None
         # map win / draw / lose (relative to the team you typed) to the match outcome
         if result in ("w", "winner"):
             result = "win"
@@ -2033,7 +2113,7 @@ def discord_command(name, opts, uid=None, interaction_id=None):
                 "/odds - who's most likely to win\n"
                 "/games - upcoming games + betting odds\n"
                 "/linkdiscord <code> - link your account to bet (code from the tracker's Bets tab)\n"
-                "/bet team:<name> stake:<n> - back your team to win (add pick:draw for a draw; shows payout, points & stake left; add confirm to place). Bets are final\n"
+                "/bet match:<game> result:<win/draw/lose> team:<name> stake:<n> — back a team; or result:<over/under> goals:<line> for total goals. Shows the payout; add confirm to place. Bets are final\n"
                 "/claim - claim today's FREE 5 betting points when a drop is on (bet them on any game; win = winnings yours, a loss costs nothing)\n"
                 "/mybets - your open and settled bets\n"
                 "/allbets - everyone's open bets right now\n"
@@ -2204,9 +2284,12 @@ def register_discord_commands():
         {"name": "bet", "description": "Bet your points on a match (shows the payout; add confirm to place)", "type": 1,
          "options": [
              {"name": "match", "description": "Start typing a team or match — pick the game from the list", "type": 3, "required": True, "autocomplete": True},
-             {"name": "team", "description": "Type which team you're backing (must be in that match)", "type": 3, "required": True},
-             {"name": "result", "description": "How they do: win, draw, or lose", "type": 3, "required": True,
-              "choices": [{"name": "win", "value": "win"}, {"name": "draw", "value": "draw"}, {"name": "lose", "value": "lose"}]},
+             {"name": "result", "description": "win / draw / lose a team — or over / under for total goals", "type": 3, "required": True,
+              "choices": [{"name": "win", "value": "win"}, {"name": "draw", "value": "draw"}, {"name": "lose", "value": "lose"},
+                          {"name": "over (goals)", "value": "over"}, {"name": "under (goals)", "value": "under"}]},
+             {"name": "team", "description": "Which team you're backing (for win/draw/lose) — leave blank for over/under", "type": 3, "required": False},
+             {"name": "goals", "description": "Goals line for over/under, e.g. 2.5", "type": 10, "required": False,
+              "choices": [{"name": str(L), "value": L} for L in (0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5)]},
              {"name": "stake", "description": "Points to stake", "type": 10, "required": True},
              {"name": "confirm", "description": "Set true to actually place the bet", "type": 5, "required": False}]},
         {"name": "claim", "description": "Claim today's FREE 5 betting points (when a drop is on) — bet them on any game", "type": 1},

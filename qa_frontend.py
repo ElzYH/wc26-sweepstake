@@ -76,8 +76,8 @@ ck("placeBet sends market + line", "market:BETPICK.market||'result',line:BETPICK
 ck("placeAcca sends per-leg market + line", "market:l.market||'result',line:l.line" in HTML, None)
 # overflow fix: the O/U row must be allowed to wrap, and the two buttons must sit in ONE min-width group
 # so on a narrow (multi-column desktop) card the button group drops to a second line instead of spilling out.
-ck("the O/U row can wrap (flex-wrap) so it never overflows a narrow card", "margin-top:6px;flex-wrap:wrap" in HTML, None)
-ck("the Over/Under buttons are wrapped in a min-width flex group (wrap together, not spill)", "flex:1 1 166px;min-width:166px" in HTML, None)
+ck("the O/U row can wrap (flex-wrap) so it never overflows a narrow card", "margin-top:5px;flex-wrap:wrap" in HTML, None)
+ck("the Over/Under buttons are wrapped in a min-width flex group (wrap together, not spill)", "flex:1 1 150px;min-width:150px" in HTML, None)
 ck("the server attaches O/U prices to fixtures", "f[\"ouOdds\"] = wager.goals_odds(ch, ca)" in open(os.path.join(REPO, "scoring.py")).read(), None)
 try:
     import subprocess as _sp6
@@ -114,7 +114,7 @@ try:
             elif HTML[j] == "}":
                 depth -= 1
                 if depth == 0: return HTML[s:j + 1]
-    _fns = "\n".join(_g(n) for n in ["isDone", "provResult", "provChip", "accaLiveStatus", "betCardHTML"])
+    _fns = "\n".join(_g(n) for n in ["isDone", "pickName", "provResult", "provChip", "accaLiveStatus", "betCardHTML"])
     _js = ("const esc=s=>String(s);\n" + _fns + """
     const fixById=new Map([['M1',{matchId:'M1',home:'Qatar',away:'Switzerland',homeScore:0,awayScore:0,status:'IN_PLAY'}],
       ['M2',{matchId:'M2',home:'Brazil',away:'Morocco',homeScore:2,awayScore:1,status:'FINISHED'}]]); const live=new Set(['M1']);
@@ -144,7 +144,7 @@ try:
             elif HTML[j] == "}":
                 depth -= 1
                 if depth == 0: return HTML[s:j + 1]
-    _fns = "\n".join(_grab(n) for n in ["betPickName", "betProfit", "betLabel", "betsOnMatch", "liveGamesOf", "lbBreakdown"])
+    _fns = "\n".join(_grab(n) for n in ["pickName", "betPickName", "betProfit", "betLabel", "betsOnMatch", "liveGamesOf", "lbBreakdown"])
     _js = ("const esc=s=>String(s);\n" + _lp + "\n" + _fns + """
     let DATA={fixtures:[{home:'Japan',away:'Spain',homeOwner:'Louis',awayOwner:'Erol',homeScore:1,awayScore:0,status:'IN_PLAY',matchId:'M'}]};
     let ALLWAGERS=[{player:'Louis',matchId:'M',home:'Japan',away:'Spain',selection:'HOME',frac:'2/1',stake:5,return:15,status:'pending'},
@@ -355,18 +355,22 @@ ck("clock caps a runaway value at 130:00", liveClockText("IN_PLAY", null, 200*60
 ck("clock counts into extra time (e.g. 105:00)", liveClockText("IN_PLAY", null, 105*60) === "105:00");
 ck("clock pads single-digit seconds", liveClockText("IN_PLAY", null, 61) === "1:01");
 
-// ---- provResult(): is a bet currently winning/level/losing? ----
-ck("HOME ahead -> win",  provResult("HOME", 1, 0) === "win");
-ck("HOME level -> level", provResult("HOME", 0, 0) === "level");
-ck("HOME behind -> lose", provResult("HOME", 0, 1) === "lose");
-ck("AWAY ahead -> win",  provResult("AWAY", 0, 1) === "win");
-ck("AWAY level -> level", provResult("AWAY", 2, 2) === "level");
-ck("AWAY behind -> lose", provResult("AWAY", 1, 0) === "lose");
-ck("DRAW level -> win",  provResult("DRAW", 1, 1) === "win");
-ck("DRAW 0-0 -> win",    provResult("DRAW", 0, 0) === "win");
-ck("DRAW not level -> lose", provResult("DRAW", 2, 1) === "lose");
-ck("provResult null when score missing", provResult("HOME", null, 1) === null);
-ck("provResult reads string scores", provResult("HOME", "2", "1") === "win");
+// ---- provResult(): is a bet currently winning/level/losing? (now takes the bet/leg object) ----
+ck("HOME ahead -> win",  provResult({selection:"HOME"}, 1, 0) === "win");
+ck("HOME level -> level", provResult({selection:"HOME"}, 0, 0) === "level");
+ck("HOME behind -> lose", provResult({selection:"HOME"}, 0, 1) === "lose");
+ck("AWAY ahead -> win",  provResult({selection:"AWAY"}, 0, 1) === "win");
+ck("AWAY level -> level", provResult({selection:"AWAY"}, 2, 2) === "level");
+ck("AWAY behind -> lose", provResult({selection:"AWAY"}, 1, 0) === "lose");
+ck("DRAW level -> win",  provResult({selection:"DRAW"}, 1, 1) === "win");
+ck("DRAW 0-0 -> win",    provResult({selection:"DRAW"}, 0, 0) === "win");
+ck("DRAW not level -> lose", provResult({selection:"DRAW"}, 2, 1) === "lose");
+ck("provResult null when score missing", provResult({selection:"HOME"}, null, 1) === null);
+ck("provResult reads string scores", provResult({selection:"HOME"}, "2", "1") === "win");
+ck("O/U OVER wins when total beats the line", provResult({selection:"OVER",market:"ou",line:2.5}, 2, 2) === "win");
+ck("O/U OVER loses under the line", provResult({selection:"OVER",market:"ou",line:2.5}, 1, 1) === "lose");
+ck("O/U UNDER wins under the line", provResult({selection:"UNDER",market:"ou",line:2.5}, 1, 1) === "win");
+ck("O/U half-line is never level", provResult({selection:"OVER",market:"ou",line:3.5}, 2, 1) === "lose");
 
 // ---- accaLiveStatus(): overall winning/level/losing for an accumulator ----
 {

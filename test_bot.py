@@ -425,6 +425,38 @@ _lett = server.discord_command("bet", {"match": _t1, "team": _t1, "result": "win
 if "number" not in _lett.lower() or len(server.load_wagers()) != 0:
     fails.append(("/bet non-numeric", "letters as a stake weren't rejected on Discord: %r" % _lett))
 # now actually place (this recomputes the tracker)
+# ---- Over/Under via Discord /bet (previews + validation; run BEFORE any confirm, which recomputes/clears the test fixtures) ----
+_oup = server.discord_command("bet", {"match": _t1, "result": "over", "goals": 2.5, "stake": 3}, uid="123")
+if "preview" not in _oup.lower() or "Over 2.5 goals" not in _oup:
+    fails.append(("/bet over preview", "O/U preview wrong: %r" % _oup))
+_oubad = server.discord_command("bet", {"match": _t1, "result": "over", "goals": 3.0, "stake": 3}, uid="123")
+if "isn't offered" not in _oubad and "0.5 to 8.5" not in _oubad:
+    fails.append(("/bet over bad-line", "off-grid line not rejected: %r" % _oubad))
+_oumiss = server.discord_command("bet", {"match": _t1, "result": "over", "stake": 3}, uid="123")
+if "goals" not in _oumiss.lower():
+    fails.append(("/bet over no-line", "missing goals line not prompted: %r" % _oumiss))
+_nowin = server.discord_command("bet", {"match": _t1, "result": "win", "stake": 3}, uid="123")   # win needs a team now
+if "team" not in _nowin.lower():
+    fails.append(("/bet win no-team", "win without a team not prompted: %r" % _nowin))
+# webhook announcements must label O/U correctly (not 'a draw')
+_sent.clear()
+server._announce_bet("Erol", {"player": "Erol", "selection": "OVER", "market": "ou", "line": 2.5,
+                              "home": "Brazil", "away": "Serbia", "stake": 5, "frac": "5/6", "return": 9.15})
+if not any("Over 2.5 goals" in s for s in _sent):
+    fails.append(("ou-announce", "O/U single not labelled 'Over 2.5 goals': %r" % _sent))
+_sent.clear()
+server._announce_bet("Erol", {"player": "Erol", "stake": 4, "return": 20, "legs": [
+    {"selection": "OVER", "market": "ou", "line": 1.5, "home": "Brazil", "away": "Serbia", "frac": "1/4"},
+    {"selection": "HOME", "home": "Spain", "away": "Japan", "frac": "4/9"}]})
+if not any("Over 1.5 goals" in s and "Spain" in s for s in _sent):
+    fails.append(("ou-announce-acca", "O/U acca leg mislabelled: %r" % _sent))
+if server._wager_desc({"selection": "UNDER", "market": "ou", "line": 3.5, "home": "A", "away": "B"}) != "Under 3.5 goals":
+    fails.append(("ou-wager-desc", "O/U wager_desc wrong"))
+if server._wager_desc({"selection": "HOME", "home": "Brazil", "away": "Serbia"}) != "Brazil":
+    fails.append(("result-wager-desc", "1X2 desc regressed"))
+if not [f for f in fails if "/bet over" in f[0] or "/bet win no-team" in f[0] or "ou-" in f[0]]:
+    print("[wager] Over/Under Discord betting + announcements OK")
+
 _place = server.discord_command("bet", {"match": _t1, "team": _t1, "result": "win", "stake": 5, "confirm": True}, uid="123")
 _wl = server.load_wagers()
 if "placed" not in _place.lower() or len(_wl) != 1 or _wl[0]["player"] != "Erol":

@@ -232,7 +232,7 @@
   .livecard{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--live);border-radius:14px;
     padding:12px 14px;font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--live)}
   .livedot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--live);margin-right:6px;animation:pulse 1.4s infinite}
-  .mdgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+  .mdgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;align-items:start}
   .mdcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
   .mdcard.mdlive{border-color:var(--live);box-shadow:0 0 0 1px var(--live) inset}
   .mdcard.mdfin{opacity:.72}
@@ -592,11 +592,11 @@ function ouRowHTML(m){
     .map(k=>'<option value="'+k+'"'+(k===ln?' selected':'')+'>'+k+'</option>').join('');
   const mkOU=(sel,lbl)=>{ const o=leg[sel]; if(!o) return '';
     const on=ACCAMODE?ACCA.some(l=>samePick(l,m.matchId,sel,'ou',ln)):samePick(BETPICK,m.matchId,sel,'ou',ln);
-    return '<button class="betodd'+(on?' on':'')+'" data-mid="'+m.matchId+'" data-sel="'+sel+'" data-market="ou" data-line="'+ln+'" data-frac="'+o.frac+'">'+lbl+' <b>'+o.frac+'</b></button>'; };
-  return '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:stretch">'
-    +'<span style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);white-space:nowrap">Goals'
-    +'<select class="ouline" data-mid="'+esc(m.matchId)+'" style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 6px;font-size:13px;font-family:Sora,sans-serif">'+opts+'</select></span>'
-    +'<div style="display:flex;gap:6px;flex:1 1 166px;min-width:166px;align-items:stretch">'+mkOU('OVER','Over')+mkOU('UNDER','Under')+'</div>'
+    return '<button class="betodd'+(on?' on':'')+'" style="min-width:64px;padding:6px 5px;font-size:12px" data-mid="'+m.matchId+'" data-sel="'+sel+'" data-market="ou" data-line="'+ln+'" data-frac="'+o.frac+'">'+lbl+' <b>'+o.frac+'</b></button>'; };
+  return '<div style="display:flex;gap:5px;margin-top:5px;flex-wrap:wrap;align-items:stretch">'
+    +'<span title="Goals line" style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);white-space:nowrap">⚽'
+    +'<select class="ouline" data-mid="'+esc(m.matchId)+'" style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 4px;font-size:12px;font-family:Sora,sans-serif">'+opts+'</select></span>'
+    +'<div style="display:flex;gap:5px;flex:1 1 150px;min-width:150px;align-items:stretch">'+mkOU('OVER','Over')+mkOU('UNDER','Under')+'</div>'
     +'</div>';
 }
 function renderBets(){
@@ -614,7 +614,7 @@ function renderBets(){
   const avail=(me.bettable!=null)?Math.max(0,Math.round(me.bettable*100)/100):Math.max(0,Math.round((((me.points_settled||0)+(me.wager_net||0)-(me.wager_held||0)))*100)/100);
   const held=Math.max(0,Math.round((me.wager_held||0)*100)/100);
   const headroom=Math.max(0,Math.round((caps.max_stake-held)*100)/100);
-  const fx=(DATA.fixtures||[]).filter(m=>m.odds&&m.matchId).sort((a,b)=>(a.utcDate||'').localeCompare(b.utcDate||'')).slice(0,40);
+  const fx=(DATA.fixtures||[]).filter(m=>m.odds&&m.matchId&&(!m.utcDate||new Date(m.utcDate).getTime()>Date.now())).sort((a,b)=>(a.utcDate||'').localeCompare(b.utcDate||'')).slice(0,40);
   const SEL={HOME:'home',DRAW:'draw',AWAY:'away'};
   let h='';
   h+='<div class="ovsec"><div class="ovh">💷 Place a bet</div>';
@@ -684,7 +684,7 @@ function renderBets(){
     const drawRow=(!ko && m.odds.DRAW)?('<div style="display:flex;margin-top:6px">'+mk('DRAW','Draw')+'</div>'):'';   // draw below, full width
     const ouRow=ouRowHTML(m);                                                          // Over/Under row (line dropdown + two prices)
     return `<div class="mdcard"><div class="mdmeta">${ko?(STAGE_LABEL[m.stage]||m.stage):'Group '+(m.group||'?')} · ${esc(when)}</div>
-      <div class="mdteams" style="margin-bottom:8px"><span>${flag(m.home)}${esc(m.home)}</span><span style="color:var(--muted)">v</span><span class="mdr">${flag(m.away)}${esc(m.away)}</span></div>
+      <div class="mdteams" style="margin-bottom:6px"><span>${flag(m.home)}${esc(m.home)}</span><span style="color:var(--muted)">v</span><span class="mdr">${flag(m.away)}${esc(m.away)}</span></div>
       <div class="betodds" style="display:block">${homeAway}${drawRow}${ouRow}</div></div>`;
   }).join('')+'</div>';
   if(ACCAMODE && ACCA.length){
@@ -712,7 +712,7 @@ function renderBets(){
   }
   h+='</div>';
   // your bets
-  h+='<div class="ovsec"><div class="ovh">Your bets</div><div id="myBets"><div class="empty">Loading…</div></div></div>';
+  h+='<div class="ovsec"><div class="ovh">'+(BETPLAYER?esc(BETPLAYER)+"'s bets":'Your bets')+'</div><div id="myBets"><div class="empty">Loading…</div></div></div>';
   h+='<div class="ovsec"><div class="ovh">Everyone\'s open bets</div><div id="allBets"><div class="empty">Loading…</div></div></div>';
   h+='<div class="ovsec" id="betHallWrap" style="display:none"><div class="ovh">Best &amp; worst bets so far</div><div id="betHall"></div></div>';
   el.innerHTML=h;
@@ -879,11 +879,16 @@ function refreshBetsLive(){
     av.textContent=Math.min(avail,head); }
 }
 // ---- "is this bet currently winning?" — provisional result from the live score (display only; never settles anything) ----
-function provResult(sel, hs, as_){
+function pickName(o){   // human label for a bet or an acca leg, result OR over/under
+  if((o.market||'result')==='ou') return (o.selection==='OVER'?'Over':'Under')+' '+o.line+' goals';
+  return o.selection==='HOME'?o.home:(o.selection==='AWAY'?o.away:'Draw');
+}
+function provResult(o, hs, as_){   // live/settled outcome of a bet or leg from the current score
   if(hs==null||as_==null) return null;           // no score yet -> unknown (don't coerce null to 0)
   hs=Number(hs); as_=Number(as_); if(isNaN(hs)||isNaN(as_)) return null;
-  if(sel==='HOME') return hs>as_?'win':(hs<as_?'lose':'level');
-  if(sel==='AWAY') return as_>hs?'win':(as_<hs?'lose':'level');
+  if((o.market||'result')==='ou'){ const over=(hs+as_)>Number(o.line); return (o.selection==='OVER'?over:!over)?'win':'lose'; }  // half-line: never level
+  if(o.selection==='HOME') return hs>as_?'win':(hs<as_?'lose':'level');
+  if(o.selection==='AWAY') return as_>hs?'win':(as_<hs?'lose':'level');
   return hs===as_?'win':'lose';   // DRAW selection
 }
 function provChip(r){
@@ -902,7 +907,7 @@ function accaLiveStatus(w, fixOf, live){
     if(l.result==='won'||l.result==='void') continue;            // this leg is already safe
     if(live.has(l.matchId)){
       anyLive=true;
-      const f=fixOf(l.matchId); const r=f?provResult(l.selection,f.homeScore,f.awayScore):null;
+      const f=fixOf(l.matchId); const r=f?provResult(l,f.homeScore,f.awayScore):null;
       if(r==='lose') anyLose=true; else if(r!=='win') anyPending=true;
     } else { anyPending=true; }                                  // a leg not yet kicked off -> not winning yet
   }
@@ -919,13 +924,13 @@ function betCardHTML(w, opts){
   let body;
   if(isAcca){
     let dec=1; w.legs.forEach(l=>{const p=l.frac.split('/').map(Number); dec*=(1+p[0]/p[1]);});
-    const rows=w.legs.map(l=>{ const pick=l.selection==='HOME'?l.home:(l.selection==='AWAY'?l.away:'Draw');
+    const rows=w.legs.map(l=>{ const pick=pickName(l);
       const lr=l.result==='won'?'✅ ':(l.result==='lost'?'❌ ':(l.result==='void'?'➖ ':'')); const isL=live.has(l.matchId);
       const f=fixOf(l.matchId);
       let scoreBit='', chip='';
       if(f && f.homeScore!=null && f.awayScore!=null){
         const sc=f.homeScore+'–'+f.awayScore;
-        if(isL){ scoreBit=' <span style="color:#ff6b6b">🔴 '+sc+'</span>'; if(!l.result) chip=' '+provChip(provResult(l.selection,f.homeScore,f.awayScore)); }
+        if(isL){ scoreBit=' <span style="color:#ff6b6b">🔴 '+sc+'</span>'; if(!l.result) chip=' '+provChip(provResult(l,f.homeScore,f.awayScore)); }
         else if(isDone(f.status)) scoreBit=' <span style="opacity:.65">FT '+sc+'</span>';   // frozen final score
       } else if(isL){ scoreBit=' <span style="color:#ff6b6b">🔴 LIVE</span>'; }
       return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0;color:var(--muted)"><span>'+lr+'<b style="color:var(--ink)">'+esc(pick)+'</b> <span style="opacity:.8">('+esc(l.home)+' v '+esc(l.away)+')</span>'+scoreBit+chip+'</span><span style="color:var(--gold);font-weight:600">'+l.frac+'</span></div>';
@@ -933,11 +938,11 @@ function betCardHTML(w, opts){
     const ovr=(w.status==='pending')?accaLiveStatus(w,fixOf,live):null;
     body='<div style="font-weight:600;font-size:13.5px">'+who+'🎰 '+w.legs.length+'-fold accumulator · combined <span style="color:var(--gold)">~'+(Math.round(dec*100)/100)+'×</span>'+(ovr?' · '+provChip(ovr):'')+'</div><div style="margin-top:4px">'+rows+'</div>';
   } else {
-    const pick=w.selection==='HOME'?w.home:(w.selection==='AWAY'?w.away:'Draw'); const isL=live.has(w.matchId);
+    const pick=pickName(w); const isL=live.has(w.matchId);
     let liveBit=''; const f=fixOf(w.matchId);
     if(f && f.homeScore!=null && f.awayScore!=null){
       const sc=f.homeScore+'–'+f.awayScore;
-      if(isL) liveBit=' · <span style="color:#ff6b6b">🔴 LIVE '+sc+'</span> · '+provChip(provResult(w.selection,f.homeScore,f.awayScore));
+      if(isL) liveBit=' · <span style="color:#ff6b6b">🔴 LIVE '+sc+'</span> · '+provChip(provResult(w,f.homeScore,f.awayScore));
       else if(isDone(f.status)) liveBit=' · <span style="opacity:.65">FT '+sc+'</span>';     // frozen final score
     } else if(isL){ liveBit=' · <span style="color:#ff6b6b">🔴 LIVE</span>'; }
     body='<div style="font-weight:600;font-size:13.5px">'+who+esc(pick)+' <span style="color:var(--gold)">'+w.frac+'</span></div><div style="color:var(--muted);font-size:12px">'+esc(w.home)+' v '+esc(w.away)+liveBit+'</div>';
@@ -963,7 +968,7 @@ async function loadAllBets(){
     // best & worst settled bets (top 3 each) — biggest net wins, biggest losses
     const hw=document.getElementById('betHallWrap'), hb=document.getElementById('betHall');
     if(hw&&hb){
-      const pickOf=w=>w.legs?(w.legs.length+'-fold acca'):(w.selection==='HOME'?w.home:(w.selection==='AWAY'?w.away:'Draw'));
+      const pickOf=w=>w.legs?(w.legs.length+'-fold acca'):pickName(w);
       const settled=(j.wagers||[]).filter(w=>!w.credit&&(w.status==='won'||w.status==='lost'));
       const wins=settled.filter(w=>w.status==='won').map(w=>({w,net:(w.return||0)-(w.stake||0)})).sort((a,b)=>b.net-a.net).slice(0,3);
       const losses=settled.filter(w=>w.status==='lost').map(w=>({w,net:-(w.stake||0)})).sort((a,b)=>a.net-b.net).slice(0,3);
@@ -1117,11 +1122,11 @@ function liveParts(scored, conceded){
 }
 // One small line under a live match: who's earning what right now, and why.
 const LIVEBD=new Set();   // which live breakdowns the user has expanded (key = match|player), kept across 30s refreshes
-function betPickName(w){ return w.selection==='HOME'?w.home:(w.selection==='AWAY'?w.away:'Draw'); }
+function betPickName(w){ return pickName(w); }
 function betProfit(w){ return Math.round(((w.return||0)-(w.stake||0))*100)/100; }
 function betLabel(w){   // short human description of a bet/acca + its upside
   if(w.legs&&w.legs.length){
-    const legs=w.legs.map(lg=>esc(lg.selection==='HOME'?lg.home:(lg.selection==='AWAY'?lg.away:'Draw'))).join(' + ');
+    const legs=w.legs.map(lg=>esc(pickName(lg))).join(' + ');
     return w.stake+' on a '+w.legs.length+'-fold ('+legs+') → +'+betProfit(w)+' if it lands';
   }
   return w.stake+' on '+esc(betPickName(w))+' @ '+esc(w.frac)+' → +'+betProfit(w)+' if it wins';
@@ -2588,7 +2593,21 @@ document.getElementById('setImportFile').onchange=async(ev)=>{
 };
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(function(){}); }
 load();
-setInterval(load,30000);                       // auto-refresh every 30s
+// Adaptive auto-refresh: poll fast (~8s) when a game is live or about to kick off, so the betting list
+// closes off a game the moment it starts; relax to 30s when nothing is imminent.
+function _nextRefreshMs(){
+  const now=Date.now(); let live=false, soon=false;
+  ((DATA&&DATA.fixtures)||[]).forEach(f=>{
+    if(['IN_PLAY','PAUSED','LIVE','SUSPENDED'].includes(f.status)) live=true;
+    if(f.status==='TIMED'||f.status==='SCHEDULED'){ const dt=new Date(f.utcDate||0).getTime()-now; if(dt>0 && dt<5*60000) soon=true; }
+  });
+  return (live||soon)?8000:30000;
+}
+function _scheduleRefresh(){
+  clearTimeout(window._refreshT);
+  window._refreshT=setTimeout(async()=>{ try{ await load(); }catch(e){} _scheduleRefresh(); }, _nextRefreshMs());
+}
+_scheduleRefresh();
 document.getElementById('auto').innerHTML='<span class="dot-live"></span>auto-refresh on';
 
 window.addEventListener('pageshow',function(e){ if(e.persisted) location.reload(); });
