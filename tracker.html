@@ -33,9 +33,7 @@
   .dot-live{display:inline-block;width:8px;height:8px;border-radius:50%;background:#39d98a;margin-right:6px;
     animation:pulse 1.6s infinite}
   @keyframes pulse{50%{opacity:.3}}
-  .tabs{display:flex;gap:8px;margin:22px 0 18px;flex-wrap:nowrap;overflow-x:auto;
-    scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:3px}
-  .tabs::-webkit-scrollbar{display:none}
+  .tabs{display:flex;gap:8px;margin:22px 0 18px;flex-wrap:wrap}
   .tab{flex:0 0 auto;white-space:nowrap;font-family:'Sora';font-weight:700;
     font-size:clamp(12px,2.5vw,14px);padding:clamp(7px,1.6vw,9px) clamp(12px,2.9vw,18px);border-radius:999px;cursor:pointer;
     background:#10301f;border:1px solid var(--line);color:var(--ink)}
