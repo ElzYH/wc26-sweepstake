@@ -615,7 +615,14 @@ function renderBets(){
     h+='<div id="linkCodeBox" style="display:none;margin:0 0 12px;padding:8px 12px;border:1px solid var(--gold);border-radius:8px;font-size:13px"></div>';
   }
   if(held>=caps.max_stake-1e-9){ h+='<div style="margin:0 0 12px;padding:9px 12px;border-radius:8px;background:#2a2210;border:1px solid #ffc83d;color:#ffd97a;font-size:13px">⚠ You\'re maxed out — '+held+' points riding on open bets (limit '+caps.max_stake+'). Wait for one to settle before betting again.</div>'; }
-  if(BETMSG) h+='<div style="margin:0 0 10px;padding:8px 12px;border-radius:8px;background:'+(BETMSG[0]==='✓'?'#10240f':'#2a1414')+';color:'+(BETMSG[0]==='✓'?'#7ee787':'#ff9a9a')+';font-size:13px">'+esc(BETMSG)+'</div>';
+  if(BETMSG){
+    // success (✓ 🔒 🎁) = green, in-progress (…) = neutral, everything else = error red.
+    // startsWith handles emoji correctly — BETMSG[0] only grabs half of a surrogate-pair emoji like 🔒.
+    const _ok=BETMSG.startsWith('✓')||BETMSG.startsWith('🔒')||BETMSG.startsWith('🎁')||BETMSG.startsWith('✅');
+    const _info=!_ok && BETMSG.endsWith('…');
+    const _bg=_ok?'#10240f':(_info?'#10202f':'#2a1414'), _fg=_ok?'#7ee787':(_info?'#9fc4ff':'#ff9a9a');
+    h+='<div style="margin:0 0 10px;padding:8px 12px;border-radius:8px;background:'+_bg+';color:'+_fg+';font-size:13px">'+esc(BETMSG)+'</div>';
+  }
   // 🎁 Free-points drop — claim N free betting points on certain days, one per person (only winnings count)
   const fbet=STATUS.free_bet||{}; const fbMine=(fbet.claimed||[]).indexOf(BETPLAYER)>=0;
   if(fbet.open && !fbMine){
@@ -1654,14 +1661,16 @@ function buildHistory(d){
     hist.push({m:i+1, p:Object.fromEntries(players.map(p=>[p,{pts:P[p],srv:S[p],hyb:P[p]+S[p],alv:A[p]}]))});
   });
   // Snap the "now" point to the authoritative leaderboard totals so the chart's latest value matches the headline
-  // standings, which include betting (a settled bet win/loss the match replay can't see). Earlier points stay
-  // match-only — per-bet settle history isn't available client-side — so betting reads as the adjustment it is at
-  // the current moment rather than being back-dated onto games it had nothing to do with.
+  // standings — but SUBTRACT live in-play provisional points. Those are volatile (they appear at kickoff and
+  // vanish if the game turns), so baking them into a settled-history line makes points "appear then go missing".
+  // Settled betting (a won/lost bet) is permanent, so it stays. Live is shown separately by the "+N live" chip.
   if(hist.length>=2){
-    const lbP=new Map((((d.leaderboards||{}).points)||[]).map(r=>[r.name,r.score]));
-    const lbH=new Map((((d.leaderboards||{}).hybrid)||[]).map(r=>[r.name,r.score]));
+    const lbP=new Map((((d.leaderboards||{}).points)||[]).map(r=>[r.name,r]));
+    const lbH=new Map((((d.leaderboards||{}).hybrid)||[]).map(r=>[r.name,r]));
     const last=hist[hist.length-1].p;
-    players.forEach(p=>{ if(last[p]){ if(lbP.has(p)) last[p].pts=lbP.get(p); if(lbH.has(p)) last[p].hyb=lbH.get(p); } });
+    const stable=r=>Math.max(0,Math.round(((r.score||0)-(r.live||0))*100)/100);   // drop the live "+N" so the line is settled-only
+    players.forEach(p=>{ if(last[p]){ const rp=lbP.get(p),rh=lbH.get(p);
+      if(rp) last[p].pts=stable(rp); if(rh) last[p].hyb=stable(rh); } });
   }
   return hist;
 }

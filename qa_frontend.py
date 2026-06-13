@@ -93,6 +93,29 @@ ck("a first-interaction welcome DM exists", "_maybe_welcome(uid)" in _srv and "W
 ck("the welcome is short — a few commands, not the full help", _srv.count("WELCOME_TEXT = (") == 1 and 0 < _srv.split("WELCOME_TEXT = (", 1)[1].split(")", 1)[0].count("`/") <= 7, None)
 ck("the welcome only greets each user once (persisted)", "WELCOMED_FILE" in _srv and "if uid in seen" in _srv, None)
 
+# ---- chart history: the over-time 'now' point must be settled-only (live provisional excluded, betting kept) ----
+print("\n== chart now-point is stable (no vanishing live points) ==")
+ck("the chart subtracts live from the now-point", "drop the live" in HTML and "r.live||0" in HTML, None)
+
+# ---- bet message colour: success (✓🔒🎁) green, not red ----
+ck("the passcode-saved/free-points messages are styled by intent, not just a ✓ prefix",
+   "BETMSG.startsWith('🔒')" in HTML and "BETMSG.startsWith('🎁')" in HTML and "BETMSG[0]==='✓'" not in HTML, None)
+try:
+    import subprocess as _sp2
+    _bh = re.search(r"(function buildHistory\(d\)\{.*?\n\})", HTML, re.S).group(1)
+    _h = "function isDone(s){return s==='FINISHED'||s==='AWARDED';}\n" + _bh + """
+    const d={scoring:{points:{per_goal:1,win:3,draw:1,clean_sheet:1,stage_bonus:{}},survival:{}},
+      players:[{name:'E',teams:[{name:'Brazil',status:'alive'},{name:'Japan',status:'alive'}]}],
+      fixtures:[{home:'Brazil',away:'Serbia',homeScore:2,awayScore:0,status:'FINISHED',stage:'GROUP_STAGE',utcDate:'2026-06-10T12:00:00Z'},
+                {home:'Japan',away:'Spain',homeScore:1,awayScore:0,status:'IN_PLAY',stage:'GROUP_STAGE',utcDate:'2026-06-13T12:00:00Z'}],
+      leaderboards:{points:[{name:'E',score:11.2,live:5}],hybrid:[{name:'E',score:11.2,live:5}]}};
+    const hist=buildHistory(d);console.log(hist[hist.length-1].p['E'].pts);"""
+    open("/tmp/_bh.js", "w").write(_h)
+    _now = float(_sp2.run(["node", "/tmp/_bh.js"], capture_output=True, text=True).stdout.strip())
+    ck("now-point = settled match (6) + settled bet (0.2), live (5) EXCLUDED", abs(_now - 6.2) < 1e-9, _now)
+except Exception as _e:
+    ck("chart now-point cross-check ran", False, str(_e)[:140])
+
 # ---- potential betting points: visible but never added to the score ----
 ck("leaderboard rows show a potential-bets chip", 'class="betdelta"' in HTML and "+${p.bet_potential}" in HTML, None)
 ck("the chip explains it only counts when a bet settles", "counts only when a bet settles" in HTML, None)
