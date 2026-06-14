@@ -508,6 +508,8 @@
     <div class="tab" data-s="notify" id="notifyTab" style="display:none">🔔 Alerts</div>
   </div>
 
+  <div id="globalClaim"></div>
+
   <section class="on" id="overview"><div id="ovBody"></div></section>
 
   <section id="live"><div id="liveBody"></div></section>
@@ -1004,6 +1006,25 @@ async function loadAllBets(){
     }
   }catch(e){ box.innerHTML='<div class="empty">Could not load bets.</div>'; }
 }
+// 🎁 Free-points claim banner shown on EVERY tab while a drop is open. Logged-in players claim in one tap from
+// anywhere; passcode users get sent to the Bets tab (where they enter their passcode). Hidden once claimed.
+function renderGlobalClaim(){
+  const host=document.getElementById('globalClaim'); if(!host) return;
+  const fb=(STATUS&&STATUS.free_bet)||{};
+  if(!fb.open){ host.innerHTML=''; return; }
+  const me=(SESSION&&SESSION.logged_in&&SESSION.player)?SESSION.player:null;
+  if(me && (fb.claimed||[]).indexOf(me)>=0){ host.innerHTML=''; return; }   // already claimed -> no nagging
+  const stake=fb.stake||5;
+  const box='<div style="margin:0 0 16px;padding:11px 14px;border:1px solid var(--gold);border-radius:10px;background:#1b1606;font-size:13px;color:var(--ink);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">';
+  if(me){
+    host.innerHTML=box+'<span>🎁 <b>Free betting points!</b> Claim <b>'+stake+'</b> free points and bet them on any game — win and the winnings are yours; lose and it costs nothing.</span><button class="mini cta" id="globalClaimBtn" style="border-color:var(--gold)">🎁 Claim '+stake+'</button></div>';
+    const b=document.getElementById('globalClaimBtn'); if(b) b.onclick=async()=>{ b.disabled=true; b.textContent='Claiming…'; BETPLAYER=me; await claimFreePoints(); await refreshStatus(); };
+  } else {
+    host.innerHTML=box+'<span>🎁 <b>Free betting points are available!</b> Claim <b>'+stake+'</b> free points to bet with — one per person, today only.</span><button class="mini cta" id="globalClaimGo" style="border-color:var(--gold)">Claim on the 💷 Bets tab</button></div>';
+    const g=document.getElementById('globalClaimGo'); if(g) g.onclick=()=>{ activateTab('bets'); };
+  }
+}
+
 async function claimFreePoints(){
   let pin='';
   if(STATUS.wager_pins_set && !(SESSION.logged_in && SESSION.player===BETPLAYER)){
@@ -1771,7 +1792,9 @@ function winOddsRows(d,mode){
     +rows.map(r=>oddBar(r.name,+(r[mode]||0).toFixed(1),max)).join('');
 }
 function bestBetsHTML(d){
-  // Best = shortest-priced picks (model favourites); Worst = longest-priced (biggest payout, least likely).
+  // Best = shortest-priced picks (model favourites); Long shots = longest-priced (biggest payout) from OTHER games,
+  // so the same match never shows up twice as its own mirror. Each row shows the real fixture (home v away) with the
+  // team you'd back in bold, so it always reads the same way round.
   const fx=(d.fixtures||[]).filter(f=>f.odds&&f.matchId);
   if(!fx.length) return '';
   const caps=STATUS.wager_caps||{}; const retCap=(typeof caps.max_return==='number'&&caps.max_return>0)?caps.max_return:null;
@@ -1780,18 +1803,23 @@ function bestBetsHTML(d){
     if(f.stage && f.stage!=='GROUP_STAGE' && sel==='DRAW') return;        // no draw bets on knockouts
     const o=f.odds[sel]; if(!o) return;
     const dec=1+o.num/o.den; const prob=1/dec;                            // implied chance from the price
-    picks.push({who:sel==='HOME'?f.home:(sel==='AWAY'?f.away:'Draw'), opp:(sel==='HOME'?f.away:(sel==='AWAY'?f.home:(f.home+' v '+f.away))), frac:o.frac, prob, dec});
+    picks.push({home:f.home, away:f.away, sel, backed:(sel==='HOME'?f.home:(sel==='AWAY'?f.away:'Draw')), frac:o.frac, prob, matchId:f.matchId});
   });});
   if(!picks.length) return '';
   picks.sort((a,b)=>b.prob-a.prob);
   const best=picks.slice(0,3);
-  const worst=picks.slice(-3).reverse();                                 // longest odds = biggest underdogs
-  const row=(p,gold)=>'<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:3px 0"><span><b>'+esc(p.who)+'</b>'+(p.who==='Draw'?'':' <span style="color:var(--muted)">v '+esc(p.opp)+'</span>')+'</span><span style="color:'+(gold?'var(--gold)':'#9fd0ff')+';font-weight:600">'+p.frac+' <span style="color:var(--muted);font-weight:400">· ~'+Math.round(p.prob*100)+'%</span></span></div>';
+  const usedGames=new Set(best.map(p=>p.matchId));                        // don't repeat a game's mirror as a "long shot"
+  const worst=picks.filter(p=>!usedGames.has(p.matchId)).slice(-3).reverse();   // longest odds from the remaining games
+  const row=(p,gold)=>{
+    const fixture = (p.sel==='HOME'?'<b>'+esc(p.home)+'</b>':esc(p.home))+' <span style="color:var(--muted)">v</span> '+(p.sel==='AWAY'?'<b>'+esc(p.away)+'</b>':esc(p.away));
+    const pick = p.sel==='DRAW' ? 'back the draw' : 'back '+esc(p.backed);
+    return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:3px 0"><span>'+fixture+' <span style="color:var(--muted);font-size:11.5px">· '+pick+'</span></span><span style="color:'+(gold?'var(--gold)':'#9fd0ff')+';font-weight:600;white-space:nowrap">'+p.frac+' <span style="color:var(--muted);font-weight:400">· ~'+Math.round(p.prob*100)+'%</span></span></div>';
+  };
   let h='<div style="margin:14px 0 4px;border:1px solid var(--gold);border-radius:12px;padding:12px 14px;background:#0c1f15">'
-    +'<div style="color:var(--gold);font-weight:700;font-size:13.5px;margin-bottom:6px">💡 Best & worst bets right now <span style="color:var(--muted);font-weight:400;font-size:12px">· from the games you can bet on</span></div>'
-    +'<div style="color:#7ee787;font-size:12px;font-weight:700;margin:4px 0 2px">SAFEST — the favourites (most likely)</div>'+best.map(p=>row(p,true)).join('')
-    +'<div style="color:#9fd0ff;font-size:12px;font-weight:700;margin:8px 0 2px">LONG SHOTS — biggest payout, least likely</div>'+worst.map(p=>row(p,false)).join('')
-    +'<div style="color:var(--muted);font-size:11.5px;margin-top:6px">Shortest odds = most likely to win; longest = biggest return but rarely land'+(retCap?(' (any bet still caps at '+retCap+')'):'')+'. Not advice — every bet can lose, and bets are final.</div></div>';
+    +'<div style="color:var(--gold);font-weight:700;font-size:13.5px;margin-bottom:6px">💡 Best &amp; worst bets right now <span style="color:var(--muted);font-weight:400;font-size:12px">· from the games you can bet on</span></div>'
+    +'<div style="color:#7ee787;font-size:12px;font-weight:700;margin:4px 0 2px">SAFEST — most likely to win (shortest odds)</div>'+best.map(p=>row(p,true)).join('')
+    +(worst.length?('<div style="color:#9fd0ff;font-size:12px;font-weight:700;margin:8px 0 2px">LONG SHOTS — biggest payout, least likely</div>'+worst.map(p=>row(p,false)).join('')):'')
+    +'<div style="color:var(--muted);font-size:11.5px;margin-top:6px">Bold = the team you\'d be backing. Shortest odds win most often; longest pay the most but rarely land'+(retCap?(' (any bet still caps at '+retCap+')'):'')+'. Not advice — every bet can lose, and bets are final.</div></div>';
   return h;
 }
 function renderBettingStats(d){
@@ -1799,6 +1827,10 @@ function renderBettingStats(d){
   const _m=(STATUS.scoring_mode||d.default_mode||'hybrid');
   if(!STATUS.wagering_enabled || (_m!=='points'&&_m!=='hybrid')){ el.innerHTML=''; return; }   // betting only in Points / Both
   const L=d.wager_leaders||{}, S=Object.values(d.wager_stats||{});
+  // Each player's ACTUAL leaderboard impact from betting (free-points-cushioned) — this is the figure baked into
+  // their Points. Won/Lost stay raw (the real bet outcomes); Net shows what actually moved the leaderboard.
+  const lbNet={}; (d.players||[]).forEach(p=>{ if(p&&p.name!=null) lbNet[p.name]=(typeof p.wager_net==='number')?p.wager_net:0; });
+  const NET=r=>{ const v=lbNet[r.player]; return (typeof v==='number')?Math.round(v*10)/10:(r.net||0); };
   if(!S.length || !S.some(x=>x.bets>0)){
     el.innerHTML='<h4 style="font-family:\'Anton\';font-weight:400;color:var(--gold);text-transform:uppercase;font-size:15px;margin:22px 0 8px">💷 Betting</h4>'+bestBetsHTML(d)+'<div style="color:var(--muted);font-size:13px;margin:10px 0 14px">No bets placed yet — head to the 💷 Bets tab to back a team.</div>';
     return;
@@ -1806,20 +1838,20 @@ function renderBettingStats(d){
   const card=(label,o,fmt,colour)=> '<div class="statcard"><div class="l">'+label+'</div><div class="v" style="color:'+(colour||'var(--ink)')+'">'+(o?esc(o.player):'—')+'</div><div class="l">'+(o?fmt(o):'—')+'</div></div>';
   let h='<h4 style="font-family:\'Anton\';font-weight:400;color:var(--gold);text-transform:uppercase;font-size:15px;margin:22px 0 8px">💷 Betting</h4>';
   h+=bestBetsHTML(d);
-  const punter=S.slice().sort((a,b)=>b.net-a.net).find(x=>x.bets>0 && x.net>0);   // most net betting profit
-  if(punter) h+='<div style="margin:6px 0 10px;padding:10px 12px;border:1px solid var(--gold);border-radius:10px;background:#1b1606;font-size:13.5px;color:var(--ink)">🏆 <b>Punter of the Tournament:</b> '+esc(punter.player)+' — <b style="color:var(--gold)">+'+punter.net+'</b> net from betting.</div>';
+  const punter=S.slice().sort((a,b)=>NET(b)-NET(a)).find(x=>x.bets>0 && NET(x)>0);   // most leaderboard profit from betting
+  if(punter) h+='<div style="margin:6px 0 10px;padding:10px 12px;border:1px solid var(--gold);border-radius:10px;background:#1b1606;font-size:13.5px;color:var(--ink)">🏆 <b>Punter of the Tournament:</b> '+esc(punter.player)+' — <b style="color:var(--gold)">+'+NET(punter)+'</b> net from betting.</div>';
   h+='<div class="statgrid">'
     + card('MOST POINTS WAGERED', L.most_wagered, o=>o.staked+' staked over '+o.bets+' bet'+(o.bets===1?'':'s'))
     + card('BIGGEST WINNER', L.most_won, o=>'+'+o.won+' points won','var(--gold)')
     + card('BIGGEST LOSER', L.most_lost, o=>'−'+o.lost+' points lost','#ff7a7a')
     + '</div>';
   // full per-player table
-  const rows=S.slice().sort((a,b)=>b.net-a.net);
+  const rows=S.slice().sort((a,b)=>NET(b)-NET(a));
   h+='<div style="overflow-x:auto;margin-top:12px"><table style="width:100%;border-collapse:collapse;font-size:13px">'
     +'<tr style="color:var(--muted);text-align:right"><th style="text-align:left;padding:6px 8px">Player</th><th style="padding:6px 8px">Bets</th><th style="padding:6px 8px">Staked</th><th style="padding:6px 8px">Won</th><th style="padding:6px 8px">Lost</th><th style="padding:6px 8px">Net</th></tr>';
-  h+=rows.map(r=>'<tr style="text-align:right;border-top:1px solid var(--line)"><td style="text-align:left;padding:6px 8px;font-weight:600">'+esc(r.player)+(r.open?' <span style="color:var(--muted);font-weight:400">('+r.open+' open)</span>':'')+'</td><td style="padding:6px 8px">'+r.bets+'</td><td style="padding:6px 8px">'+r.staked+'</td><td style="padding:6px 8px;color:#7ee787">'+(r.won?'+'+r.won:'—')+'</td><td style="padding:6px 8px;color:#ff7a7a">'+(r.lost?'−'+r.lost:'—')+'</td><td style="padding:6px 8px;font-weight:700;color:'+(r.net>0?'#7ee787':(r.net<0?'#ff7a7a':'var(--ink)'))+'">'+(r.net>0?'+':'')+r.net+'</td></tr>').join('');
+  h+=rows.map(r=>{ const _n=NET(r); return '<tr style="text-align:right;border-top:1px solid var(--line)"><td style="text-align:left;padding:6px 8px;font-weight:600">'+esc(r.player)+(r.open?' <span style="color:var(--muted);font-weight:400">('+r.open+' open)</span>':'')+'</td><td style="padding:6px 8px">'+r.bets+'</td><td style="padding:6px 8px">'+r.staked+'</td><td style="padding:6px 8px;color:#7ee787">'+(r.won?'+'+r.won:'—')+'</td><td style="padding:6px 8px;color:#ff7a7a">'+(r.lost?'−'+r.lost:'—')+'</td><td style="padding:6px 8px;font-weight:700;color:'+(_n>0?'#7ee787':(_n<0?'#ff7a7a':'var(--ink)'))+'">'+(_n>0?'+':'')+_n+'</td></tr>'; }).join('');
   h+='</table></div>';
-  h+='<div style="color:var(--muted);font-size:11.5px;margin-top:8px;line-height:1.55"><b>How to read this:</b> <b>Bets</b> = how many bets they\'ve settled · <b>Staked</b> = total points risked · <b>Won</b> = profit from winning bets (your stake back <i>plus</i> the winnings) · <b>Lost</b> = points lost on losing bets · <b>Net</b> = Won − Lost, i.e. the points betting has added to (or taken off) their total. A “—” just means none yet. These winnings/losses are already baked into each player\'s Points and Both totals.</div>';
+  h+='<div style="color:var(--muted);font-size:11.5px;margin-top:8px;line-height:1.55"><b>How to read this:</b> <b>Bets</b> = how many bets they\'ve settled · <b>Staked</b> = total points risked · <b>Won</b> = profit from winning bets (your stake back <i>plus</i> the winnings) · <b>Lost</b> = points lost on losing bets · <b>Net</b> = the points betting has actually <b>added to or taken off their leaderboard total</b>. Everyone\'s first 5 betting points are free, so small net losses don\'t move the leaderboard — that\'s why Net can be smaller than Won − Lost. A “—” just means none yet. These Net figures are exactly what\'s baked into each player\'s Points and Both totals.</div>';
   el.innerHTML=h;
 }
 function renderOdds(d){
@@ -1836,7 +1868,12 @@ function renderOdds(d){
   if(st.biggest_win) cards+=`<div class="statcard"><div class="l">BIGGEST WIN</div><div class="v" style="font-size:18px">${st.biggest_win}</div></div>`;
   if(st.top_team) cards+=`<div class="statcard"><div class="l">TOP SCORING TEAM</div><div class="v">${flag(st.top_team)}${st.top_team} <small>${st.top_team_goals} goals</small></div></div>`;
   cards+=`<div class="statcard"><div class="l">STRONGEST SQUAD</div><div class="v">${st.strongest_player||'—'} <small>${st.strongest_player_strength||0}</small></div><div class="l">highest rated on paper</div></div>`;
-  if(STATUS.scoring_mode!=='survival' && st.proj_points_player) cards+=`<div class="statcard"><div class="l">MOST LIKELY · MOST POINTS</div><div class="v">${st.proj_points_player} <small>${st.proj_points_value}</small></div><div class="l">projected points · group + run model</div></div>`;
+  if(STATUS.scoring_mode!=='survival'){
+    let pjP=null,pjV=null;
+    if(SIMRES&&SIMRES.length){ const t=SIMRES.slice().sort((a,b)=>b.proj-a.proj)[0]; if(t){ pjP=t.name; pjV=Math.round(t.proj); } }   // same 1,500-run model as the PROJ PTS table, so the card and table always agree
+    else if(st.proj_points_player){ pjP=st.proj_points_player; pjV=st.proj_points_value; }   // provisional, only shown until the sim finishes
+    if(pjP) cards+=`<div class="statcard"><div class="l">MOST LIKELY · MOST POINTS</div><div class="v">${esc(pjP)} <small>${pjV}</small></div><div class="l">projected final points · 1,500-run forecast</div></div>`;
+  }
   cards+=`<div class="statcard"><div class="l">UNDERDOG · DARK-HORSE PLAYER</div><div class="v">${st.underdog_player||'—'} <small>${st.underdog_player_strength||0}</small></div><div class="l">weakest squad on paper</div></div>`;
   if(st.rivalry) cards+=`<div class="statcard"><div class="l">BIGGEST RIVALRY</div><div class="v" style="font-size:18px">${st.rivalry}</div><div class="l">${st.rivalry_count} group meeting${st.rivalry_count===1?'':'s'}</div></div>`;
   cards+=`<div class="statcard"><div class="l">MOST FAVOURITES</div><div class="v">${st.most_favourites_player||'—'} <small>${st.most_favourites||0}★</small></div><div class="l">tier-1 teams owned</div></div>`;
@@ -2082,7 +2119,7 @@ function ensureSim(){                          // auto-run the forecast; re-runs
     if(SIMRES){
       const mode=STATUS.scoring_mode||'hybrid';
       SIMSORT = mode==='points'?'pts':(mode==='survival'?'surv':'both');
-      renderSim(SIMSORT); renderOverview(DATA);
+      renderOverview(DATA); renderOdds(DATA);     // renderOdds re-renders the cards (so MOST POINTS picks up the sim) + the sim table
     }
   },30);
 }
@@ -2121,6 +2158,7 @@ async function refreshStatus(){
        window.__stageCapStr = window.__stageCaps ? window.__stageCaps.map(function(s){ return s.label+' — max '+s.cap+(s.from?(' (from '+s.from+')'):''); }).join(' · ') : ''; }catch(e){ window.__stageCapStr=''; }
   const bt=document.getElementById('betsTab'); if(bt) bt.style.display=STATUS.wagering_enabled?'':'none';
   const nt=document.getElementById('notifyTab'); if(nt) nt.style.display=(STATUS.wagering_enabled||STATUS.discord_oauth)?'':'none';   // keep the Alerts tab in lockstep with STATUS (same as bets) — otherwise it vanishes until the next 30s poll
+  renderGlobalClaim();          // 🎁 free-points claim shows on EVERY tab while a drop is open (not just the Bets tab)
   const m=STATUS.scoring_mode||DATA.default_mode||'hybrid';
   const ml={points:'Points',survival:'Survival',hybrid:'Points + survival'}[m]||m;
   const dm={fair:'Fair',weighted:'Weighted',random:'Random (even)'}[STATUS.draw_mode]||STATUS.draw_mode||'—';

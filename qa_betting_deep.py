@@ -124,6 +124,15 @@ ck("one more than MAX_PENDING is rejected", not ok and "open bets" in res, res)
 e = W.epoch_of(fx())
 ck("epoch_of returns a non-empty label", bool(e), e)
 ck("budget_remaining starts at STAGE_BUDGET", W.budget_remaining([], "Erol", e) == W.STAGE_BUDGET, W.budget_remaining([], "Erol", e))
+# a player who has staked PAST the budget this epoch (e.g. after the cap was lowered) clamps to 0 — never negative
+_over = [{"player": "Erol", "epoch": e, "stake": W.STAGE_BUDGET + 25, "status": "lost"}]
+ck("staking past the budget clamps to 0 (locked out, never negative)", W.budget_remaining(_over, "Erol", e) == 0.0, W.budget_remaining(_over, "Erol", e))
+_w_over = list(_over)
+_okb, _msgb = W.place(_w_over, "Erol", fx(mid="bx", stage="GROUP_STAGE"), "HOME", 1, settled_points=9999, comp_home=STRONG, comp_away=WEAK, now=NOW)
+ck("with the budget used up, even a 1-pt bet is refused", not _okb and "budget" in (_msgb or "").lower(), _msgb)
+# winning a bet climbs the budget back, never above the max
+_back = [{"player": "Erol", "epoch": e, "stake": 20, "status": "lost"}, {"player": "Erol", "epoch": e, "stake": 5, "status": "won", "return": 80}]
+ck("a win tops the budget back up but never above STAGE_BUDGET", W.budget_remaining(_back, "Erol", e) == W.STAGE_BUDGET, W.budget_remaining(_back, "Erol", e))
 
 # ============================================================== SETTLEMENT (SINGLE)
 print("\n== SETTLEMENT: SINGLES ==")

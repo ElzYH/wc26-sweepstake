@@ -322,17 +322,16 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
             pass
 
     def _tiebreak(p, primary):
-        # Deep, fully deterministic ordering. Primary key first, then a cascade that rewards the better-placed
-        # squad when the headline number ties: more teams alive -> higher forecast finish -> stronger remaining
-        # squad -> better title shot -> better owned-team goal difference -> more goals scored -> realised
-        # betting profit -> name (so the order never flickers).
+        # Deep, fully deterministic ordering. Primary key first, then a cascade: more teams alive -> better
+        # owned-team goal difference -> more goals scored -> higher forecast finish -> stronger remaining squad
+        # -> better title shot -> realised betting profit -> name. (GD and goals rank ABOVE the projection.)
         return (-_numf(p.get(primary, 0)),
                 -_numf(p.get("alive_teams", 0)),
+                -_numf(p.get("goal_diff", 0)),
+                -_numf(p.get("goals_for", 0)),
                 -_numf(p.get("projected_points", 0)),
                 -_numf(p.get("squad_strength", 0)),
                 -_numf(p.get("champion_odds", 0)),
-                -_numf(p.get("goal_diff", 0)),
-                -_numf(p.get("goals_for", 0)),
                 -_numf(p.get("wager_net", 0)),
                 str(p.get("name", "")).lower())
 
