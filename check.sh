@@ -143,6 +143,9 @@ if python3 qa_claims_pins.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAI
 say "Odds-audit QA (book overround, market lookup, house-edge integrity guard, auto matchday audit idempotency + resilience)"
 if python3 qa_odds_audit.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_odds_audit.py 2>&1 | tail -24; FAIL=1; fi
 
+say "Calibration QA (overlay loader, goals knob, every guard, integrity ABORT, 1000-case market fuzz: no crash / no underround / in-band)"
+if python3 qa_calibration.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_calibration.py 2>&1 | tail -30; FAIL=1; fi
+
 say "Frontend QA (~58 checks: JS parses, XSS escaping, owner lookup, KO captions, 2-dp money, wheel draw, multi-page)"
 if python3 qa_frontend.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_frontend.py 2>&1 | tail -22; FAIL=1; fi
 

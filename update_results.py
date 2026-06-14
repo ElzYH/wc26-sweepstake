@@ -100,11 +100,25 @@ def unmatched_names(api_names, resolve, canon):
     return sorted({n for n in api_names if resolve(n) not in canon})
 
 
+def _resolve_token(token=None):
+    """football-data token from: explicit arg -> $FOOTBALL_DATA_TOKEN -> config.json's "token" (so CLI tools
+    like --check just work inside the repo folder). Returns None if none found."""
+    if token:
+        return token
+    t = os.environ.get("FOOTBALL_DATA_TOKEN")
+    if t:
+        return t
+    try:
+        return (json.load(open("config.json")).get("token") or "").strip() or None
+    except Exception:
+        return None
+
+
 def audit(token=None, teams_path="teams.json"):
     """Dry-run: fetch the feed and report team names that don't map to teams.json."""
-    token = token or os.environ.get("FOOTBALL_DATA_TOKEN")
+    token = _resolve_token(token)
     if not token:
-        sys.exit("Set FOOTBALL_DATA_TOKEN first.")
+        sys.exit("No football-data token. Set $FOOTBALL_DATA_TOKEN, or run inside the repo folder where config.json has it.")
     resolve = build_name_map(teams_path)
     canon = {t["name"] for t in json.load(open(teams_path))["teams"]}
     matches = _get(f"/competitions/{COMPETITION}/matches", token).get("matches", [])
@@ -126,7 +140,7 @@ def _get(path, token):
 
 
 def fetch(out="results.json", token=None):
-    token = token or os.environ.get("FOOTBALL_DATA_TOKEN")
+    token = _resolve_token(token)
     if not token:
         sys.exit("Set FOOTBALL_DATA_TOKEN (env var / GitHub Secret) first.")
     resolve = build_name_map()

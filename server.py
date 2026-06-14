@@ -146,7 +146,72 @@ def _comp(teams, name):
         c = t.get("composite", NEUTRAL_COMPOSITE)
         if isinstance(c, (int, float)) and c > 0:
             return c
-    return NEUTRAL_COMPOSITE   # reentrant: callers may hold it while update_now re-acquires for the wager settle
+    return NEUTRAL_COMPOSITE
+
+
+# ---- per-instance odds calibration (gitignored overrides; NEVER mutates the tracked teams.json) ----
+CALIBRATION_FILE = "calibration.json"
+GOALS_BASE_MIN, GOALS_BASE_MAX = 2.0, 3.2   # the goals knob may only live in a sane band, whatever calibration says
+
+
+def _load_calibration():
+    """The per-instance calibration overlay: {'composites': {name: val}, 'goals_base': float, ...}. Missing or
+    corrupt -> {} (the app falls straight back to the base teams.json / wager defaults). Never raises."""
+    try:
+        d = _load_json_resilient(CALIBRATION_FILE, dict, validate=lambda x: isinstance(x, dict))
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def load_teams():
+    """The single source of team records for PRICING + display. Reads teams.json, then overlays any calibrated
+    composite from calibration.json. A junk override (NaN / out-of-band / non-numeric) is ignored, so a bad
+    calibration file can never poison the board — it just falls back to the base strength. Never raises."""
+    try:
+        teams = json.load(open("teams.json"))["teams"]
+    except Exception:
+        return []
+    co = (_load_calibration().get("composites") or {})
+    if isinstance(co, dict) and co:
+        for t in teams:
+            v = co.get(t.get("name"))
+            try:
+                v = float(v)
+            except (TypeError, ValueError):
+                continue
+            if v == v and 0 < v <= 105:                 # finite, in-band -> apply; else keep base composite
+                t["composite"] = v
+    return teams
+
+
+def _calibrated_goals_base():
+    """The calibrated goals base if present + sane, else the wager default. Always returns a value in-band."""
+    base = getattr(wager_mod, "GOALS_BASE", 2.6) if wager_mod else 2.6
+    g = _load_calibration().get("goals_base")
+    try:
+        g = float(g)
+        if g == g and GOALS_BASE_MIN <= g <= GOALS_BASE_MAX:
+            return g
+    except (TypeError, ValueError):
+        pass
+    return base
+
+
+def _apply_goals_base():
+    """Push the calibrated goals base into the wager engine (expected_goals reads GOALS_BASE at call time).
+    Called at startup and after each calibration write. No-op/sane if anything is off. Never raises."""
+    if wager_mod is None:
+        return
+    try:
+        g = _load_calibration().get("goals_base")
+        g = float(g)
+        if g == g and GOALS_BASE_MIN <= g <= GOALS_BASE_MAX:
+            wager_mod.GOALS_BASE = g
+    except (TypeError, ValueError, AttributeError):
+        pass
+
+
 _last_manual_poll = [0.0]
 MANUAL_POLL_MIN_INTERVAL = 25.0   # seconds; cap manual /api/poll upstream fetches so spamming can't burn the API quota
 
@@ -327,7 +392,7 @@ def live_save(state):
 def build_draw_result(payload):
     """Turn the wheel's {players:[{name,teams:[teamName]}], bonus_pool:[name]} into a
     full draw_result.json, looking up tier/group/composite from teams.json."""
-    teams = {t["name"]: t for t in json.load(open("teams.json"))["teams"]}
+    teams = {t["name"]: t for t in load_teams()}
     def expand(name):
         t = teams.get(name, {"name": name, "tier": 4, "group": "?", "confederation": "?", "composite": 0})
         return {"name": t["name"], "tier": t["tier"], "group": t["group"],
@@ -875,7 +940,7 @@ def _current_round_max_stake():
     except Exception:
         return wager_mod.MAX_STAKE
     try:
-        known = {t["name"] for t in json.load(open("teams.json"))["teams"]}
+        known = {t["name"] for t in load_teams()}
     except Exception:
         known = None
     caps = [wager_mod.stage_max_stake(m.get("stage")) for m in results.get("matches", [])
@@ -2103,7 +2168,7 @@ def discord_command(name, opts, uid=None, interaction_id=None):
                            avail, round_max, can_stake, warn))
             try:
                 results = json.load(open("results.json"))
-                teams = {t["name"]: t for t in json.load(open("teams.json"))["teams"]}
+                teams = {t["name"]: t for t in load_teams()}
             except Exception:
                 return "Couldn't load the data to place that bet."
             raw = next((x for x in results.get("matches", []) if wager_mod.match_id(x) == m["matchId"]), None)
@@ -2197,7 +2262,7 @@ def discord_command(name, opts, uid=None, interaction_id=None):
                        avail, round_max, can_stake, warn))
         try:
             results = json.load(open("results.json"))
-            teams = {t["name"]: t for t in json.load(open("teams.json"))["teams"]}
+            teams = {t["name"]: t for t in load_teams()}
         except Exception:
             return "Couldn't load the data to place that bet."
         raw = next((x for x in results.get("matches", []) if wager_mod.match_id(x) == m["matchId"]), None)
@@ -2598,7 +2663,7 @@ def _maybe_matchday_audit(cfg):
         if not games:
             return
         try:
-            teams = {t["name"]: t for t in json.load(open("teams.json")).get("teams", [])}
+            teams = {t["name"]: t for t in load_teams()}
         except Exception:
             teams = {}
         n = ll = fav_hits = draws = overs = goals = 0
@@ -2634,6 +2699,236 @@ def _maybe_matchday_audit(cfg):
         save_config(cfg)
     except Exception as e:
         log("matchday audit error (non-fatal):", e)
+
+
+def _ko_ts(m):
+    try:
+        return calendar.timegm(time.strptime((m.get("utcDate") or "")[:19], "%Y-%m-%dT%H:%M:%S"))
+    except Exception:
+        return None
+
+
+def _implied_composite(target_p, opp_comp, side):
+    """Bisect the composite that makes the 1X2 model give `target_p` to `side` (opponent fixed). Monotone -> exact."""
+    lo, hi = 1.0, 105.0
+    for _ in range(40):
+        mid = (lo + hi) / 2.0
+        ph, pd, pa = wager_mod._fair_probs(mid, opp_comp) if side == "home" else wager_mod._fair_probs(opp_comp, mid)
+        p = ph if side == "home" else pa
+        if p < target_p:
+            lo = mid
+        else:
+            hi = mid
+    return max(1.0, min(105.0, (lo + hi) / 2.0))
+
+
+def _market_implied_lambda(p_over25):
+    """Goal expectation implied by a market Over-2.5 probability (invert the Poisson tail). Clamped to a sane band."""
+    lo, hi, tgt = 0.3, 6.0, 1.0 - p_over25            # cdf(2, lam) decreases in lam
+    for _ in range(40):
+        mid = (lo + hi) / 2.0
+        if wager_mod._poisson_cdf(2, mid) > tgt:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2.0
+
+
+def _fetch_calibration_market(cfg):
+    """Pull h2h + totals from the-odds-api for calibration (median across books, with a book COUNT per game so we
+    can skip thin markets). Build-only here; returns None on any failure so a bad fetch never changes odds."""
+    key = cfg.get("odds_api_key")
+    if not key:
+        return None
+    regions = cfg.get("odds_api_regions", "uk")
+    url = ("https://api.the-odds-api.com/v4/sports/soccer_fifa_world_cup/odds/"
+           "?apiKey=%s&regions=%s&markets=h2h,totals&oddsFormat=decimal" % (urllib.parse.quote(key), regions))
+    try:
+        with urllib.request.urlopen(url, timeout=20) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+    except Exception as e:
+        log("calibration market fetch failed (no change):", e)
+        return None
+    out = {}
+    med = lambda xs: sorted(xs)[len(xs) // 2] if xs else None
+    for ev in (data or []):
+        home, away = ev.get("home_team"), ev.get("away_team")
+        if not home or not away:
+            continue
+        hL, dL, aL, oL, uL, books = [], [], [], [], [], set()
+        for bk in ev.get("bookmakers", []):
+            books.add(bk.get("key"))
+            for mk in bk.get("markets", []):
+                if mk.get("key") == "h2h":
+                    for oc in mk.get("outcomes", []):
+                        nm, pr = oc.get("name"), oc.get("price")
+                        if nm == home: hL.append(pr)
+                        elif nm == away: aL.append(pr)
+                        elif (nm or "").lower() == "draw": dL.append(pr)
+                elif mk.get("key") == "totals":
+                    for oc in mk.get("outcomes", []):
+                        if oc.get("point") == 2.5:
+                            if (oc.get("name") or "").lower() == "over": oL.append(oc.get("price"))
+                            elif (oc.get("name") or "").lower() == "under": uL.append(oc.get("price"))
+        rec = {"books": len(books)}
+        if hL and aL: rec["h2h"] = {"home": med(hL), "draw": med(dL), "away": med(aL)}
+        if oL and uL: rec["totals"] = {"line": 2.5, "over": med(oL), "under": med(uL)}
+        if rec.get("h2h") or rec.get("totals"):
+            out["%s v %s" % (home, away)] = rec
+    return out
+
+
+def _maybe_auto_calibrate(cfg, market=None):
+    """AUTO odds calibration toward the bookmaker market, once per finished matchday. Writes ONLY a per-instance
+    calibration overlay (composites + goals base) — never the tracked teams.json, never a bet. Off unless
+    `auto_calibrate` is set. Guards: market-coverage floor, clean name resolution, freeze teams in live/imminent
+    games, bounded + clamped moves, finite checks, and an INTEGRITY ABORT that simulates the proposed odds and
+    bails (no change) if anything would underround. Fully defensive; a bad cycle can never disturb betting."""
+    try:
+        if not cfg.get("auto_calibrate"):
+            return                                       # master kill switch (default off)
+        if wager_mod is None or not draw_locked():
+            return
+        td = _load_tracker() or {}
+        fx = td.get("fixtures") or []
+        if not fx:
+            return
+        by_day = {}
+        for m in fx:
+            d = (m.get("utcDate") or "")[:10]
+            if d:
+                by_day.setdefault(d, []).append(m)
+        done = [d for d, g in by_day.items() if g and all(x.get("status") in ("FINISHED", "AWARDED") for x in g)]
+        if not done:
+            return
+        day = max(done)
+        if _load_calibration().get("last_calibrated_matchday") == day:
+            return                                       # already calibrated for this matchday (idempotent)
+
+        mkt = market if market is not None else _fetch_calibration_market(cfg)
+        if not mkt:
+            log("auto-calibrate: no market available; skipping (no change).")
+            return
+
+        teams = {t["name"]: t for t in load_teams()}     # CURRENT effective composites (overlay already applied)
+        try:
+            import update_results as _UR
+            resolve = _UR.build_name_map("teams.json")
+        except Exception:
+            resolve = lambda n: n
+
+        max_step = abs(float(cfg.get("calibration_max_step", 5.0) or 5.0))
+        min_books = int(cfg.get("calibration_min_books", 3) or 3)
+        freeze_min = abs(float(cfg.get("calibration_freeze_min", 30.0) or 30.0))
+        goals_step = abs(float(cfg.get("calibration_goals_step", 0.1) or 0.1))
+
+        now = time.time()
+        frozen = set()                                   # don't move a team that's playing now or kicks off soon
+        for m in fx:
+            ko = _ko_ts(m)
+            live = m.get("status") in ("IN_PLAY", "PAUSED", "LIVE")
+            soon = ko is not None and 0 <= (ko - now) <= freeze_min * 60
+            if live or soon:
+                frozen.add(resolve(m.get("home", "")))
+                frozen.add(resolve(m.get("away", "")))
+
+        implied = {}
+        glam_mkt, glam_model = [], []
+        for keyk, rec in mkt.items():
+            if not isinstance(rec, dict):
+                continue
+            try:
+                _books = int(rec.get("books") or 0)
+            except (TypeError, ValueError):
+                _books = 0
+            if _books < min_books:
+                continue                                 # coverage guard: ignore thin / malformed-book markets
+            if " v " not in keyk:
+                continue
+            hn, an = [x.strip() for x in keyk.split(" v ", 1)]
+            hn, an = resolve(hn), resolve(an)
+            if hn not in teams or an not in teams:
+                continue                                 # never invent a strength for an unmatched name
+            ch, ca = teams[hn]["composite"], teams[an]["composite"]
+            h2h = rec.get("h2h") or {}
+            book = _odds_book_overround([h2h.get("home"), h2h.get("draw"), h2h.get("away")])
+            if book:
+                try:
+                    mph, mpa = (1.0 / h2h["home"]) / book, (1.0 / h2h["away"]) / book
+                    if hn not in frozen:
+                        implied.setdefault(hn, []).append(_implied_composite(mph, ca, "home"))
+                    if an not in frozen:
+                        implied.setdefault(an, []).append(_implied_composite(mpa, ch, "away"))
+                except (TypeError, ZeroDivisionError, KeyError):
+                    pass
+            tot = rec.get("totals") or {}
+            tb = _odds_book_overround([tot.get("over"), tot.get("under")])
+            if tb:
+                try:
+                    p_over = (1.0 / tot["over"]) / tb
+                    glam_mkt.append(_market_implied_lambda(p_over))
+                    glam_model.append(wager_mod.expected_goals(ch, ca))
+                except (TypeError, ZeroDivisionError, KeyError):
+                    pass
+
+        cal = _load_calibration()
+        co = dict(cal.get("composites") or {})
+        changes = []
+        for name, vals in implied.items():
+            cur = teams[name]["composite"]
+            target = sum(vals) / len(vals)
+            if target != target:                         # NaN guard
+                continue
+            step = max(-max_step, min(max_step, target - cur))
+            new = round(max(1.0, min(105.0, cur + step)), 1)
+            if abs(new - cur) >= 0.1:
+                co[name] = new
+                changes.append((name, round(cur, 1), new))
+
+        gb_old = _calibrated_goals_base()
+        gb_new = gb_old
+        if glam_mkt and glam_model:
+            diff = (sum(glam_mkt) / len(glam_mkt)) - (sum(glam_model) / len(glam_model))
+            if diff == diff:
+                gstep = max(-goals_step, min(goals_step, diff))
+                gb_new = round(max(GOALS_BASE_MIN, min(GOALS_BASE_MAX, gb_old + gstep)), 3)
+
+        iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        if not changes and abs(gb_new - gb_old) < 1e-9:
+            _atomic_write_json(CALIBRATION_FILE, {**cal, "last_calibrated_matchday": day})  # mark day; nothing else moved
+            return
+
+        # INTEGRITY ABORT — simulate every upcoming market with the proposed composites + goals base; bail on any underround
+        sim = {k: dict(v) for k, v in teams.items()}
+        for name, _, new in changes:
+            if name in sim:
+                sim[name]["composite"] = new
+        _gb_save = getattr(wager_mod, "GOALS_BASE", 2.6)
+        try:
+            wager_mod.GOALS_BASE = gb_new
+            viol = _odds_integrity_violations(td, sim)
+        finally:
+            wager_mod.GOALS_BASE = _gb_save
+        if viol:
+            log("auto-calibrate ABORTED — proposed odds would underround (no change):", "; ".join(viol[:6]))
+            return
+
+        hist = (cal.get("history") or [])
+        hist.append({"ts": iso, "day": day, "changes": changes, "goals_base": [gb_old, gb_new]})
+        _atomic_write_json(CALIBRATION_FILE, {
+            "composites": co, "goals_base": gb_new, "updated": iso,
+            "last_calibrated_matchday": day, "history": hist[-50:]})
+        _apply_goals_base()                              # push the new goals base into the live engine
+        line = ("🎯 Auto-calibration %s — %d team(s) nudged toward market; goals base %.2f→%.2f"
+                % (day, len(changes), gb_old, gb_new))
+        log(line)
+        if changes:
+            log("  " + "; ".join("%s %.1f→%.1f" % (n, o, nw) for n, o, nw in changes[:12]))
+        if cfg.get("odds_audit_discord") and (cfg.get("discord_webhook") or "").startswith("https://"):
+            detail = ("\n" + "; ".join("%s %.1f→%.1f" % (n, o, nw) for n, o, nw in changes[:10])) if changes else ""
+            discord_send(line + detail)
+    except Exception as e:
+        log("auto-calibrate error (non-fatal):", e)
 
 
 def maybe_send_daily_digest(cfg):
@@ -2686,6 +2981,10 @@ def poller():
                 _maybe_matchday_audit(load_config())          # read-only odds audit + house-edge guard, once per finished matchday
             except Exception as e:
                 print("[odds-audit] error:", e)
+            try:
+                _maybe_auto_calibrate(load_config())          # auto-nudge odds toward market (off unless auto_calibrate set)
+            except Exception as e:
+                print("[auto-calibrate] error:", e)
             try:
                 _maybe_announce_free_drop(load_config())
             except Exception as e:
@@ -3795,7 +4094,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, json.dumps({"ok": False, "error": "That game could not be found."}))
             teams = {}
             try:
-                teams = {t["name"]: t for t in json.load(open("teams.json"))["teams"]}
+                teams = {t["name"]: t for t in load_teams()}
             except Exception:
                 pass
             if match.get("home") not in teams or match.get("away") not in teams:
@@ -3890,7 +4189,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 td = _load_tracker() or {}
                 results = json.load(open("results.json"))
-                teams = {t["name"]: t for t in json.load(open("teams.json"))["teams"]}
+                teams = {t["name"]: t for t in load_teams()}
             except Exception:
                 return self._send(400, json.dumps({"ok": False, "error": "No data yet."}))
             if wager_mod.betting_locked(td):
@@ -4089,6 +4388,7 @@ if __name__ == "__main__":
         print("[warn] running as root is risky — create a normal user to run this server.")
     _key = ensure_admin_key()
     _apply_wager_caps()                   # load admin return/acca limits at boot
+    _apply_goals_base()                   # restore the calibrated goals base (if any) into the wager engine
     if HAVE_WEBPUSH:
         ensure_vapid()                    # one-time keypair so native Web Push (Path A) can work
     threading.Thread(target=poller, daemon=True).start()
