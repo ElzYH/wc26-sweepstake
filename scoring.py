@@ -310,7 +310,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                 p["bettable"] = wager.available_points(p["name"], p["points_settled"], wagers)  # earned + free bonus + winnings - held
                 p["wager_budget_left"] = (round(wager.budget_remaining(wagers, p["name"], cur_epoch), 1)
                                           if cur_epoch else float(wager.STAGE_BUDGET))   # live round budget (drawdown ceiling)
-                p["wager_budget_max"] = float(wager.STAGE_BUDGET)
+                p["wager_budget_max"] = float(wager.stage_budget(cur_epoch)) if cur_epoch else float(wager.STAGE_BUDGET)
                 hnet = wager.leaderboard_net(p["name"], hyp)
                 hheld = wager.leaderboard_held(p["name"], hyp)
                 p["bet_potential"] = max(0.0, round((hnet - hheld) - (lnet - held_lb), 1))   # score-if-all-bets-win minus score-now
@@ -323,13 +323,16 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
 
     def _tiebreak(p, primary):
         # Deep, fully deterministic ordering. Primary key first, then a cascade that rewards the better-placed
-        # squad when the headline number ties: more teams still alive -> higher forecast finish -> stronger
-        # remaining squad -> better title shot -> realised betting profit -> name (so the order never flickers).
+        # squad when the headline number ties: more teams alive -> higher forecast finish -> stronger remaining
+        # squad -> better title shot -> better owned-team goal difference -> more goals scored -> realised
+        # betting profit -> name (so the order never flickers).
         return (-_numf(p.get(primary, 0)),
                 -_numf(p.get("alive_teams", 0)),
                 -_numf(p.get("projected_points", 0)),
                 -_numf(p.get("squad_strength", 0)),
                 -_numf(p.get("champion_odds", 0)),
+                -_numf(p.get("goal_diff", 0)),
+                -_numf(p.get("goals_for", 0)),
                 -_numf(p.get("wager_net", 0)),
                 str(p.get("name", "")).lower())
 
@@ -429,6 +432,10 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
     played = [n for n in played if n in teams]
     pgf = {p["name"]: sum(t["gf"] for t in p["teams"]) for p in players_out}
     pga = {p["name"]: sum(t["ga"] for t in p["teams"]) for p in players_out}
+    for _p in players_out:                            # expose owned-team goals so the tie-breaker (and analysis) can use them
+        _p["goals_for"] = pgf.get(_p["name"], 0)
+        _p["goals_against"] = pga.get(_p["name"], 0)
+        _p["goal_diff"] = _p["goals_for"] - _p["goals_against"]
     pcs = {p["name"]: sum(cs[t["name"]] for t in p["teams"]) for p in players_out}
     over_t = under_t = best_def = over_p = under_p = top_sc = most_con = gl = most_cs = None
     if played:

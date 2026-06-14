@@ -316,16 +316,19 @@ def run():
     wager.settle(av, fx(mid="v2", status="POSTPONED"))
     ck("void leg drops out of the acca", av[0]["status"] == "won" and av[0]["return"] == round(4 * one, 1), av[0])
 
-    # --- max stake rises each knockout round (+5/round, +15 for the final) ---
+    # --- max stake rises a clean +5 each round: 30 → 35 → 40 → 45 → 50 → 55 → 60 ---
     ck("group cap is the base 30", wager.stage_max_stake("GROUP_STAGE") == 30)
-    ck("knockout caps step +5", [wager.stage_max_stake(s) for s in
-       ("LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS")] == [35, 40, 45, 50],
-       [wager.stage_max_stake(s) for s in ("LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS")])
-    ck("final cap is 65 (50 + extra 15)", wager.stage_max_stake("FINAL") == 65, wager.stage_max_stake("FINAL"))
+    ck("caps step +5 every round through the final", [wager.stage_max_stake(s) for s in
+       ("LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL")] == [35, 40, 45, 50, 55, 60],
+       [wager.stage_max_stake(s) for s in ("LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL")])
+    ck("final cap is 60 (+5 from the semis)", wager.stage_max_stake("FINAL") == 60, wager.stage_max_stake("FINAL"))
     ck("31 rejected on a group game", not wager.place([], "Erol", fx(stage="GROUP_STAGE"), "HOME", 31, 200, 80, 40)[0])
     ck("35 allowed on an R32 game", wager.place([], "Erol", fx(mid="r32", stage="LAST_32"), "HOME", 35, 200, 80, 40)[0])
     ck("36 rejected on an R32 game", not wager.place([], "Erol", fx(mid="r32b", stage="LAST_32"), "HOME", 36, 200, 80, 40)[0])
-    ck("65 allowed in the final", wager.place([], "Erol", fx(mid="fin", stage="FINAL"), "HOME", 65, 200, 80, 40)[0])
+    # the per-round budget is always 20 above that round's cap, so the cap is reachable: 60 in the final is allowed, 61 rejected.
+    ck("the final's 60 cap is reachable (budget is 80) and 61 is rejected",
+       wager.place([], "Erol", fx(mid="fin", stage="FINAL"), "HOME", 60, 200, 200, 40)[0]
+       and not wager.place([], "Erol", fx(mid="fin2", stage="FINAL"), "HOME", 61, 200, 200, 40)[0])
     # an acca uses the LOWEST leg's cap (most conservative)
     mix = [{"match": fx(mid="mg", stage="GROUP_STAGE"), "selection": "HOME", "comp_home": 80, "comp_away": 40},
            {"match": fx(mid="mf", stage="FINAL"), "selection": "HOME", "comp_home": 70, "comp_away": 50}]
@@ -404,7 +407,7 @@ def run():
     # budget = budget - stakes + returns(won), clamped [0, B]
     net = [{"player": "Erol", "epoch": "GROUP_1", "stake": 50, "status": "lost", "return": 0},
            {"player": "Erol", "epoch": "GROUP_1", "stake": 10, "status": "won", "return": 25}]
-    ck("budget tracks net losses+wins (100-60+25=65)", wager.budget_remaining(net, "Erol", "GROUP_1") == 65,
+    ck("budget tracks net losses+wins (B-60+25)", wager.budget_remaining(net, "Erol", "GROUP_1") == max(0.0, min(B, B - 60 + 25)),
        wager.budget_remaining(net, "Erol", "GROUP_1"))
     topped = [{"player": "Erol", "epoch": "GROUP_1", "stake": 20, "status": "lost", "return": 0},
               {"player": "Erol", "epoch": "GROUP_1", "stake": 10, "status": "won", "return": 40}]
@@ -414,8 +417,14 @@ def run():
     ck("budget can hit 0", wager.budget_remaining(locked, "Erol", "GROUP_1") == 0)
     lk_ok, lk_msg = wager.place(locked, "Erol", fx(mid="lk1", utc=g1), "HOME", 1, 500, 80, 40, group_mid_ts=mid)
     ck("0 budget = locked out of this epoch", not lk_ok and "budget" in lk_msg.lower(), lk_msg)
-    ck("a different epoch (GROUP_2) is unaffected by GROUP_1 losses",
-       wager.budget_remaining(locked, "Erol", "GROUP_2") == B and wager.budget_remaining(locked, "Erol", "LAST_16") == B)
+    ck("a different epoch is unaffected by GROUP_1 losses (and carries its own +5/round budget)",
+       wager.budget_remaining(locked, "Erol", "GROUP_2") == wager.stage_budget("GROUP_2")
+       and wager.budget_remaining(locked, "Erol", "LAST_16") == wager.stage_budget("LAST_16"))
+    ck("budget rises +5 each round and is always 20 above that round's per-bet cap",
+       [wager.stage_budget(e) for e in ("GROUP_1", "LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL")]
+       == [50, 55, 60, 65, 70, 75, 80]
+       and all(wager.stage_budget(e) == wager.stage_max_stake(s) + 20
+               for e, s in (("GROUP_1", "GROUP_STAGE"), ("LAST_32", "LAST_32"), ("FINAL", "FINAL"))))
     cap_ok, cap_msg = wager.place([], "Erol", fx(mid="cp1", utc=g1), "HOME", 40, 500, 80, 40, group_mid_ts=mid)
     ck("per-bet cap (30) still applies even with full budget", not cap_ok and "30" in cap_msg, cap_msg)
     # a real placement lands in the right epoch and reduces that epoch's budget

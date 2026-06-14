@@ -28,7 +28,18 @@ MAX_ACTIVE_ACCAS = 2      # most simultaneous OPEN accumulators per player (sing
 FREE_BET_STAKE = 5        # a claimed free bet stakes this many points; the stake is NEVER credited — only winnings (profit) count
 STARTING_BONUS = 5        # everyone starts with this many free betting points so they can bet before earning any.
                           # It's bet-only: it never sits on the leaderboard, and it cushions the first 5 of net losses.
-STAGE_BUDGET = 100        # staking allowance per "epoch": group 1st half, group 2nd half, then each KO round.
+STAGE_BUDGET = 50         # base staking allowance (group stage). Rises +5 each knockout round (see STAGE_BUDGET_MAP),
+                          # and fully regenerates each "epoch": group 1st half, group 2nd half, then every KO round.
+STAGE_BUDGET_MAP = {      # per-epoch budget — always 20 above that round's per-bet cap, so the cap is always reachable.
+    "GROUP_1":         50, "GROUP_2": 50,
+    "LAST_32":         55,
+    "LAST_16":         60,
+    "QUARTER_FINALS":  65,
+    "SEMI_FINALS":     70,
+    "THIRD_PLACE":     75,
+    "FINAL":           80,
+    "WINNER":          80,
+}
                           # Resets automatically because budget_remaining only sums bets within the same epoch.
 OVERROUND = 1.08          # ~8% bookmaker margin
 MAX_PROB = 0.95           # favourites can be priced shorter (down to ~1/20) so the margin holds on them too
@@ -36,16 +47,16 @@ MAX_PROB = 0.95           # favourites can be priced shorter (down to ~1/20) so 
 # Max stake rises as the tournament gets deeper: +5 per knockout round, and an extra +15 for the final.
 # WC2026 round dates (UTC, for reference — actual dates come from the live fixture feed):
 #   Group stage 11–27 Jun · Round of 32 28 Jun–3 Jul · Round of 16 4–7 Jul · Quarter-finals 9–11 Jul ·
-#   Semi-finals 14–15 Jul · Third place 18 Jul · Final 19 Jul. The 100-pt budget also resets at each of these.
+#   Semi-finals 14–15 Jul · Third place 18 Jul · Final 19 Jul. The 50-pt budget also resets at each of these.
 STAGE_MAX_STAKE = {
     "GROUP_STAGE":     30,
     "LAST_32":         35,
     "LAST_16":         40,
     "QUARTER_FINALS":  45,
     "SEMI_FINALS":     50,
-    "THIRD_PLACE":     50,
-    "FINAL":           65,     # 50 + extra 15
-    "WINNER":          65,
+    "THIRD_PLACE":     55,
+    "FINAL":           60,     # +5 every round: 30 → 35 → 40 → 45 → 50 → 55 → 60
+    "WINNER":          60,
 }
 
 
@@ -354,11 +365,20 @@ def epoch_of(match, group_mid_ts=None):
     return stage
 
 
-def budget_remaining(wagers, player, epoch, budget=STAGE_BUDGET):
+def stage_budget(epoch):
+    """Per-round staking budget for an epoch (group halves 50, then +5 each knockout round). Regenerates
+    each round automatically because budget_remaining only sums bets tagged with the same epoch."""
+    return STAGE_BUDGET_MAP.get(epoch, STAGE_BUDGET)
+
+
+def budget_remaining(wagers, player, epoch, budget=None):
     """Points a player can still stake in this epoch:
     budget - (stakes placed this epoch) + (returns from won bets this epoch), clamped to [0, budget].
     Losing leaves the budget down (you climb back only by winning); winnings top it up, never above budget.
-    Void bets refund so they don't count. Resets per epoch because we only sum bets tagged with this `epoch`."""
+    Void bets refund so they don't count. Resets per epoch because we only sum bets tagged with this `epoch`.
+    The budget defaults to this epoch's allowance (stage_budget) — group 50, rising +5 each knockout round."""
+    if budget is None:
+        budget = stage_budget(epoch)
     spent = 0.0
     back = 0.0
     for w in wagers or []:
@@ -483,13 +503,14 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
     if stake > avail + 1e-9:
         return False, "You only have %g points available to stake." % avail
     epoch = epoch_of(match, group_mid_ts)              # per-round staking budget (both this and the per-bet cap apply)
+    eb = stage_budget(epoch)
     brem = budget_remaining(wagers, player, epoch)
     if brem <= 1e-9:
         return False, ("You've used up your %d-point staking budget for this round. It resets at the next round "
-                       "(the group-stage midpoint, then each knockout round) — you can't bet again until then." % STAGE_BUDGET)
+                       "(the group-stage midpoint, then each knockout round) — you can't bet again until then." % eb)
     if stake > brem + 1e-9:
         return False, ("Your staking budget left this round is %g of %d points — stake that or less. "
-                       "It tops back up when your bets win (never above %d) and resets next round." % (brem, STAGE_BUDGET, STAGE_BUDGET))
+                       "It tops back up when your bets win (never above %d) and resets next round." % (brem, eb, eb))
     if market == "ou":
         odds = goals_odds(comp_home, comp_away).get(_line_key(line), {}).get(selection)
     else:
@@ -708,11 +729,12 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
     if stake > avail + 1e-9:
         return False, "You only have %g points available to stake." % avail
     epoch = epoch_of(min(selections, key=lambda s: _utc_ts(s["match"].get("utcDate") or "") or 0)["match"], group_mid_ts)
+    eb = stage_budget(epoch)
     brem = budget_remaining(wagers, player, epoch)
     if brem <= 1e-9:
-        return False, ("You've used up your %d-point staking budget for this round (resets next round)." % STAGE_BUDGET)
+        return False, ("You've used up your %d-point staking budget for this round (resets next round)." % eb)
     if stake > brem + 1e-9:
-        return False, ("Your staking budget left this round is %g of %d points — stake that or less." % (brem, STAGE_BUDGET))
+        return False, ("Your staking budget left this round is %g of %d points — stake that or less." % (brem, eb))
     legs = []
     dec = 1.0
     for s in selections:
