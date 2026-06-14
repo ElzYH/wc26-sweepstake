@@ -1386,12 +1386,20 @@ def _update_match_clocks(matches, now=None):
                             rec["htp"] = (rec.get("htp") or 0.0) + max(0.0, now - rec["ps"])  # bank the paused time
                             rec["ps"] = None
                             changed = True
-                        if playing and not rec.get("ps"):     # re-lock to the feed minute if we've drifted (e.g. a poll missed half-time)
+                        if playing and not rec.get("ps"):     # keep the clock roughly tied to the broadcast minute WITHOUT yanking it backward
                             mn = m.get("minute")
                             if isinstance(mn, (int, float)) and mn is not None and mn >= 0:
                                 target = float(mn) * 60.0
                                 computed = now - rec["ko"] - (rec.get("htp") or 0.0)
-                                if abs(computed - target) > 75:   # >~1 min off the broadcast clock — snap back to it (catches small unbanked pauses fast)
+                                # The feed minute is AHEAD of our clock (we missed time, or the feed jumped) -> catch up forward fast.
+                                # Our clock running AHEAD of the feed minute is EXPECTED on a delayed / "sticky" feed (the free plan
+                                # lags the real minute and sometimes freezes it), and must NOT pull the clock back — doing so made the
+                                # clock keep restarting to a stale minute and fall ~minutes behind. Only snap back on a BIG lead
+                                # (~a missed half-time), never for ordinary feed lag.
+                                if computed < target - 75:
+                                    rec["ko"] = now - (rec.get("htp") or 0.0) - target
+                                    changed = True
+                                elif computed > target + 480:    # >8 min ahead => a real gap (e.g. a half-time we never saw), not feed lag
                                     rec["ko"] = now - (rec.get("htp") or 0.0) - target
                                     changed = True
                 else:

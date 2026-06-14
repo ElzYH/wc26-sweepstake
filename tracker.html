@@ -1131,7 +1131,7 @@ async function renderNotifyTab(){
   if(!games.length){ html+='<div class="empty">No upcoming games involving your teams or your open bets right now.</div>'; }
   else html+=games.map((f,i)=>{
     const reason=(myTeams.has(f.home)||myTeams.has(f.away))?(betMids.has(f.matchId)?'your team · you bet':'your team'):'you bet';
-    const when=f.utcDate?('<span style="color:var(--muted);font-size:11.5px">'+esc(String(f.utcDate).slice(5,16).replace('T',' '))+'</span>'):'';
+    const when=(f.utcDate&&!isNaN(new Date(f.utcDate)))?('<span style="color:var(--muted);font-size:11.5px">'+esc(new Date(f.utcDate).toLocaleString(undefined,{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))+'</span>'):'';
     const liveTag=(f.status==='IN_PLAY'||f.status==='PAUSED')?' <span style="color:#ff6b6b;font-size:11px">🔴 LIVE</span>':'';
     const isMuted=muted.has(f.matchId);
     return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:6px">'
@@ -1315,15 +1315,22 @@ function liveBreakLine(m){
   }
   return html?('<div class="livebd-wrap">'+html+'</div>'):'';
 }
-function liveClockText(status, minute, liveSec, pens){
+function liveClockText(status, minute, liveSec, pens, clockAt){
   if(pens==='1'||pens===true) return 'PENS';                          // shootout in progress/decided while still live
   if(status==='PAUSED') return 'HT';
   if(!(status==='IN_PLAY'||status==='LIVE'||status==='SUSPENDED')) return '';
   const ls=(liveSec===''||liveSec==null)?null:Number(liveSec);
   if(ls!=null&&!isNaN(ls)&&ls>=0){
-    let sec=ls+Math.min(75,Math.max(0,(Date.now()-FETCH_AT)/1000));   // tick on from the server value; catch-up capped just over one poll so a stale/backgrounded tab can't run ahead
+    // Tick on from the SERVER's clock: liveSec was valid at clockAt (server epoch), so elapsed = now − clockAt.
+    // Anchoring to the server time (NOT our own per-fetch time) means a stale or lagging poll can't snap the
+    // clock backward — which, with the feed minute freezing on the free plan, was making it fall ~minutes behind.
+    const ca=(clockAt===''||clockAt==null)?null:Number(clockAt);
+    let elapsed = (ca!=null&&!isNaN(ca)&&ca>0) ? Math.max(0, Date.now()/1000-ca)
+                                               : Math.max(0,(Date.now()-FETCH_AT)/1000);   // fallback for pre-clockAt data
+    elapsed=Math.min(elapsed,15*60);                                  // backgrounded-tab safety; re-synced on focus
+    let sec=ls+elapsed;
     const mnNum=(minute===''||minute==null)?null:Number(minute);
-    if(mnNum!=null&&!isNaN(mnNum)&&mnNum>=0) sec=Math.min(sec,(mnNum+2)*60);   // never tick past the broadcast minute +2 — the feed minute is ground truth (no 72:00 while it says 50')
+    if(mnNum!=null&&!isNaN(mnNum)&&mnNum>=0) sec=Math.min(sec,(mnNum+8)*60);   // loose ceiling only — the feed minute lags/freezes on the free plan, so don't clamp the accurate clock down to it
     if(sec>125*60) sec=125*60;                                        // never beyond end of extra time — a shootout shows 'PENS', not a clock
     const mm=Math.floor(sec/60), ss=Math.floor(sec%60);
     return mm+':'+(ss<10?'0':'')+ss;
@@ -1334,11 +1341,11 @@ function liveClockText(status, minute, liveSec, pens){
 }
 function liveClock(m){
   const pens=(m.shootout||m.penHome!=null||m.penAway!=null)?'1':'';
-  return '<span class="liveclock" data-st="'+esc(m.status||'')+'" data-mn="'+(m.minute==null?'':m.minute)+'" data-ls="'+(m.liveSec==null?'':m.liveSec)+'" data-pens="'+pens+'">'+liveClockText(m.status,m.minute,m.liveSec,pens)+'</span>';
+  return '<span class="liveclock" data-st="'+esc(m.status||'')+'" data-mn="'+(m.minute==null?'':m.minute)+'" data-ls="'+(m.liveSec==null?'':m.liveSec)+'" data-ca="'+(m.clockAt==null?'':m.clockAt)+'" data-pens="'+pens+'">'+liveClockText(m.status,m.minute,m.liveSec,pens,m.clockAt)+'</span>';
 }
 function updateLiveClocks(){
   const els=document.querySelectorAll('.liveclock'); if(!els.length) return;
-  els.forEach(el=>{ const ls=el.dataset.ls===''?null:el.dataset.ls; el.textContent=liveClockText(el.dataset.st, el.dataset.mn, ls, el.dataset.pens); });
+  els.forEach(el=>{ const ls=el.dataset.ls===''?null:el.dataset.ls; const ca=el.dataset.ca===''?null:el.dataset.ca; el.textContent=liveClockText(el.dataset.st, el.dataset.mn, ls, el.dataset.pens, ca); });
 }
 setInterval(updateLiveClocks,1000);
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden) load(); });   // foregrounding re-syncs the clock
@@ -1714,7 +1721,7 @@ function renderOverview(d){
         const liveN=liveOf(m);
         const fin=doneOf(m);
         const sc=scored(m)?(m.homeScore+'–'+m.awayScore):'v';
-        const tag=liveN?('<span class="livedot"></span>'+liveClock(m)):(fin?'FT':(t?t+' UTC':'TBC'));
+        const tag=liveN?('<span class="livedot"></span>'+liveClock(m)):(fin?'FT':(t?fmtTime(m.utcDate):'TBC'));   // fmtTime -> the viewer's local time (UK = BST), not raw UTC
         const where=m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):('Group '+(m.group||'?'));
         const kn=koNote(m);
         return `<div class="mdcard${liveN?' mdlive':''}${fin?' mdfin':''}"><div class="mdmeta">${where} · ${tag}${kn?' · '+kn:''}</div>
