@@ -20,6 +20,7 @@ import hashlib
 import shutil
 import threading
 import time
+import math
 import calendar
 import urllib.request
 import urllib.parse
@@ -2509,6 +2510,121 @@ def update_now(cfg):
         return False, str(e)          # results.json + tracker_data.json left intact
 
 
+def _odds_book_overround(decimals):
+    """Sum of implied probabilities across a market's decimal prices. >1.0 = a house edge."""
+    s = 0.0
+    for d in decimals:
+        try:
+            d = float(d)
+        except (TypeError, ValueError):
+            return None
+        if d > 1.0:
+            s += 1.0 / d
+    return s if s > 0 else None
+
+
+def _odds_integrity_violations(td, teams):
+    """READ-ONLY safety guard: every UPCOMING match's offered 1X2 + Over/Under books must carry a
+    house edge (overround > 100%). Returns a list of human strings for any that don't. This should
+    always be empty (the goals book filters underround lines and 1X2 carries a fixed margin) — it's a
+    monitor so a money market can never silently go bettor-positive. Never raises."""
+    out = []
+    if wager_mod is None:
+        return out
+    try:
+        for f in (td.get("fixtures") or []):
+            if not isinstance(f, dict):
+                continue
+            if f.get("status") not in ("TIMED", "SCHEDULED"):
+                continue
+            h, a = f.get("home"), f.get("away")
+            if h not in teams or a not in teams:
+                continue
+            ch = wager_mod.live_strength((teams.get(h) or {}).get("composite", 0), h, td.get("fixtures") or [])
+            ca = wager_mod.live_strength((teams.get(a) or {}).get("composite", 0), a, td.get("fixtures") or [])
+            mo = wager_mod.match_odds(ch, ca)
+            b1 = _odds_book_overround([mo["HOME"]["decimal"], mo["DRAW"]["decimal"], mo["AWAY"]["decimal"]])
+            if b1 is not None and b1 <= 1.0:
+                out.append("%s v %s — 1X2 book %.1f%%" % (h, a, b1 * 100))
+            for ln, leg in (wager_mod.goals_odds(ch, ca) or {}).items():
+                bo = _odds_book_overround([leg["OVER"]["decimal"], leg["UNDER"]["decimal"]])
+                if bo is not None and bo <= 1.0:
+                    out.append("%s v %s — O/U %s book %.1f%%" % (h, a, ln, bo * 100))
+    except Exception as e:
+        log("odds integrity check error (non-fatal):", e)
+    return out
+
+
+def _maybe_matchday_audit(cfg):
+    """AUTO, READ-ONLY: once a whole UTC matchday has finished, log a calibration + house-edge summary
+    (and post it to Discord if `odds_audit_discord` is on). Idempotent via last_audited_matchday. It
+    NEVER changes odds, composites or bets — it only reports, with the integrity guard as a safety net.
+    Fully defensive: a bad cycle can never disturb scoring/settlement/betting."""
+    try:
+        if not draw_locked() or wager_mod is None:
+            return
+        td = _load_tracker() or {}
+        fx = td.get("fixtures") or []
+        if not fx:
+            return
+        # group finished-with-scores games by UTC date; find the latest date that's FULLY done
+        by_day = {}
+        for m in fx:
+            d = (m.get("utcDate") or "")[:10]
+            if d:
+                by_day.setdefault(d, []).append(m)
+        done_days = []
+        for d, games in by_day.items():
+            if games and all(g.get("status") in ("FINISHED", "AWARDED") for g in games):
+                done_days.append(d)
+        if not done_days:
+            return
+        day = max(done_days)
+        if cfg.get("last_audited_matchday") == day:
+            return                                  # already reported this matchday
+        games = [g for g in by_day[day] if isinstance(g.get("homeScore"), (int, float))
+                 and isinstance(g.get("awayScore"), (int, float))]
+        if not games:
+            return
+        try:
+            teams = {t["name"]: t for t in json.load(open("teams.json")).get("teams", [])}
+        except Exception:
+            teams = {}
+        n = ll = fav_hits = draws = overs = goals = 0
+        for g in games:
+            h, a = g.get("home"), g.get("away")
+            hs, as_ = int(g["homeScore"]), int(g["awayScore"])
+            ch = (teams.get(h) or {}).get("composite", 0) or 0
+            ca = (teams.get(a) or {}).get("composite", 0) or 0
+            ph, pd, pa = wager_mod._fair_probs(ch, ca)
+            lam = wager_mod.expected_goals(ch, ca)
+            res = "H" if hs > as_ else ("A" if as_ > hs else "D")
+            p_act = {"H": ph, "D": pd, "A": pa}[res]
+            ll += -math.log(max(1e-9, p_act))
+            fav = max((("H", ph), ("D", pd), ("A", pa)), key=lambda kv: kv[1])[0]
+            fav_hits += (fav == res); draws += (res == "D"); overs += ((hs + as_) > 2.5); goals += hs + as_
+            n += 1
+        if n == 0:
+            return
+        violations = _odds_integrity_violations(td, teams)
+        line = ("📊 Matchday %s audit — %d games · favourites %d/%d · draws %d · Over2.5 %d/%d · "
+                "avg goals %.2f · 1X2 log-loss %.2f · house-edge %s"
+                % (day, n, fav_hits, n, draws, overs, n, goals / n, ll / n,
+                   ("OK ✓" if not violations else ("⚠ %d NEGATIVE-EDGE MARKET(S)!" % len(violations)))))
+        log(line)
+        if violations:
+            log("  integrity violations:", "; ".join(violations[:10]))
+        if cfg.get("odds_audit_discord") and (cfg.get("discord_webhook") or "").startswith("https://"):
+            msg = line
+            if violations:
+                msg += "\n⚠ " + "; ".join(violations[:8])
+            discord_send(msg)
+        cfg["last_audited_matchday"] = day          # config-only write (idempotency); never touches bets/odds
+        save_config(cfg)
+    except Exception as e:
+        log("matchday audit error (non-fatal):", e)
+
+
 def maybe_send_daily_digest(cfg):
     """Post the summary (+ today's games) to Discord and push each player their fixtures, once per day
     at/after the configured UTC hour. Idempotent: a persisted last_digest_date stops a restart double-posting."""
@@ -2555,6 +2671,10 @@ def poller():
                 maybe_send_daily_digest(load_config())
             except Exception as e:
                 print("[digest] error:", e)
+            try:
+                _maybe_matchday_audit(load_config())          # read-only odds audit + house-edge guard, once per finished matchday
+            except Exception as e:
+                print("[odds-audit] error:", e)
             try:
                 _maybe_announce_free_drop(load_config())
             except Exception as e:
