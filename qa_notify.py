@@ -66,31 +66,31 @@ ck("a goal pushes the owner", any(p[1] == "goal" for p in PUSH), PUSH)
 transition(tracker(0, "IN_PLAY", 1, 0), tracker(1, "FINISHED", 1, 0))
 ck("full-time posts to the webhook", any("Full-time" in x for x in DISC), DISC)
 
-print("\n== channel gating: solo games are DM-only; head-to-head & knockout still post to the channel ==")
+print("\n== channel feed (switch ON): EVERY game event posts to the channel — solo, head-to-head, knockout ==")
 def solo_tracker(status, hs, as_, stage="GROUP_STAGE"):
-    # James owns the home team; the away team is unowned (pool) -> NOT head-to-head
+    # James owns the home team; the away team is unowned (pool) -> NOT head-to-head, but the channel still gets it
     return {"stats": {"matches_played": 0, "teams_remaining": 30, "goals": 0},
             "leaderboards": {"hybrid": [{"name": "James"}], "points": [{"name": "James"}], "survival": [{"name": "James"}]},
             "players": [{"name": "Erol"}, {"name": "James"}],
             "fixtures": [{"home": "Brazil", "away": "Panama", "status": status,
                           "homeOwner": "James", "awayOwner": "—",
                           "homeScore": hs, "awayScore": as_, "stage": stage, "group": "A"}]}
-# solo kickoff -> owner DM + push, but NO channel post
+# solo kickoff -> channel post + owner DM + push + all-games feed
 transition(solo_tracker("TIMED", None, None), solo_tracker("IN_PLAY", 0, 0))
-ck("a solo game's kickoff does NOT post to the channel", not any("Kicked off" in x for x in DISC), DISC)
+ck("a solo game's kickoff posts to the channel (switch on means post game events)", any("Kicked off" in x for x in DISC), DISC)
 ck("a solo game's kickoff still DMs the owner", any(p[0] == "James" for p in DM), DM)
 ck("a solo game's kickoff still pushes the owner", any(p[0] == "James" for p in PUSH), PUSH)
 ck("a solo game's kickoff still feeds the all-games feed", any("Kicked off" in x for x in DMALL), DMALL)
-# solo goal -> DM only, no channel
+# solo goal -> channel post + owner DM
 transition(solo_tracker("IN_PLAY", 0, 0), solo_tracker("IN_PLAY", 1, 0))
-ck("a solo goal does NOT post to the channel", not any("scored" in x for x in DISC), DISC)
+ck("a solo goal posts to the channel (switch on)", any("scored" in x for x in DISC), DISC)
 ck("a solo goal still DMs the owner", any("scored" in m[1] for m in DM), DM)
-# head-to-head (Spain/Erol vs France/James) kickoff -> DOES post to channel
+# head-to-head (Spain/Erol vs France/James) kickoff -> posts to channel
 transition(tracker(0, "TIMED", None, None), tracker(0, "IN_PLAY", 0, 0))
-ck("a head-to-head kickoff DOES post to the channel", any("Kicked off" in x for x in DISC), DISC)
-# knockout solo kickoff -> important -> DOES post to channel
+ck("a head-to-head kickoff posts to the channel", any("Kicked off" in x for x in DISC), DISC)
+# knockout kickoff -> posts to channel
 transition(solo_tracker("TIMED", None, None, stage="LAST_16"), solo_tracker("IN_PLAY", 0, 0, stage="LAST_16"))
-ck("a knockout game posts to the channel even if solo-owned", any("Kicked off" in x for x in DISC), DISC)
+ck("a knockout game posts to the channel too", any("Kicked off" in x for x in DISC), DISC)
 
 print("\n== pre-tournament (nothing live, nothing finished): stay SILENT ==")
 transition(tracker(0, "TIMED", None, None), tracker(0, "TIMED", None, None))

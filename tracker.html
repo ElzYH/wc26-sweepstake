@@ -1659,7 +1659,7 @@ function renderOverview(d){
   // LIVE NOW
   html+='<div class="ovsec"><div class="ovh">🔴 Live now</div>';
   if(live.length){
-    html+='<div class="livegrid">'+live.map(m=>`<div class="livecard"><span class="livedot"></span>LIVE${m.minute?" "+m.minute+"'":""}${m.stage&&m.stage!=='GROUP_STAGE'?' · '+(STAGE_LABEL[m.stage]||m.stage):''}
+    html+='<div class="livegrid">'+live.map(m=>`<div class="livecard"><span class="livedot"></span>${liveClock(m)}${m.stage&&m.stage!=='GROUP_STAGE'?' · '+(STAGE_LABEL[m.stage]||m.stage):''}
       <div class="lmatch"><span>${flag(m.home)}${esc(m.home)}${own(m.homeOwner)}</span><span class="lsc">${m.homeScore??0}–${m.awayScore??0}</span><span class="lr">${flag(m.away)}${esc(m.away)}${own(m.awayOwner)}</span></div>${liveBreakLine(m)}</div>`).join('')+'</div>';
   } else {
     html+='<div class="empty">No games in play right now — live scores appear here the moment a match kicks off.</div>';
@@ -1682,7 +1682,7 @@ function renderOverview(d){
         const liveN=liveOf(m);
         const fin=doneOf(m);
         const sc=scored(m)?(m.homeScore+'–'+m.awayScore):'v';
-        const tag=liveN?('<span class="livedot"></span>LIVE'+(m.minute?" "+m.minute+"'":'')):(fin?'FT':(t?t+' UTC':'TBC'));
+        const tag=liveN?('<span class="livedot"></span>'+liveClock(m)):(fin?'FT':(t?t+' UTC':'TBC'));
         const where=m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):('Group '+(m.group||'?'));
         const kn=koNote(m);
         return `<div class="mdcard${liveN?' mdlive':''}${fin?' mdfin':''}"><div class="mdmeta">${where} · ${tag}${kn?' · '+kn:''}</div>

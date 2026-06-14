@@ -1295,9 +1295,12 @@ def _update_match_clocks(matches, now=None):
                 if playing or paused:
                     if not isinstance(rec, dict):
                         mn = m.get("minute")
-                        if isinstance(mn, (int, float)) and mn is not None and mn >= 0:  # only anchor with a real minute
-                            clocks[mid] = {"ko": now - float(mn) * 60.0, "htp": 0.0, "ps": (now if paused else None)}
-                            changed = True
+                        if isinstance(mn, (int, float)) and mn is not None and mn >= 0:
+                            ko = now - float(mn) * 60.0       # back-date from the broadcast minute when we have one (most accurate)
+                        else:
+                            ko = now                          # no feed minute (e.g. free plan): start the clock at the kickoff the SERVER just detected
+                        clocks[mid] = {"ko": ko, "htp": 0.0, "ps": (now if paused else None)}
+                        changed = True
                     else:
                         if paused and not rec.get("ps"):
                             rec["ps"] = now           # a pause (half-time) just began
@@ -1382,17 +1385,16 @@ def notify_changes(old):
 
     def match_event(etype, recipients, group_line, ping=False, important=False, match_id=None):
         # recipients: list of (owner, title, body). Personal alerts always go to the owner (push + DM).
-        # The communal CHANNEL line only fires for "important" games — two players head-to-head, or a
-        # knockout tie — so the channel stays signal, not spam. Everything else is DM-only.
-        owners = [ow for ow, _t, _b in recipients if ow and ow not in ("—", "-")]
-        head_to_head = len(set(owners)) >= 2          # two different players' teams in the same match
-        send_channel = important or head_to_head
+        # The communal CHANNEL line fires for EVERY game event (kickoff/half-time/full-time) whenever the admin
+        # has the channel feed switched on (game_channel_alerts) — turning it on means "post game events here".
+        # When it's off, only personal DMs (owners + all-games opt-ins) go out. `important` is kept for callers
+        # but no longer gates the channel — the single admin switch is the control.
         for ow, ti, bo in recipients:
             if ow and ow not in ("—", "-"):
                 push_player(ow, etype, ti, bo)
                 _bot_dm_player(ow, "%s — %s" % (ti, bo), match_id=match_id)   # personal -> always DM (falls back to @mention for opt-ins)
-        if send_channel and _game_channel_on():
-            discord_send(group_line)        # communal feed: important games only, and only if the admin left it on
+        if _game_channel_on():
+            discord_send(group_line)        # communal feed: every game event while the channel is on
         _dm_all_games(group_line)           # ...and DMs anyone who opted into the all-games feed
 
     def own(o):
@@ -1465,18 +1467,16 @@ def notify_changes(old):
                 ohs, oas = ov[3], ov[4]
                 if None not in (nhs, nas, ohs, oas):
                     score = "%s %d–%d %s" % (h, nhs, nas, a)
-                    _both = ho_ok and ao_ok                # both teams owned -> a head-to-head goal is channel-worthy
-                    _goal_chan = _both or _ko
                     if nhs > ohs and ho_ok:
                         push_player(ho, "goal", "%s scored! ⚽" % h, score)
                         _bot_dm_player(ho, "⚽ **%s** scored — %s" % (h, score), match_id=mid)     # personal -> DM
-                        if _goal_chan and _game_channel_on():
+                        if _game_channel_on():
                             discord_send("⚽ **%s** (%s) scored — %s" % (h, ho, score))
                         _dm_all_games("⚽ **%s** (%s) scored — %s" % (h, ho, score))
                     if nas > oas and ao_ok:
                         push_player(ao, "goal", "%s scored! ⚽" % a, score)
                         _bot_dm_player(ao, "⚽ **%s** scored — %s" % (a, score), match_id=mid)     # personal -> DM
-                        if _goal_chan and _game_channel_on():
+                        if _game_channel_on():
                             discord_send("⚽ **%s** (%s) scored — %s" % (a, ao, score))
                         _dm_all_games("⚽ **%s** (%s) scored — %s" % (a, ao, score))
     except Exception:

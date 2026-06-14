@@ -226,6 +226,10 @@ ck("the Alerts tab reveal in render() uses the same condition", "STATUS.wagering
 # ---- this round: betting revert, layout, stable join link, leaner copy ----
 print("\n== iOS betting fix + layout + join link ==")
 ck("the broken noFloat/scrollBy keyboard hack is gone", "noFloat" not in HTML and "scrollBy" not in HTML, None)
+# the live displays must use the ticking server-anchored clock (liveClock), not the raw feed minute
+ck("overview 'Live now' grid uses the ticking clock", '<span class="livedot"></span>${liveClock(m)}' in HTML, None)
+ck("matchday slate uses the ticking clock for live games", '\'<span class="livedot"></span>\'+liveClock(m)' in HTML, None)
+ck("the live displays no longer hard-show the raw feed minute", '">LIVE'+chr(36)+'{m.minute?' not in HTML and "LIVE'+(m.minute?" not in HTML, None)
 ck("stake inputs are 16px (iOS won't zoom)", HTML.count("padding:8px 10px;font-size:16px") == 2 and "padding:8px 10px;font-size:14px" not in HTML, None)
 ck("tabs wrap gracefully onto the next row (left-aligned, no scroller)", ".tabs{display:flex;gap:8px;margin:22px 0 18px;flex-wrap:wrap}" in HTML and "overflow-x:auto" not in HTML.split(".tabs{")[1][:80], None)
 ck("tab pills scale smoothly with viewport (clamp), so they wrap slowly", "font-size:clamp(12px,2.5vw,14px)" in HTML.replace(" ", ""), None)
@@ -393,7 +397,7 @@ ck("clock shows PENS during a shootout", liveClockText("IN_PLAY", null, 7200, "1
 ck("clock falls back to the feed minute", liveClockText("IN_PLAY", 52, null) === "52'");
 ck("clock falls back to LIVE with nothing", liveClockText("IN_PLAY", null, null) === "LIVE");
 ck("clock is blank when not live", liveClockText("FINISHED", 90, 5400) === "");
-ck("clock caps a runaway value at 130:00", liveClockText("IN_PLAY", null, 200*60) === "130:00");
+ck("clock caps a runaway value at 130:00", liveClockText("IN_PLAY", null, 200*60) === "130:00")
 ck("clock counts into extra time (e.g. 105:00)", liveClockText("IN_PLAY", null, 105*60) === "105:00");
 ck("clock pads single-digit seconds", liveClockText("IN_PLAY", null, 61) === "1:01");
 

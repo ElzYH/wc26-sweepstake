@@ -2,7 +2,7 @@
 """
 Live match-clock QA. Drives _update_match_clocks through a full match lifecycle with controlled time and
 checks the elapsed seconds the tracker will show: anchors correctly, excludes half-time, ticks accurately,
-and only anchors when the feed gives a minute (never guesses).
+and anchors the clock at the server-detected kickoff (back-dating by the feed minute when one is available, otherwise starting at 0:00), excluding half-time and re-locking to the broadcast minute if it drifts.
 """
 import os, sys, json, tempfile
 
@@ -79,12 +79,14 @@ S._update_match_clocks(match("IN_PLAY", 52, mid="m2"), now=5000)
 ck("elapsed reads 52:00 immediately", abs((elapsed("m2", 5000) or 0) - 3120) < 1, elapsed("m2", 5000))
 ck("and 53:00 a minute later", abs((elapsed("m2", 5060) or 0) - 3180) < 1, elapsed("m2", 5060))
 
-print("\n== no broadcast minute -> never guess (stays untracked, frontend shows LIVE) ==")
+print("\n== no broadcast minute -> anchor at the server-detected kickoff (clock starts at 0:00) ==")
 S._update_match_clocks(match("IN_PLAY", None, mid="m3"), now=6000)
-ck("match with no feed minute is not anchored", S._load_match_clocks().get("m3") is None)
-# ...but once a minute appears, it anchors
-S._update_match_clocks(match("IN_PLAY", 10, mid="m3"), now=6000)
-ck("anchors as soon as a minute is available", abs((elapsed("m3", 6000) or 0) - 600) < 1, elapsed("m3", 6000))
+ck("match with no feed minute IS anchored at kickoff (ko=now)", S._load_match_clocks().get("m3") is not None)
+ck("no-minute clock reads ~0:00 at kickoff", abs((elapsed("m3", 6000) or 0) - 0) < 1, elapsed("m3", 6000))
+ck("no-minute clock ticks on from kickoff", abs((elapsed("m3", 6063) or 0) - 63) < 1, elapsed("m3", 6063))
+# ...and if a real broadcast minute later disagrees by >2 min, it re-locks to the feed minute
+S._update_match_clocks(match("IN_PLAY", 10, mid="m3"), now=6063)
+ck("re-locks to the feed minute when one arrives (10' -> ~600s)", abs((elapsed("m3", 6063) or 0) - 600) < 5, elapsed("m3", 6063))
 
 print("\n== scoring attaches liveSec/liveHT to fixtures from the clocks file ==")
 # write a clocks file and a tiny results.json, run scoring, read the fixture back
