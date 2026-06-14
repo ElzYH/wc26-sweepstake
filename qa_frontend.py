@@ -130,9 +130,9 @@ except Exception as _e:
 print("\n== leaderboard combined total + breakdown ==")
 ck("the two chips are merged into one combined total chip on the left", 'class="lbtot"' in HTML and "(p.live||0)+(p.bet_potential||0)" in HTML, None)
 ck("each row has a where-from breakdown panel", 'class="lbbd"' in HTML and "function lbBreakdown(p)" in HTML, None)
-ck("the breakdown names live games and open bets", "Right now (live)" in HTML and "If your open bets land" in HTML, None)
+ck("the breakdown names live games and open bets", "Right now (live)" in HTML and "open bets" in HTML and "if they land" in HTML, None)
 ck("leaderboard breakdowns stay open across the 30s refresh", "LBBD.add(nm)" in HTML and "LBBD.delete(nm)" in HTML and "LBBD.has(p.name)" in HTML, None)
-ck("the live-game dropdown lists everyone's bets on that game", "function betsOnMatch(m)" in HTML and "bet'+(gbets.length===1?''" in HTML, None)
+ck("each bettor on a live game gets a Name +N collapsible (like the owner rows)", "function betsOnMatch(m)" in HTML and "gbets.forEach" in HTML and "+betProfit(w)+" in HTML and "if this '+w.legs.length+'-fold lands" in HTML, None)
 ck("all pending wagers are fetched for the breakdowns", "ALLWAGERS=(wj.wagers||[]).filter" in HTML, None)
 try:
     import subprocess as _sp4
@@ -150,7 +150,7 @@ try:
     let ALLWAGERS=[{player:'Louis',matchId:'M',home:'Japan',away:'Spain',selection:'HOME',frac:'2/1',stake:5,return:15,status:'pending'},
       {player:'Erol',legs:[{home:'Japan',away:'Spain',selection:'AWAY',frac:'3/1',matchId:'M'},{home:'A',away:'B',selection:'HOME',frac:'1/1',matchId:'O'}],stake:3,return:24,status:'pending'}];
     const lb=lbBreakdown({name:'Louis'}); const mb=betsOnMatch({matchId:'M'}).map(w=>w.player);
-    console.log(JSON.stringify({liveShown:lb.includes('Japan vs Spain'),betShown:lb.includes('If your open bets land'),matchBets:mb}));""")
+    console.log(JSON.stringify({liveShown:lb.includes('Japan vs Spain'),betShown:lb.includes('if they land'),matchBets:mb}));""")
     open("/tmp/_lb2.js", "w").write(_js)
     _r = json.loads(_sp4.run(["node", "/tmp/_lb2.js"], capture_output=True, text=True).stdout.strip())
     ck("leaderboard breakdown shows the player's live game + bet", _r["liveShown"] and _r["betShown"], _r)
@@ -169,13 +169,43 @@ try:
     _js = ("const esc=s=>String(s);\nlet ALLWAGERS=[];\nlet DATA={scoring:{points:{per_goal:1,win:3,draw:1,clean_sheet:1}},"
            "leaderboards:{points:[{name:'Louis',bet_potential:3.34}]}};\n" + _lp + "\n" + _lb +
            "\nconst o=liveBreakLine({home:'Japan',away:'Brazil',homeOwner:'Louis',awayOwner:'Louis',homeScore:0,awayScore:0,matchId:'X'});"
-           "console.log(JSON.stringify({n:(o.match(/<details/g)||[]).length, has734:o.includes('+7.34'), bets:o.includes('your open bets')}));")
+           "console.log(JSON.stringify({n:(o.match(/<details/g)||[]).length, folded:o.includes('+7.34'), betRow:o.includes('your open bets'), tot4:o.includes('+4')}));")
     open("/tmp/_lb.js", "w").write(_js)
     _r = json.loads(_sp3.run(["node", "/tmp/_lb.js"], capture_output=True, text=True).stdout.strip())
     ck("owning both sides dedupes to ONE dropdown (not 'Louis +2 · Louis +2')", _r["n"] == 1, _r)
-    ck("the total folds in betting (+4 live + 3.34 bets = +7.34)", _r["has734"] and _r["bets"], _r)
+    ck("the live total is scoreline-only — open bets are NOT folded into it", (not _r["folded"]) and (not _r["betRow"]) and _r["tot4"], _r)
 except Exception as _e:
     ck("live-breakdown dropdown cross-check ran", False, str(_e)[:140])
+try:
+    import subprocess as _sp6
+    _lp = re.search(r"(function liveParts\(scored, conceded\)\{.*?\n\})", HTML, re.S).group(1)
+    def _g2(nm):
+        s = HTML.index("function " + nm); i = HTML.index("{", s); depth = 0
+        for j in range(i, len(HTML)):
+            if HTML[j] == "{": depth += 1
+            elif HTML[j] == "}":
+                depth -= 1
+                if depth == 0: return HTML[s:j + 1]
+    _helpers = "\n".join(_g2(n) for n in ["isDone", "pickName", "provResult", "provChip", "betProfit", "betsOnMatch", "liveBreakLine"])
+    _js = ("const esc=s=>String(s==null?'':s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));\n"
+           "const LIVEBD=new Set();\n"
+           "let DATA={scoring:{points:{per_goal:1,win:3,draw:1,clean_sheet:1}},fixtures:["
+           "{home:'Brazil',away:'Morocco',homeOwner:'James',awayOwner:'-',homeScore:1,awayScore:1,status:'IN_PLAY',matchId:'X'}]};\n"
+           "let ALLWAGERS=[{player:'James',matchId:'X',home:'Brazil',away:'Morocco',selection:'HOME',frac:'6/5',stake:5,return:11,status:'pending'},"
+           "{player:'Erol',legs:[{home:'Brazil',away:'Morocco',selection:'AWAY',frac:'9/4',matchId:'X'},{home:'A',away:'B',selection:'HOME',frac:'2/1',matchId:'O'}],stake:2,return:23,status:'pending'}];\n"
+           + _lp + "\n" + _helpers +
+           "\nconst o=liveBreakLine(DATA.fixtures[0]);"
+           "console.log(JSON.stringify({"
+           "single:o.includes('<b>James</b>')&&o.includes('if it wins')&&o.includes('+6'),"
+           "acca:o.includes('<b>Erol</b>')&&o.includes('if this 2-fold lands')&&o.includes('+21'),"
+           "nfold:(o.match(/<details/g)||[]).length}));")
+    open("/tmp/_bbet.js", "w").write(_js)
+    _r = json.loads(_sp6.run(["node", "/tmp/_bbet.js"], capture_output=True, text=True).stdout.strip())
+    ck("a single bettor renders 'Name +profit if it wins'", _r["single"], _r)
+    ck("an acca bettor renders 'Name +profit if this N-fold lands'", _r["acca"], _r)
+    ck("owner + two bettors = 3 collapsibles on the game (James owner, James bet, Erol bet)", _r["nfold"] == 3, _r)
+except Exception as _e:
+    ck("bettor-row render cross-check ran", False, str(_e)[:160])
 ck("group tables carry the pool-teams note", "Pool teams (no owner):" in HTML and "You only ever earn your own team" in HTML, None)
 ck("the rules panel explains the pool", "The pool (leftover teams):" in HTML and "score for <b>no one</b>" in HTML, None)
 _setup = open(os.path.join(REPO, "setup.html")).read() if os.path.exists(os.path.join(REPO, "setup.html")) else ""

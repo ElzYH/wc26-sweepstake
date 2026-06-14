@@ -1230,7 +1230,7 @@ function lbBreakdown(p){   // leaderboard row dropdown: where this player's live
       +(g.parts.length?' <span style="opacity:.7">· '+g.parts.map(x=>esc(x[0])+' '+x[1]).join(', ')+'</span>':'')+'</span></div>').join('');
   }
   if(bets.length){
-    h+='<div class="lbbd-h">🎲 If your open bets land</div>'+bets.map(w=>
+    h+='<div class="lbbd-h">🎲 '+esc(p.name)+"'s open bets — if they land</div>"+bets.map(w=>
       '<div class="lbbd-row"><span>'+betLabel(w)+'</span></div>').join('');
   }
   if(!h) h='<div class="lbbd-row"><span>Nothing in play and no open bets right now.</span></div>';
@@ -1243,33 +1243,45 @@ function liveBreakLine(m){
     if(!ow||ow==='—'||ow==='-') return;
     (byP[ow]=byP[ow]||[]).push({tm,b:liveParts(sc,co)});
   });
-  const lbRows=((DATA.leaderboards||{}).points)||[];
-  const betPot=p=>{ const r=lbRows.find(x=>x.name===p); return (r&&r.bet_potential)||0; };
   let html='';
   Object.keys(byP).forEach(ow=>{
     const teams=byP[ow];
-    const liveTot=Math.round(teams.reduce((s,t)=>s+t.b.pts,0)*100)/100;
-    const bp=betPot(ow);                                   // this player's open-bet upside (any game), folded into the total
-    const tot=Math.round((liveTot+bp)*100)/100;
+    const liveTot=Math.round(teams.reduce((s,t)=>s+t.b.pts,0)*100)/100;   // live scoreline points ONLY
+    const tot=liveTot;                                                     // bets are shown separately below — never folded in here
     const key=(m.matchId||(m.home+'_'+m.away))+'|'+ow;
     const rows=teams.map(t=>'<div class="lbd-row"><span>'+esc(t.tm)+'</span><span>'+(t.b.parts.length?t.b.parts.map(p=>esc(p[0])+' +'+p[1]).join(' · '):'nothing yet')+(' = +'+t.b.pts)+'</span></div>').join('');
     html+='<details class="livebd" data-bd="'+esc(key)+'"'+(LIVEBD.has(key)?' open':'')+'>'
       +'<summary><b>'+esc(ow)+'</b> <span class="lbd-tot">+'+tot+'</span> <span class="lbd-cap">if it ends like this</span></summary>'
       +'<div class="lbd-body">'+rows
-      +(bp>0?'<div class="lbd-row"><span>🎲 your open bets</span><span style="color:var(--gold)">+'+bp+' if they land</span></div>':'')
-      +(bp>0?'<div class="lbd-row lbd-grand"><span>Total</span><span>+'+tot+'</span></div>':'')
       +'</div></details>';
   });
   const un=[[m.homeOwner,m.home],[m.awayOwner,m.away]].filter(s=>!s[0]||s[0]==='—'||s[0]==='-').map(s=>esc(s[1]));
   if(un.length) html+='<div class="lbd-pool">'+un.join(' & ')+(un.length===1?' is':' are')+' unowned (pool) — scores for no one</div>';
-  // everyone's open bets on THIS game (singles on either team + any acca with a leg here)
+  // everyone's open bets on THIS game, shown like the owner rows: a "Name +N if it lands" you can expand
   const gbets=betsOnMatch(m);
   if(gbets.length){
-    const key='bets|'+(m.matchId||(m.home+'_'+m.away));
-    const rows=gbets.map(w=>'<div class="lbd-row"><span><b>'+esc(w.player)+'</b></span><span>'+betLabel(w)+'</span></div>').join('');
-    html+='<details class="livebd" data-bd="'+esc(key)+'"'+(LIVEBD.has(key)?' open':'')+'>'
-      +'<summary>🎲 <b>'+gbets.length+' bet'+(gbets.length===1?'':'s')+'</b> on this game <span class="lbd-cap">— tap to see who</span></summary>'
-      +'<div class="lbd-body">'+rows+'</div></details>';
+    const liveS=new Set((DATA.fixtures||[]).filter(f=>f.status==='IN_PLAY'||f.status==='PAUSED').map(f=>f.matchId));
+    const fxb=new Map((DATA.fixtures||[]).map(f=>[f.matchId,f]));
+    const scoreBit=(mid)=>{ const f=fxb.get(mid); if(!(f&&f.homeScore!=null&&f.awayScore!=null)) return ['',null];
+      const sc=f.homeScore+'–'+f.awayScore; if(liveS.has(mid)) return [' <span style="color:#ff6b6b">🔴 '+sc+'</span>', f];
+      if(isDone(f.status)) return [' <span style="opacity:.65">FT '+sc+'</span>', null]; return ['', f]; };
+    gbets.forEach(w=>{
+      const isA=!!(w.legs&&w.legs.length);
+      const key='bet|'+(m.matchId||(m.home+'_'+m.away))+'|'+(w.id||w.player);
+      let rows, cap;
+      if(isA){
+        cap='if this '+w.legs.length+'-fold lands';
+        rows=w.legs.map(l=>{ const lr=l.result==='won'?'✅ ':(l.result==='lost'?'❌ ':(l.result==='void'?'➖ ':''));
+          const [sb,f]=scoreBit(l.matchId); const ch=(f&&!l.result)?(' '+provChip(provResult(l,f.homeScore,f.awayScore))):'';
+          return '<div class="lbd-row"><span>'+lr+esc(pickName(l))+' <span style="opacity:.7">('+esc(l.home)+' v '+esc(l.away)+')</span>'+sb+ch+'</span><span style="color:var(--gold)">'+esc(l.frac)+'</span></div>'; }).join('');
+      } else {
+        cap='if it wins'; const [sb,f]=scoreBit(w.matchId); const ch=(f&&w.status==='pending')?(' '+provChip(provResult(w,f.homeScore,f.awayScore))):'';
+        rows='<div class="lbd-row"><span>'+esc(pickName(w))+' <span style="opacity:.7">('+esc(w.home)+' v '+esc(w.away)+')</span>'+sb+ch+'</span><span style="color:var(--gold)">'+esc(w.frac)+'</span></div>';
+      }
+      html+='<details class="livebd" data-bd="'+esc(key)+'"'+(LIVEBD.has(key)?' open':'')+'>'
+        +'<summary>🎲 <b>'+esc(w.player)+'</b> <span class="lbd-tot">+'+betProfit(w)+'</span> <span class="lbd-cap">'+cap+'</span></summary>'
+        +'<div class="lbd-body">'+rows+'</div></details>';
+    });
   }
   return html?('<div class="livebd-wrap">'+html+'</div>'):'';
 }
