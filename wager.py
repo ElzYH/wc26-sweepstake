@@ -168,7 +168,11 @@ def goals_odds(comp_home, comp_away, lines=None):
             implied = min(MAX_PROB, p * OU_OVERROUND)
             num, den = _nearest_fraction(1.0 / implied)
             leg[sel] = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
-        out[_line_key(L)] = leg
+        # Only offer a line if the OFFERED book still overrounds. On lines far from the game's expected total one
+        # side is near-certain and its price hits the MAX_PROB cap, which would leave the book < 100% (a bettor
+        # edge). Skipping those keeps every offered goals market house-positive. The central lines always survive.
+        if (1.0 / leg["OVER"]["decimal"]) + (1.0 / leg["UNDER"]["decimal"]) > 1.0 + 1e-9:
+            out[_line_key(L)] = leg
     return out
 
 
@@ -655,9 +659,11 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
         return place(wagers, player, s["match"], s["selection"], stake, settled_points,
                      s["comp_home"], s["comp_away"], now, group_mid_ts,
                      market=s.get("market", "result"), line=s.get("line"))
-    keys = [(match_id(s["match"]), s.get("market", "result")) for s in selections]
+    keys = [match_id(s["match"]) for s in selections]
     if len(set(keys)) != len(keys):
-        return False, "Only one result bet and one goals (over/under) bet per game in an accumulator."
+        return False, ("Each game can only go in an accumulator once. A result and a goals bet on the same "
+                       "match are correlated — e.g. Under 0.5 is always a draw, and Under 0.5 with a team to "
+                       "win can never happen — so combining them would be mispriced. Back those as separate singles.")
     try:
         stake = round(float(stake), 2)
     except (TypeError, ValueError):

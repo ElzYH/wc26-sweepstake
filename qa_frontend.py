@@ -73,6 +73,10 @@ ck("O/U buttons carry market + line data attributes", 'data-market="ou"' in HTML
 ck("the line dropdown defaults to 2.5", "OULINE[mid] || '2.5'" in HTML, None)
 ck("picks compare on matchId+market+sel+line (samePick)", "function samePick(p, mid, sel, market, line)" in HTML, None)
 ck("placeBet sends market + line", "market:BETPICK.market||'result',line:BETPICK.line" in HTML, None)
+# one leg per game: a result + a goals bet on the SAME match are correlated, so the builder must never combine them
+ck("acca builder keys legs by matchId only (one leg per game)", "ACCA.findIndex(l=>l.matchId===mid)" in HTML and "ACCA.findIndex(l=>l.matchId===mid && (l.market" not in HTML, None)
+ck("tapping another market on the same game switches the single (no same-game combo)", "BETPICK && BETPICK.matchId===mid)" in HTML or "BETPICK.matchId===mid){" in HTML, None)
+ck("the old 'other market on this game -> auto-accumulator' path is gone", "the other market on this game -> auto-accumulator" not in HTML, None)
 ck("placeAcca sends per-leg market + line", "market:l.market||'result',line:l.line" in HTML, None)
 # overflow fix: the O/U row must be allowed to wrap, and the two buttons must sit in ONE min-width group
 # so on a narrow (multi-column desktop) card the button group drops to a second line instead of spilling out.

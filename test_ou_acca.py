@@ -59,14 +59,16 @@ badsel = [{"match": fx("A", "B"), "selection": "HOME", "market": "ou", "line": 2
 oks, msg = W.place_acca([], "Erol", badsel, 3, 100, now=NOW)
 ck("a 1X2 selection on an O/U-market leg rejects", not oks, msg if oks else None)
 
-print("\n== same game: ONE result + ONE goals bet is allowed; a second same-market leg is blocked ==")
-same_ok = [{"match": mA, "selection": "OVER", "market": "ou", "line": 2.5, "comp_home": CH, "comp_away": CA},
-           {"match": mA, "selection": "HOME", "comp_home": CH, "comp_away": CA}]
-ok_same, w_same = W.place_acca([], "Erol", same_ok, 3, 100, now=NOW)
-ck("O/U + match-winner on the SAME game is allowed", ok_same and isinstance(w_same, dict) and len(w_same.get("legs", [])) == 2, w_same)
-if ok_same:
-    ids = {(l.get("matchId"), l.get("market", "result")) for l in w_same["legs"]}
-    ck("the two same-game legs carry different markets", len(ids) == 2 and (w_same["legs"][0]["matchId"] == w_same["legs"][1]["matchId"]), w_same["legs"])
+print("\n== same game: a result + goals combo is correlated, so it's blocked (back them as singles) ==")
+same_corr = [{"match": mA, "selection": "OVER", "market": "ou", "line": 2.5, "comp_home": CH, "comp_away": CA},
+             {"match": mA, "selection": "HOME", "comp_home": CH, "comp_away": CA}]
+ok_same, w_same = W.place_acca([], "Erol", same_corr, 3, 100, now=NOW)
+ck("O/U + match-winner on the SAME game is REJECTED (correlated — was mispriced)", not ok_same, w_same)
+# the egregious case: Under 0.5 IS a draw -> combining them paid ~3x too much
+u05_draw = [{"match": mA, "selection": "UNDER", "market": "ou", "line": 0.5, "comp_home": CH, "comp_away": CA},
+            {"match": mA, "selection": "DRAW", "comp_home": CH, "comp_away": CA}]
+ok_ud, w_ud = W.place_acca([], "Erol", u05_draw, 3, 100, now=NOW)
+ck("Under 0.5 + Draw on the same game is REJECTED", not ok_ud, w_ud)
 dup_result = [{"match": mA, "selection": "HOME", "comp_home": CH, "comp_away": CA},
               {"match": mA, "selection": "AWAY", "comp_home": CH, "comp_away": CA}]
 ok_dup, msg_dup = W.place_acca([], "Erol", dup_result, 3, 100, now=NOW)
@@ -75,15 +77,6 @@ dup_ou = [{"match": mA, "selection": "OVER", "market": "ou", "line": 2.5, "comp_
           {"match": mA, "selection": "UNDER", "market": "ou", "line": 3.5, "comp_home": CH, "comp_away": CA}]
 ok_dou, msg_dou = W.place_acca([], "Erol", dup_ou, 3, 100, now=NOW)
 ck("two O/U legs on the same game are blocked", not ok_dou, msg_dou if ok_dou else None)
-# and a same-game O/U + 1X2 acca settles each leg on its own market from one final score
-wsg = []
-W.place_acca(wsg, "Erol", same_ok, 4, 100, now=NOW)
-W.settle(wsg, fin("Brazil", "Serbia", 2, 1), now=NOW + 10)   # total 3 > 2.5 (OVER wins) AND home win (HOME wins)
-ck("same-game acca: both legs settle from one score -> won", wsg[0]["status"] == "won", wsg[0])
-wsg2 = []
-W.place_acca(wsg2, "Erol", same_ok, 4, 100, now=NOW)
-W.settle(wsg2, fin("Brazil", "Serbia", 0, 0), now=NOW + 10)   # total 0 (OVER loses) -> acca lost
-ck("same-game acca: a losing leg sinks it", wsg2[0]["status"] == "lost", wsg2[0])
 
 print("\n== settlement: partial, then a losing O/U leg sinks the acca ==")
 # acca: OVER 2.5 on Brazil-Serbia, HOME on Spain-Japan

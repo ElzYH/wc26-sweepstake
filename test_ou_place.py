@@ -34,9 +34,16 @@ print("\n== line validation ==")
 for bad in (3.0, 9.5, 0, -1, "x", None, 2.0):
     ok_b, msg = W.place([], "Erol", FUTURE, "OVER", 5, 100, CH, CA, now=NOW, market="ou", line=bad)
     ck("line %r is rejected" % (bad,), not ok_b, msg if ok_b else None)
-for good in W.OU_LINES:
-    ok_g, _ = W.place([], "Erol", FUTURE, "OVER", 5, 100, CH, CA, now=NOW, market="ou", line=good)
+offered = sorted(W.goals_odds(CH, CA).keys(), key=float)
+for good in offered:
+    ok_g, _ = W.place([], "Erol", FUTURE, "OVER", 5, 100, CH, CA, now=NOW, market="ou", line=float(good))
     ck("offered line %s is accepted" % good, ok_g, None)
+# a line on the ladder but NOT offered for this game (one side near-certain -> would underround) is rejected, not mispriced
+not_offered = [L for L in W.OU_LINES if W._line_key(L) not in W.goals_odds(CH, CA)]
+ck("some outer lines are filtered out for a typical game", len(not_offered) > 0, not_offered)
+if not_offered:
+    ok_n, msg_n = W.place([], "Erol", FUTURE, "OVER", 5, 100, CH, CA, now=NOW, market="ou", line=not_offered[0])
+    ck("a ladder line not offered for this game is rejected (can't be mispriced)", not ok_n, msg_n if ok_n else None)
 
 print("\n== selection validation (O/U only takes OVER/UNDER) ==")
 for bad in ("HOME", "DRAW", "AWAY", "over ", "", "YES"):

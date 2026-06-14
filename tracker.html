@@ -800,10 +800,10 @@ function renderBets(){
     const market=b.dataset.market||'result', line=(b.dataset.line!=null && b.dataset.line!=='')?parseFloat(b.dataset.line):null;
     const pick=()=>({matchId:mid,sel:sel,frac:frac,market:market,line:line});
     if(ACCAMODE){
-      const ix=ACCA.findIndex(l=>l.matchId===mid && (l.market||'result')===(market||'result'));
+      const ix=ACCA.findIndex(l=>l.matchId===mid);                     // ONE leg per game (any market) — never two correlated picks on a match
       if(ix>=0){
         if(samePick(ACCA[ix],mid,sel,market,line)) ACCA.splice(ix,1);   // re-tap the exact leg -> remove it
-        else ACCA[ix]=pick();                                           // same game + same market, different pick -> switch that leg
+        else ACCA[ix]=pick();                                           // same game, different pick/market -> switch that game's leg
       } else {
         if(ACCA.length>=maxLegs){ BETMSG='An accumulator can have at most '+maxLegs+' legs.'; renderBets(); return; }
         ACCA.push(pick());                                              // a new game -> add a leg
@@ -814,10 +814,10 @@ function renderBets(){
     } else {
       if(samePick(BETPICK,mid,sel,market,line)){
         BETPICK=null;                                                   // re-tap the single -> remove it
-      } else if(BETPICK && BETPICK.matchId===mid && (BETPICK.market||'result')===(market||'result')){
-        BETPICK=pick();                                                 // same game + same market, other outcome/line -> switch
+      } else if(BETPICK && BETPICK.matchId===mid){
+        BETPICK=pick();                                                 // same game (any market/outcome) -> switch the single (no same-game combos)
       } else if(BETPICK && accasOn){
-        ACCA=[BETPICK,pick()];                                          // a second game OR the other market on this game -> auto-accumulator
+        ACCA=[BETPICK,pick()];                                          // a DIFFERENT game -> auto-accumulator
         ACCAMODE=true; BETPICK=null;
       } else {
         BETPICK=pick();                                                 // first pick (or accas off -> just switch)

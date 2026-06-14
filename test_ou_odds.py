@@ -28,9 +28,14 @@ ck("lambda is clamped to the band", W.GOALS_LAMBDA_MIN <= W.expected_goals(99, 1
 ck("hostile composites don't crash lambda", all(isinstance(W.expected_goals(a, b), float) for a, b in
    [(None, None), (float("nan"), 50), (float("inf"), 1), (-5, -9), ("x", "y"), (0, 0)]), None)
 
-print("\n== all 9 lines 0.5..8.5 are offered ==")
-o = W.goals_odds(80, 80)
-ck("nine lines present", sorted(o.keys(), key=float) == ["0.5", "1.5", "2.5", "3.5", "4.5", "5.5", "6.5", "7.5", "8.5"], list(o.keys()))
+print("\n== offered lines keep a house margin; central lines always present ==")
+o = W.goals_odds(80, 80)   # even game, lambda ~2.6
+ck("central lines 1.5/2.5/3.5 always offered", all(k in o for k in ["1.5", "2.5", "3.5"]), list(o.keys()))
+ck("even-game offered set is 0.5..5.5 (extreme lines dropped so the book never underrounds)",
+   sorted(o.keys(), key=float) == ["0.5", "1.5", "2.5", "3.5", "4.5", "5.5"], list(o.keys()))
+ck("every offered line keeps a house margin (book > 100%)",
+   all(1.0 / dec(o[k]["OVER"]) + 1.0 / dec(o[k]["UNDER"]) > 1.0 for k in o),
+   {k: round(1 / dec(o[k]["OVER"]) + 1 / dec(o[k]["UNDER"]), 3) for k in o})
 ck("each line has OVER + UNDER", all(set(o[k].keys()) == {"OVER", "UNDER"} for k in o), None)
 
 print("\n== realism vs real-life markets (even game) ==")
@@ -43,24 +48,16 @@ ck("O/U 0.5 OVER is short (<1.25)", dec(o["0.5"]["OVER"]) < 1.25, dec(o["0.5"]["
 ck("O/U 0.5 UNDER is long (>4.0)", dec(o["0.5"]["UNDER"]) > 4.0, dec(o["0.5"]["UNDER"]))
 # O/U 1.5 Over is the most common 'goals' bet — should sit roughly 1.25-1.6 for an even game.
 ck("O/U 1.5 OVER ~ 1.2-1.65", 1.20 <= dec(o["1.5"]["OVER"]) <= 1.65, dec(o["1.5"]["OVER"]))
-# High lines: Over 8.5 is a long shot, Under 8.5 a near-certainty (priced at the short cap).
-ck("O/U 8.5 OVER is a big price (>20)", dec(o["8.5"]["OVER"]) > 20, dec(o["8.5"]["OVER"]))
-ck("O/U 8.5 UNDER is heavily odds-on (<1.15)", dec(o["8.5"]["UNDER"]) < 1.15, dec(o["8.5"]["UNDER"]))
+# Highest line offered for an even game (5.5): Over is a long shot, Under heavily odds-on.
+ck("O/U 5.5 OVER is a big price (>8)", dec(o["5.5"]["OVER"]) > 8, dec(o["5.5"]["OVER"]))
+ck("O/U 5.5 UNDER is odds-on (<1.20)", dec(o["5.5"]["UNDER"]) < 1.20, dec(o["5.5"]["UNDER"]))
 
-print("\n== bookmaker margin: core lines carry the overround; extreme (capped) lines stay sane ==")
-# A line is "capped" once a side hits the price floor (1/20, dec 1.05) or the ladder ceiling (100/1, dec 101) —
-# at those extremes a real two-way book can't hold a full margin, and that's expected. Elsewhere it must.
-def capped(k):
-    return any(abs(dec(o[k][s]) - 1.05) < 1e-6 or dec(o[k][s]) >= 100 for s in ("OVER", "UNDER"))
+print("\n== bookmaker margin: EVERY offered line carries an overround (underround lines are filtered out) ==")
+# The goals book now only offers a line when its two-way book overrounds — so there is never a bettor edge,
+# even on the outer lines where one side is near-certain (those simply aren't offered for that game).
 for k in o:
     book = 1.0 / dec(o[k]["OVER"]) + 1.0 / dec(o[k]["UNDER"])
-    if capped(k):
-        # no full margin possible, but there must be no meaningful free money for a bettor either
-        ck("line %s (extreme) stays sane: short fav, long shot, no big arb" % k,
-           min(dec(o[k]["OVER"]), dec(o[k]["UNDER"])) <= 1.10 and max(dec(o[k]["OVER"]), dec(o[k]["UNDER"])) >= 7
-           and book >= 0.95, round(book, 4))
-    else:
-        ck("line %s book carries a real margin (1.04-1.30)" % k, 1.04 <= book <= 1.30, round(book, 4))
+    ck("line %s keeps a house margin (100%% < book <= 135%%)" % k, 1.0 < book <= 1.35, round(book, 4))
 
 print("\n== monotonicity: higher line -> Over less likely (longer), Under shorter ==")
 ks = sorted(o.keys(), key=float)
@@ -82,7 +79,9 @@ print("\n== hostile inputs never crash and stay sane ==")
 for a, b in [(None, None), (float("nan"), 50), (float("inf"), float("-inf")), (-9, -9), ("x", "y"), (0, 0), (1e9, 0)]:
     try:
         oo = W.goals_odds(a, b)
-        good = (len(oo) == 9 and all(dec(oo[k][s]) >= 1.0 for k in oo for s in oo[k]))
+        good = (all(k in oo for k in ["1.5", "2.5", "3.5"])                       # central lines always there
+                and all(dec(oo[k][s]) >= 1.0 for k in oo for s in oo[k])         # every price is a real (>=1.0) decimal
+                and all(1.0 / dec(oo[k]["OVER"]) + 1.0 / dec(oo[k]["UNDER"]) > 1.0 for k in oo))  # and overrounds
     except Exception as e:
         good = False
         print("    crash on (%r,%r): %r" % (a, b, e))

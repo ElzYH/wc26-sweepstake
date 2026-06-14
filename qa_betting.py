@@ -170,6 +170,16 @@ wl = fresh()
 ok, e = W.place_acca(wl, "Erol", [leg("A","B",1,"HOME"), leg("A","B",1,"AWAY")], 5, 1000, now=NOW)
 ck("acca rejects the same game twice", not ok, e)
 wl = fresh()
+# correlated same-game result + goals legs (e.g. Under 0.5 IS a draw; Under 0.5 + a win is impossible) -> blocked
+ou_leg = {"match": M("A","B",1), "selection": "UNDER", "market": "ou", "line": 0.5, "comp_home": 90, "comp_away": 50}
+ok, e = W.place_acca(wl, "Erol", [ou_leg, leg("A","B",1,"DRAW")], 5, 1000, now=NOW)
+ck("acca rejects a result+goals combo on the SAME game (correlated, was mispriced 3x)", not ok, e)
+wl = fresh()
+# the SAME two markets on DIFFERENT games is still fine
+ou_leg2 = {"match": M("A","B",1), "selection": "UNDER", "market": "ou", "line": 2.5, "comp_home": 90, "comp_away": 50}
+ok, _ = W.place_acca(wl, "Erol", [ou_leg2, leg("C","D",2,"HOME")], 5, 1000, now=NOW)
+ck("acca still accepts result + goals on DIFFERENT games", ok, None)
+wl = fresh()
 ok, e = W.place_acca(wl, "Erol", [leg("A","B",1,"HOME",stage="FINAL")], 5, 1000, now=NOW)  # 1-leg -> single path; DRAW only blocked
 ck("1-leg acca routes to single (placed ok as HOME on final)", ok, e)
 wl = fresh()
