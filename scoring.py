@@ -596,7 +596,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                                     # so allow the real-time clock to run a few minutes ahead of it rather than clamping it
                                     # down (that made the clock fall behind). A generous +8 only guards a genuine overrun
                                     # (e.g. a half-time the feed never flagged); the upstream re-lock fixes bigger gaps.
-                                    ceil = min(int((float(mn) + 8) * 60), 125 * 60)
+                                    ceil = min(int((float(mn) + 5) * 60), 125 * 60)
                                 elif banked_ht:
                                     ceil = 92 * 60           # 2nd-half estimate: never past 90'(+stoppage) without a minute
                                 else:

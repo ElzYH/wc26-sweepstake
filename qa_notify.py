@@ -24,15 +24,15 @@ json.dump({"configured": True, "discord_webhook": "https://example/webhook", "si
           open(os.environ["WC26_CONFIG"], "w"))
 import server as S
 
-DISC, PUSH, MENT, DM, DMALL = [], [], [], [], []
+DISC, PUSH, MENT, DM, DMALL, DMALL_EXCL = [], [], [], [], [], []
 S.discord_send = lambda text: DISC.append(text)
 S.push_player = lambda player, etype, title, body: PUSH.append((player, etype, title))
 S.discord_mention = lambda who, msg: MENT.append((who, msg))
 S._bot_dm_player = lambda player, text, match_id=None: (DM.append((player, text)) or 1)   # personal DM path
-S._dm_all_games = lambda text: DMALL.append(text)                          # all-games opt-in feed
+S._dm_all_games = lambda text, exclude_players=None: (DMALL.append(text), DMALL_EXCL.append(list(exclude_players or [])))   # all-games feed (also records who was excluded)
 
 def reset():
-    DISC.clear(); PUSH.clear(); MENT.clear(); DM.clear(); DMALL.clear()
+    DISC.clear(); PUSH.clear(); MENT.clear(); DM.clear(); DMALL.clear(); DMALL_EXCL.clear()
 
 def tracker(matches_played, status, hs, as_, leader="Erol", hybrid=None):
     return {"stats": {"matches_played": matches_played},
@@ -62,6 +62,8 @@ ck("a goal DMs the scoring team's owner (not an @mention)", any("scored" in m[1]
 ck("a goal no longer @mentions in the channel", not any("scored" in m[1] for m in MENT), MENT)
 ck("a goal feeds the all-games subscribers", any("scored" in x for x in DMALL), DMALL)
 ck("a goal pushes the owner", any(p[1] == "goal" for p in PUSH), PUSH)
+ck("a goal excludes the scoring owner from the all-games DM (no '(Erol) scored' + 'scored' double-notify)",
+   any("Erol" in (ex or []) for ex in DMALL_EXCL), DMALL_EXCL)
 
 transition(tracker(0, "IN_PLAY", 1, 0), tracker(1, "FINISHED", 1, 0))
 ck("full-time posts to the webhook", any("Full-time" in x for x in DISC), DISC)
@@ -108,6 +110,13 @@ old = tracker(1, "FINISHED", 1, 0, hybrid=[{"name": "Erol"}, {"name": "James"}])
 new = tracker(2, "FINISHED", 1, 0, hybrid=[{"name": "James"}, {"name": "Erol"}])
 transition(old, new)
 ck("a settled leader change DOES post 'New leader'", any("New leader" in x for x in DISC), DISC)
+# the clutter case: a LIVE goal while earlier games are already finished (matches_played stays put) churns the
+# provisional board but NOTHING new settled -> must stay quiet (this is the per-goal spam the user hit)
+old = tracker(2, "IN_PLAY", 0, 0, hybrid=[{"name": "Erol"}, {"name": "James"}])
+new = tracker(2, "IN_PLAY", 1, 0, hybrid=[{"name": "James"}, {"name": "Erol"}])   # live goal flips the provisional order
+transition(old, new)
+ck("no 'New leader' ping when a live goal shuffles the board but no NEW result settled",
+   not any("New leader" in x for x in DISC), DISC)
 
 print("\n== daily digest: live standings instead of 'hasn't kicked off', and no mirrored/duplicate fixtures ==")
 import time as _t

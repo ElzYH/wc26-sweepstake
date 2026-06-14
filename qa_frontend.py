@@ -398,7 +398,7 @@ ck("clock falls back to the feed minute", liveClockText("IN_PLAY", 52, null) ===
 ck("clock falls back to LIVE with nothing", liveClockText("IN_PLAY", null, null) === "LIVE");
 ck("clock is blank when not live", liveClockText("FINISHED", 90, 5400) === "");
 ck("clock caps a runaway value at the end-of-ET ceiling (125:00)", liveClockText("IN_PLAY", null, 200*60) === "125:00")
-ck("clock isn't clamped down to a lagging feed minute, but a big drift is capped at feed+8 (72:00 drift, feed 50' -> 58:00, never 72:00)", liveClockText("IN_PLAY", 50, 72*60) === "58:00");
+ck("clock isn't clamped down to a lagging feed minute, but a big drift is capped at feed+5 (72:00 drift, feed 50' -> 55:00, never 72:00)", liveClockText("IN_PLAY", 50, 72*60) === "55:00");
 ck("clock reads the feed minute when on time (feed 50', liveSec 50:00)", liveClockText("IN_PLAY", 50, 50*60) === "50:00");
 ck("clock counts into extra time (e.g. 105:00)", liveClockText("IN_PLAY", null, 105*60) === "105:00");
 ck("clock pads single-digit seconds", liveClockText("IN_PLAY", null, 61) === "1:01");

@@ -250,8 +250,8 @@ _lo = {"hybrid": [{"name": "A", "score": 50, "alive_teams": 3, "total_teams": 9}
 _ln = {"hybrid": [{"name": "A", "score": 50, "alive_teams": 3, "total_teams": 9},
                   {"name": "C", "score": 45, "alive_teams": 3, "total_teams": 9},
                   {"name": "B", "score": 42, "alive_teams": 3, "total_teams": 9}], "points": [], "survival": []}
-_oldr = {"stats": {"matches_played": 10}, "fixtures": [], "leaderboards": _lo, "players": []}
-_newr = {"stats": {"matches_played": 10}, "fixtures": [], "leaderboards": _ln, "players": []}
+_oldr = {"stats": {"matches_played": 9}, "fixtures": [], "leaderboards": _lo, "players": []}
+_newr = {"stats": {"matches_played": 10}, "fixtures": [], "leaderboards": _ln, "players": []}   # a result just settled (9->10) and reordered the board -> overtake fires (live churn alone would NOT)
 json.dump(_newr, open(os.path.join(D, "tracker_data.json"), "w"))
 server.notify_changes(_oldr)
 server._bot_dm_player = _orig_dm

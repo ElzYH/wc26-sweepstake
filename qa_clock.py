@@ -84,7 +84,7 @@ S._update_match_clocks(match("IN_PLAY", None, mid="m3"), now=6000)
 ck("match with no feed minute IS anchored at kickoff (ko=now)", S._load_match_clocks().get("m3") is not None)
 ck("no-minute clock reads ~0:00 at kickoff", abs((elapsed("m3", 6000) or 0) - 0) < 1, elapsed("m3", 6000))
 ck("no-minute clock ticks on from kickoff", abs((elapsed("m3", 6063) or 0) - 63) < 1, elapsed("m3", 6063))
-# ...and if a real broadcast minute later disagrees by >2 min, it re-locks to the feed minute
+# ...and if a real broadcast minute later disagrees by >3 min, it re-locks to the feed minute
 S._update_match_clocks(match("IN_PLAY", 10, mid="m3"), now=6063)
 ck("re-locks to the feed minute when one arrives (10' -> ~600s)", abs((elapsed("m3", 6063) or 0) - 600) < 5, elapsed("m3", 6063))
 
@@ -148,7 +148,7 @@ ls = live_sec_via_scoring({"ko": now2 - 105 * 60, "htp": 0, "ps": None}, {"minut
 ck("a real feed minute is trusted into extra time (~105:00)", ls is not None and abs(ls - 105 * 60) <= 60, ls)
 # LIVESCORES backstop: even if the underlying clock drifted to 72', a feed minute of 50' caps the DISPLAY near 52:00
 ls = live_sec_via_scoring({"ko": now2 - 72 * 60, "htp": 0, "ps": None}, {"minute": 50})
-ck("livescores: raw clock drifted to 72' but feed says 50' -> display capped near 58:00 (feed+8), NEVER 72:00", ls is not None and 50 * 60 <= ls <= 58 * 60 + 1, ls)
+ck("livescores: raw clock drifted to 72' but feed says 50' -> display capped at feed+5 (~55:00), NEVER 72:00", ls is not None and 50 * 60 <= ls <= 55 * 60 + 1, ls)
 ls = live_sec_via_scoring({"ko": now2 - 50 * 60, "htp": 0, "ps": None}, {"minute": 50})
 ck("livescores: an on-time clock reads the feed minute (~50:00)", ls is not None and abs(ls - 50 * 60) <= 2, ls)
 

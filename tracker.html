@@ -1330,7 +1330,7 @@ function liveClockText(status, minute, liveSec, pens, clockAt){
     elapsed=Math.min(elapsed,15*60);                                  // backgrounded-tab safety; re-synced on focus
     let sec=ls+elapsed;
     const mnNum=(minute===''||minute==null)?null:Number(minute);
-    if(mnNum!=null&&!isNaN(mnNum)&&mnNum>=0) sec=Math.min(sec,(mnNum+8)*60);   // loose ceiling only — the feed minute lags/freezes on the free plan, so don't clamp the accurate clock down to it
+    if(mnNum!=null&&!isNaN(mnNum)&&mnNum>=0) sec=Math.min(sec,(mnNum+5)*60);   // safety ceiling: the clock may run a little ahead of a lagging feed minute, but not run away
     if(sec>125*60) sec=125*60;                                        // never beyond end of extra time — a shootout shows 'PENS', not a clock
     const mm=Math.floor(sec/60), ss=Math.floor(sec%60);
     return mm+':'+(ss<10?'0':'')+ss;

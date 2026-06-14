@@ -662,10 +662,21 @@ def _dm_all_games_uids():
     return [str(u) for u in s] if isinstance(s, list) else []
 
 
-def _dm_all_games(text):
-    """DM the all-games match feed to everyone who opted in with `/notifyme all`. Best-effort; never raises."""
+def _dm_all_games(text, exclude_players=None):
+    """DM the all-games match feed to everyone who opted in with `/notifyme all`. Anyone in `exclude_players`
+    (the owner[s] who ALREADY got a personal DM for this exact event) is skipped, so an owner who also opted
+    into the all-games feed doesn't receive the same goal/event twice. Best-effort; never raises."""
     try:
+        skip = set()
+        for pl in (exclude_players or []):
+            if pl and pl not in ("—", "-"):
+                try:
+                    skip.update(str(u) for u in _uids_for_player(pl))
+                except Exception:
+                    pass
         for u in _dm_all_games_uids()[:50]:
+            if u in skip:
+                continue
             _bot_dm(u, text)
     except Exception as e:
         log("dm all-games failed:", e)
@@ -1391,12 +1402,13 @@ def _update_match_clocks(matches, now=None):
                             if isinstance(mn, (int, float)) and mn is not None and mn >= 0:
                                 target = float(mn) * 60.0
                                 computed = now - rec["ko"] - (rec.get("htp") or 0.0)
-                                # The feed minute is AHEAD of our clock (we missed time, or the feed jumped) -> catch up forward fast.
+                                # The feed minute is AHEAD of our clock (we missed time, or the feed jumped) -> catch up forward.
                                 # Our clock running AHEAD of the feed minute is EXPECTED on a delayed / "sticky" feed (the free plan
                                 # lags the real minute and sometimes freezes it), and must NOT pull the clock back — doing so made the
                                 # clock keep restarting to a stale minute and fall ~minutes behind. Only snap back on a BIG lead
-                                # (~a missed half-time), never for ordinary feed lag.
-                                if computed < target - 75:
+                                # (~a missed half-time), never for ordinary feed lag. Use a wide forward threshold too, so the feed
+                                # briefly OVER-reading the minute (stoppage time is sometimes folded in) can't yank the clock ahead.
+                                if computed < target - 180:      # >3 min BEHIND the feed => we genuinely missed time, catch up
                                     rec["ko"] = now - (rec.get("htp") or 0.0) - target
                                     changed = True
                                 elif computed > target + 480:    # >8 min ahead => a real gap (e.g. a half-time we never saw), not feed lag
@@ -1464,6 +1476,7 @@ def notify_changes(old):
     if not new or old is None:
         return                              # first compute / no data: nothing to compare
     _mp = (new.get("stats") or {}).get("matches_played", 0)
+    _old_mp = (old.get("stats") or {}).get("matches_played", 0) or 0   # so we can tell a SETTLED change from live provisional churn
     _any_live = any((m.get("status") in LIVE_STATUSES) for m in (new.get("fixtures") or []))
     if _mp == 0 and not _any_live:
         return                              # truly nothing happening yet (pre-tournament): stay quiet
@@ -1480,7 +1493,7 @@ def notify_changes(old):
                 _bot_dm_player(ow, "%s — %s" % (ti, bo), match_id=match_id)   # personal -> always DM (falls back to @mention for opt-ins)
         if _game_channel_on():
             discord_send(group_line)        # communal feed: every game event while the channel is on
-        _dm_all_games(group_line)           # ...and DMs anyone who opted into the all-games feed
+        _dm_all_games(group_line, exclude_players=[r[0] for r in recipients])   # ...and DMs all-games opt-ins, minus owners who already got the personal DM
 
     def own(o):
         return o if (o and o not in ("—", "-")) else "—"
@@ -1489,7 +1502,7 @@ def notify_changes(old):
     try:
         ol = (old["leaderboards"]["hybrid"][0] or {}).get("name")
         nl = (new["leaderboards"]["hybrid"][0] or {}).get("name")
-        if _mp > 0 and nl and ol and nl != ol:
+        if _mp > _old_mp and nl and ol and nl != ol:   # only when a match SETTLES — points accrue live, so a single goal must not ping "new leader"
             alert_all("leader", "New leader 📈", "%s now tops the table." % nl,
                       "📈 New leader: **%s** now tops the table." % nl)
     except Exception:
@@ -1497,7 +1510,7 @@ def notify_changes(old):
     # head-to-head overtakes (positions below 1st), in the active scoring mode. An overtake involves two
     # players, so it's a genuine head-to-head moment -> it posts to the channel AND DMs both players.
     try:
-        for x, y, pos in (rivalry_alerts(old, new, _active_mode()) if _mp > 0 else []):
+        for x, y, pos in (rivalry_alerts(old, new, _active_mode()) if _mp > _old_mp else []):   # overtakes only when a result settles — live points churn the board on every goal
             push_player(x, "rivalry", "Moved up 📊", "You overtook %s for %s." % (y, _ord(pos)))
             push_player(y, "rivalry", "Overtaken 📉", "%s just passed you for %s." % (x, _ord(pos)))
             _bot_dm_player(x, "📊 You overtook **%s** for %s." % (y, _ord(pos)))
@@ -1557,13 +1570,13 @@ def notify_changes(old):
                         _bot_dm_player(ho, "⚽ **%s** scored — %s" % (h, score), match_id=mid)     # personal -> DM
                         if _game_channel_on():
                             discord_send("⚽ **%s** (%s) scored — %s" % (h, ho, score))
-                        _dm_all_games("⚽ **%s** (%s) scored — %s" % (h, ho, score))
+                        _dm_all_games("⚽ **%s** (%s) scored — %s" % (h, ho, score), exclude_players=[ho])   # owner already got the personal DM above
                     if nas > oas and ao_ok:
                         push_player(ao, "goal", "%s scored! ⚽" % a, score)
                         _bot_dm_player(ao, "⚽ **%s** scored — %s" % (a, score), match_id=mid)     # personal -> DM
                         if _game_channel_on():
                             discord_send("⚽ **%s** (%s) scored — %s" % (a, ao, score))
-                        _dm_all_games("⚽ **%s** (%s) scored — %s" % (a, ao, score))
+                        _dm_all_games("⚽ **%s** (%s) scored — %s" % (a, ao, score), exclude_players=[ao])   # owner already got the personal DM above
     except Exception:
         pass
     # a player's team is knocked out
