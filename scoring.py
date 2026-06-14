@@ -104,10 +104,32 @@ def _mid(m):
     return "%s|%s|%s" % (m.get("home"), m.get("away"), (m.get("utcDate") or "")[:16])
 
 
+def _numf(v, default=0.0):
+    """Coerce to a finite float for sort keys; junk/NaN/inf -> default. Never raises."""
+    try:
+        f = float(v)
+        return f if f == f and f not in (float('inf'), float('-inf')) else default
+    except (TypeError, ValueError):
+        return default
+
+
 def compute(teams_path="teams.json", draw_path="draw_result.json",
             results_path="results.json", out="tracker_data.json", default_mode="hybrid", wagers=None,
-            clocks_path="match_clocks.json", group_mid_ts=None):
+            clocks_path="match_clocks.json", group_mid_ts=None, composite_overrides=None):
     teams = {t["name"]: t for t in _load(teams_path)["teams"]}
+    # Overlay calibrated composites (from the server's calibration.json) so the DISPLAYED odds are priced
+    # from the SAME strengths that bet PLACEMENT uses. Without this, auto-calibration moves placement odds
+    # but the fixture list keeps showing the raw teams.json prices — i.e. display != placement. Same junk
+    # guard as the server's load_teams(): a bad override is ignored, never poisons the board.
+    if isinstance(composite_overrides, dict) and composite_overrides:
+        for _name, _t in teams.items():
+            _v = composite_overrides.get(_name)
+            try:
+                _v = float(_v)
+            except (TypeError, ValueError):
+                continue
+            if _v == _v and 0 < _v <= 105:
+                _t["composite"] = _v
     draw = _load(draw_path)
     results = _load(results_path)
     matches = results.get("matches", [])
@@ -299,14 +321,26 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
         except Exception:
             pass
 
+    def _tiebreak(p, primary):
+        # Deep, fully deterministic ordering. Primary key first, then a cascade that rewards the better-placed
+        # squad when the headline number ties: more teams still alive -> higher forecast finish -> stronger
+        # remaining squad -> better title shot -> realised betting profit -> name (so the order never flickers).
+        return (-_numf(p.get(primary, 0)),
+                -_numf(p.get("alive_teams", 0)),
+                -_numf(p.get("projected_points", 0)),
+                -_numf(p.get("squad_strength", 0)),
+                -_numf(p.get("champion_odds", 0)),
+                -_numf(p.get("wager_net", 0)),
+                str(p.get("name", "")).lower())
+
     def board(key):
         if key == "survival":
-            rows = sorted(players_out, key=lambda p: (-p["alive_teams"], -p["survival"]))
+            rows = sorted(players_out, key=lambda p: _tiebreak(p, "alive_teams"))
             return [{"name": p["name"], "score": p["alive_teams"], "alive_teams": p["alive_teams"],
                      "live": p["live"], "total_teams": p["total_teams"],
                      "wager_held": p.get("wager_held", 0), "wager_net": p.get("wager_net", 0),
                      "bets_open": p.get("bets_open", 0), "points_settled": p.get("points_settled"), "bet_potential": p.get("bet_potential", 0)} for p in rows]
-        rows = sorted(players_out, key=lambda p: (-p[key], -p["alive_teams"]))
+        rows = sorted(players_out, key=lambda p: _tiebreak(p, key))
         return [{"name": p["name"], "score": p[key], "alive_teams": p["alive_teams"],
                  "live": p["live"], "total_teams": p["total_teams"],
                  "wager_held": p.get("wager_held", 0), "wager_net": p.get("wager_net", 0),

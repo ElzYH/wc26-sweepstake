@@ -951,7 +951,7 @@ def _current_round_max_stake():
 # Round order + friendly labels for the betting explainer. WC2026 schedule for reference (UTC, subject to FIFA):
 #   Group stage 11–27 Jun · Round of 32 28 Jun–3 Jul · Round of 16 4–7 Jul · Quarter-finals 9–11 Jul
 #   Semi-finals 14–15 Jul · Third place 18 Jul · Final 19 Jul. The per-game cap rises each round (30→35→40→45→50→65),
-#   and the 100-pt staking budget resets at the group midpoint and again at the start of each of these rounds.
+#   and the 50-pt staking budget resets at the group midpoint and again at the start of each of these rounds.
 _STAGE_LABELS = [("GROUP_STAGE", "Group stage"), ("LAST_32", "Round of 32"), ("LAST_16", "Round of 16"),
                  ("QUARTER_FINALS", "Quarter-finals"), ("SEMI_FINALS", "Semi-finals"),
                  ("THIRD_PLACE", "Third place"), ("FINAL", "Final")]
@@ -2566,7 +2566,7 @@ def update_now(cfg):
             _update_match_clocks(json.load(open("results.json")).get("matches", []))
         except Exception:
             pass
-        scoring_mod.compute(out="tracker_data.json", default_mode=cfg.get("scoring_mode", "hybrid"), wagers=wlist, group_mid_ts=_group_mid_ts())
+        scoring_mod.compute(out="tracker_data.json", default_mode=cfg.get("scoring_mode", "hybrid"), wagers=wlist, group_mid_ts=_group_mid_ts(), composite_overrides=(_load_calibration().get("composites") or None))
         cfg["last_update"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         save_config(cfg)
         notify_changes(old_snapshot)        # personalised alerts (if any subscribers)
@@ -3676,7 +3676,7 @@ class Handler(BaseHTTPRequestHandler):
                 wl = load_wagers() or None             # standing bets always count, even if NEW betting is switched off
                 try:                                 # rebuild the tracker from the restored data (no network needed)
                     scoring_mod.compute(out="tracker_data.json",
-                                        default_mode=cfg.get("scoring_mode", "hybrid"), wagers=wl, group_mid_ts=_group_mid_ts())
+                                        default_mode=cfg.get("scoring_mode", "hybrid"), wagers=wl, group_mid_ts=_group_mid_ts(), composite_overrides=(_load_calibration().get("composites") or None))
                     ok, err = True, None
                 except Exception as e:
                     ok, err = False, str(e)
