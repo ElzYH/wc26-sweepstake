@@ -620,6 +620,10 @@ function renderBets(){
   const avail=(me.bettable!=null)?Math.max(0,Math.round(me.bettable*100)/100):Math.max(0,Math.round((((me.points_settled||0)+(me.wager_net||0)-(me.wager_held||0)))*100)/100);
   const held=Math.max(0,Math.round((me.wager_held||0)*100)/100);
   const headroom=Math.max(0,Math.round((caps.max_stake-held)*100)/100);
+  // LIVE round staking budget (the drawdown ceiling): drops when bets lose, climbs back when they win, capped, resets each round
+  const budgetMax=Math.max(0,Math.round(((me.wager_budget_max!=null)?me.wager_budget_max:(caps.wager_budget!=null?caps.wager_budget:100))*100)/100);
+  const budgetLeft=Math.max(0,Math.round(((me.wager_budget_left!=null)?me.wager_budget_left:budgetMax)*100)/100);
+  const canStake=Math.max(0,Math.round(Math.min(avail,headroom,budgetLeft)*100)/100);
   const fx=(DATA.fixtures||[]).filter(m=>m.odds&&m.matchId&&(!m.utcDate||new Date(m.utcDate).getTime()>Date.now())).sort((a,b)=>(a.utcDate||'').localeCompare(b.utcDate||'')).slice(0,40);
   const SEL={HOME:'home',DRAW:'draw',AWAY:'away'};
   let h='';
@@ -628,7 +632,8 @@ function renderBets(){
   // prominent: the per-bet ceiling + the LIVE amount this player can stake right now (drops as bets open, recovers as they settle)
   h+='<div style="margin:12px 0;display:flex;gap:10px;flex-wrap:wrap">'
     +'<div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px"><div style="color:var(--muted);font-size:11.5px;letter-spacing:.04em">MAX PER BET</div><div style="font-family:\'Anton\';font-size:26px;line-height:1.1">'+caps.max_stake+'</div><div style="color:var(--muted);font-size:11px">ceiling for one bet · rises each round (65 in the final)</div></div>'
-    +'<div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--gold);border-radius:12px;padding:10px 14px"><div style="color:var(--muted);font-size:11.5px;letter-spacing:.04em">'+esc(BETPLAYER.toUpperCase())+' CAN STAKE NOW</div><div style="font-family:\'Anton\';font-size:26px;line-height:1.1;color:'+(headroom>0?'var(--gold)':'#ff9a9a')+'" id="betAvail">'+Math.min(avail,headroom)+'</div><div style="color:var(--muted);font-size:11px">'+(held>0?held+' of '+caps.max_stake+' riding on open bets · frees up as they settle':'up to the '+caps.max_stake+' cap · '+avail+' pts available')+'</div></div>'
+    +'<div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--gold);border-radius:12px;padding:10px 14px"><div style="color:var(--muted);font-size:11.5px;letter-spacing:.04em">'+esc(BETPLAYER.toUpperCase())+' CAN STAKE NOW</div><div style="font-family:\'Anton\';font-size:26px;line-height:1.1;color:'+(canStake>0?'var(--gold)':'#ff9a9a')+'" id="betAvail">'+canStake+'</div><div style="color:var(--muted);font-size:11px">'+(held>0?held+' of '+caps.max_stake+' riding on open bets · frees up as they settle':'up to the '+caps.max_stake+' cap · '+avail+' pts available')+'</div></div>'
+    +'<div style="flex:1;min-width:150px;background:var(--card);border:1px solid '+(budgetLeft<budgetMax?'#ffc83d':'var(--line)')+';border-radius:12px;padding:10px 14px"><div style="color:var(--muted);font-size:11.5px;letter-spacing:.04em">BUDGET THIS ROUND</div><div style="font-family:\'Anton\';font-size:26px;line-height:1.1;color:'+(budgetLeft>0?'var(--ink)':'#ff9a9a')+'" id="betBudget">'+budgetLeft+'<span style="font-size:14px;color:var(--muted)"> / '+budgetMax+'</span></div><div style="color:var(--muted);font-size:11px">'+(budgetLeft<budgetMax?('down '+Math.round((budgetMax-budgetLeft)*10)/10+' from losses · wins top it back up'):'full · drops if a bet loses, recovers when one wins')+'</div></div>'
     +'</div>';
   h+='<div style="margin:0 0 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px">Betting as <select id="betWho"'+((SESSION.logged_in&&SESSION.player)?' disabled':'')+' style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:14px">'+players.map(p=>`<option${p===BETPLAYER?' selected':''}>${esc(p)}</option>`).join('')+'</select></div>';
   if(SESSION.logged_in && SESSION.player===BETPLAYER){
@@ -660,7 +665,8 @@ function renderBets(){
     }
     h+='<div id="linkCodeBox" style="display:none;margin:0 0 12px;padding:8px 12px;border:1px solid var(--gold);border-radius:8px;font-size:13px"></div>';
   }
-  if(held>=caps.max_stake-1e-9){ h+='<div style="margin:0 0 12px;padding:9px 12px;border-radius:8px;background:#2a2210;border:1px solid #ffc83d;color:#ffd97a;font-size:13px">⚠ You\'re maxed out — '+held+' points riding on open bets (limit '+caps.max_stake+'). Wait for one to settle before betting again.</div>'; }
+  if(budgetLeft<=1e-9){ h+='<div style="margin:0 0 12px;padding:9px 12px;border-radius:8px;background:#2a2210;border:1px solid #ffc83d;color:#ffd97a;font-size:13px">⚠ You\'ve used up your '+budgetMax+'-point staking budget for this round — it tops back up when an open bet wins, and resets next round.</div>'; }
+  else if(held>=caps.max_stake-1e-9){ h+='<div style="margin:0 0 12px;padding:9px 12px;border-radius:8px;background:#2a2210;border:1px solid #ffc83d;color:#ffd97a;font-size:13px">⚠ You\'re maxed out — '+held+' points riding on open bets (limit '+caps.max_stake+'). Wait for one to settle before betting again.</div>'; }
   if(BETMSG){
     // success (✓ 🔒 🎁) = green, in-progress (…) = neutral, everything else = error red.
     // startsWith handles emoji correctly — BETMSG[0] only grabs half of a surrogate-pair emoji like 🔒.
@@ -695,7 +701,7 @@ function renderBets(){
   }).join('')+'</div>';
   if(ACCAMODE && ACCA.length){
     let dec=1; ACCA.forEach(l=>{const [n,d2]=l.frac.split('/').map(Number); dec*=(1+n/d2);});
-    const accaCap=Math.min(headroom, Math.min.apply(null,ACCA.map(l=>{const f=fx.find(m=>m.matchId===l.matchId); return f&&f.maxStake?f.maxStake:caps.max_stake;})));
+    const accaCap=Math.min(headroom, budgetLeft, Math.min.apply(null,ACCA.map(l=>{const f=fx.find(m=>m.matchId===l.matchId); return f&&f.maxStake?f.maxStake:caps.max_stake;})));
     h+='<div class="betcta" style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
       +'<div style="font-weight:600;margin-bottom:8px">🎰 '+ACCA.length+'-fold accumulator <span style="color:var(--muted);font-weight:400">· max stake '+accaCap+'</span></div>'
       +ACCA.map((l,i)=>{const fxp=fx.find(m=>m.matchId===l.matchId); const who=(l.market||'result')==='ou'?((l.sel==='OVER'?'Over':'Under')+' '+l.line+' '+(fxp?'('+esc(fxp.home)+' v '+esc(fxp.away)+')':'')):(l.sel==='HOME'?(fxp?fxp.home:'home'):(l.sel==='AWAY'?(fxp?fxp.away:'away'):'Draw'));
@@ -708,7 +714,7 @@ function renderBets(){
     const fxp=fx.find(m=>m.matchId===BETPICK.matchId);
     if(fxp){ const isOU=(BETPICK.market||'result')==='ou';
       const who=isOU?((BETPICK.sel==='OVER'?'Over':'Under')+' '+BETPICK.line+' goals ('+esc(fxp.home)+' v '+esc(fxp.away)+')'):(BETPICK.sel==='HOME'?fxp.home:(BETPICK.sel==='AWAY'?fxp.away:'Draw'));
-      const fracDisp=BETPICK.frac; const smax=Math.min(fxp.maxStake||caps.max_stake, headroom);
+      const fracDisp=BETPICK.frac; const smax=Math.min(fxp.maxStake||caps.max_stake, headroom, budgetLeft);
       h+='<div class="betcta" style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
         +'<div style="font-size:13.5px;margin-bottom:8px">Bet on <b>'+esc(who)+'</b> @ <b style="color:var(--gold)">'+fracDisp+'</b> <span style="color:var(--muted)">· max '+smax+'</span></div>'
         +(smax<=0?'<div style="color:#ffb86b;font-size:13px">You\'ve hit the open-bet limit — wait for a bet to settle.</div>':('<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="betStake" type="number" min="'+caps.min_stake+'" max="'+Math.min(smax,avail)+'" step="0.01" placeholder="stake (pts)" style="width:120px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:16px">'
@@ -882,7 +888,10 @@ function refreshBetsLive(){
   const caps=STATUS.wager_caps||{max_stake:30}; const me=(DATA.players||[]).find(p=>p.name===BETPLAYER); const av=document.getElementById('betAvail');
   if(me && av){ const avail=(me.bettable!=null)?Math.max(0,Math.round(me.bettable*100)/100):Math.max(0,Math.round((((me.points_settled||0)+(me.wager_net||0)-(me.wager_held||0)))*100)/100);
     const head=Math.max(0,Math.round((caps.max_stake-Math.max(0,me.wager_held||0))*100)/100);
-    av.textContent=Math.min(avail,head); }
+    const bMax=(me.wager_budget_max!=null)?me.wager_budget_max:(caps.wager_budget!=null?caps.wager_budget:100);
+    const bLeft=(me.wager_budget_left!=null)?Math.max(0,Math.round(me.wager_budget_left*100)/100):bMax;
+    av.textContent=Math.max(0,Math.round(Math.min(avail,head,bLeft)*100)/100);
+    const bv=document.getElementById('betBudget'); if(bv) bv.innerHTML=bLeft+'<span style="font-size:14px;color:var(--muted)"> / '+bMax+'</span>'; }
 }
 // ---- "is this bet currently winning?" — provisional result from the live score (display only; never settles anything) ----
 function pickName(o){   // human label for a bet or an acca leg, result OR over/under

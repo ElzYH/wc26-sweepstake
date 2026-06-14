@@ -2566,7 +2566,7 @@ def update_now(cfg):
             _update_match_clocks(json.load(open("results.json")).get("matches", []))
         except Exception:
             pass
-        scoring_mod.compute(out="tracker_data.json", default_mode=cfg.get("scoring_mode", "hybrid"), wagers=wlist)
+        scoring_mod.compute(out="tracker_data.json", default_mode=cfg.get("scoring_mode", "hybrid"), wagers=wlist, group_mid_ts=_group_mid_ts())
         cfg["last_update"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         save_config(cfg)
         notify_changes(old_snapshot)        # personalised alerts (if any subscribers)
@@ -3676,7 +3676,7 @@ class Handler(BaseHTTPRequestHandler):
                 wl = load_wagers() or None             # standing bets always count, even if NEW betting is switched off
                 try:                                 # rebuild the tracker from the restored data (no network needed)
                     scoring_mod.compute(out="tracker_data.json",
-                                        default_mode=cfg.get("scoring_mode", "hybrid"), wagers=wl)
+                                        default_mode=cfg.get("scoring_mode", "hybrid"), wagers=wl, group_mid_ts=_group_mid_ts())
                     ok, err = True, None
                 except Exception as e:
                     ok, err = False, str(e)

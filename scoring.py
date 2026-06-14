@@ -106,7 +106,7 @@ def _mid(m):
 
 def compute(teams_path="teams.json", draw_path="draw_result.json",
             results_path="results.json", out="tracker_data.json", default_mode="hybrid", wagers=None,
-            clocks_path="match_clocks.json"):
+            clocks_path="match_clocks.json", group_mid_ts=None):
     teams = {t["name"]: t for t in _load(teams_path)["teams"]}
     draw = _load(draw_path)
     results = _load(results_path)
@@ -264,6 +264,15 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
     if wagers is not None and wager is not None:
         try:
             pdel = wager.player_deltas(wagers)
+            # the round (epoch) being bet into now = epoch of the soonest still-to-play game; used to show each
+            # player their LIVE staking budget (drops on losses, climbs back on wins) on the bet form
+            cur_epoch = None
+            try:
+                _upc = [m for m in matches if m.get("status") in ("SCHEDULED", "TIMED")]
+                if _upc:
+                    cur_epoch = wager.epoch_of(min(_upc, key=lambda m: m.get("utcDate") or "zzzz"), group_mid_ts)
+            except Exception:
+                cur_epoch = None
             # what-if list: every open bet flipped to won (returns were locked at placement) — used to show
             # "+N if your bets land" on the leaderboard WITHOUT ever adding it to the real score
             hyp = [(dict(w, status="won") if (isinstance(w, dict) and w.get("status") == "pending" and not w.get("credit")) else w) for w in wagers]
@@ -277,6 +286,9 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                 p["wager_held"] = held_disp
                 p["bets_open"] = d.get("pending_count", 0)
                 p["bettable"] = wager.available_points(p["name"], p["points_settled"], wagers)  # earned + free bonus + winnings - held
+                p["wager_budget_left"] = (round(wager.budget_remaining(wagers, p["name"], cur_epoch), 1)
+                                          if cur_epoch else float(wager.STAGE_BUDGET))   # live round budget (drawdown ceiling)
+                p["wager_budget_max"] = float(wager.STAGE_BUDGET)
                 hnet = wager.leaderboard_net(p["name"], hyp)
                 hheld = wager.leaderboard_held(p["name"], hyp)
                 p["bet_potential"] = max(0.0, round((hnet - hheld) - (lnet - held_lb), 1))   # score-if-all-bets-win minus score-now
