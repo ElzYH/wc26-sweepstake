@@ -1314,7 +1314,7 @@ def _update_match_clocks(matches, now=None):
                             if isinstance(mn, (int, float)) and mn is not None and mn >= 0:
                                 target = float(mn) * 60.0
                                 computed = now - rec["ko"] - (rec.get("htp") or 0.0)
-                                if abs(computed - target) > 120:   # >2 min off the broadcast clock — correct it
+                                if abs(computed - target) > 75:   # >~1 min off the broadcast clock — snap back to it (catches small unbanked pauses fast)
                                     rec["ko"] = now - (rec.get("htp") or 0.0) - target
                                     changed = True
                 else:

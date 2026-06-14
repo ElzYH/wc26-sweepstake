@@ -1292,6 +1292,8 @@ function liveClockText(status, minute, liveSec, pens){
   const ls=(liveSec===''||liveSec==null)?null:Number(liveSec);
   if(ls!=null&&!isNaN(ls)&&ls>=0){
     let sec=ls+Math.min(75,Math.max(0,(Date.now()-FETCH_AT)/1000));   // tick on from the server value; catch-up capped just over one poll so a stale/backgrounded tab can't run ahead
+    const mnNum=(minute===''||minute==null)?null:Number(minute);
+    if(mnNum!=null&&!isNaN(mnNum)&&mnNum>=0) sec=Math.min(sec,(mnNum+2)*60);   // never tick past the broadcast minute +2 — the feed minute is ground truth (no 72:00 while it says 50')
     if(sec>125*60) sec=125*60;                                        // never beyond end of extra time — a shootout shows 'PENS', not a clock
     const mm=Math.floor(sec/60), ss=Math.floor(sec%60);
     return mm+':'+(ss<10?'0':'')+ss;

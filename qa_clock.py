@@ -88,6 +88,15 @@ ck("no-minute clock ticks on from kickoff", abs((elapsed("m3", 6063) or 0) - 63)
 S._update_match_clocks(match("IN_PLAY", 10, mid="m3"), now=6063)
 ck("re-locks to the feed minute when one arrives (10' -> ~600s)", abs((elapsed("m3", 6063) or 0) - 600) < 5, elapsed("m3", 6063))
 
+print("\n== LIVESCORES tier: a drifted clock snaps straight back to the broadcast minute (the primary 72-fix) ==")
+S._update_match_clocks(match("IN_PLAY", 10, mid="lc"), now=0)            # anchor at 10'
+# 72 wall-minutes pass with breaks/pauses we never saw; the feed now reports 50' -> the clock must SNAP to ~50:00, not show 72:00
+S._update_match_clocks(match("IN_PLAY", 50, mid="lc"), now=72 * 60)
+ck("72' of wall-clock but the feed says 50' -> clock snaps to ~50:00 (not 72:00)", abs((elapsed("lc", 72 * 60) or 0) - 50 * 60) < 5, elapsed("lc", 72 * 60))
+# and a larger unbanked pause (>~1 min of drift) re-locks to the feed minute (tighter 75s threshold)
+S._update_match_clocks(match("IN_PLAY", 51, mid="lc"), now=72 * 60 + 180)   # 3 min later the feed only advanced 1' -> a ~2 min unbanked pause
+ck("an unbanked pause past the threshold re-locks to the feed minute (~51:00)", abs((elapsed("lc", 72 * 60 + 180) or 0) - 51 * 60) < 5, elapsed("lc", 72 * 60 + 180))
+
 print("\n== scoring attaches liveSec/liveHT to fixtures from the clocks file ==")
 # write a clocks file and a tiny results.json, run scoring, read the fixture back
 shutil_dir = t
@@ -131,6 +140,11 @@ ck("2nd half with a banked HT reads ~50:00 (accurate)", ls is not None and abs(l
 # a real feed minute is trusted into extra time
 ls = live_sec_via_scoring({"ko": now2 - 105 * 60, "htp": 0, "ps": None}, {"minute": 105})
 ck("a real feed minute is trusted into extra time (~105:00)", ls is not None and abs(ls - 105 * 60) <= 60, ls)
+# LIVESCORES backstop: even if the underlying clock drifted to 72', a feed minute of 50' caps the DISPLAY near 52:00
+ls = live_sec_via_scoring({"ko": now2 - 72 * 60, "htp": 0, "ps": None}, {"minute": 50})
+ck("livescores: raw clock drifted to 72' but feed says 50' -> display capped near 52:00, NEVER 72:00", ls is not None and 50 * 60 <= ls <= 52 * 60 + 1, ls)
+ls = live_sec_via_scoring({"ko": now2 - 50 * 60, "htp": 0, "ps": None}, {"minute": 50})
+ck("livescores: an on-time clock reads the feed minute (~50:00)", ls is not None and abs(ls - 50 * 60) <= 2, ls)
 
 print("\n== clock hardening: stop at a penalty shootout (clock freezes, UI shows PENS) ==")
 ls = live_sec_via_scoring({"ko": now2 - 125 * 60, "htp": 0, "ps": None}, {"minute": None, "shootout": True})

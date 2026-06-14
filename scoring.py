@@ -540,7 +540,10 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                                 has_minute = isinstance(mn, (int, float)) and mn is not None and mn >= 0
                                 banked_ht = htp > 60.0
                                 if has_minute:
-                                    ceil = 125 * 60          # re-locked to the feed clock -> trust up to end of extra time
+                                    # On a livescores feed the broadcast minute is ground truth: never let the
+                                    # ticking clock run more than ~2 min past it (covers the smooth tick between
+                                    # polls), so it can't drift to 72:00 while the feed says 50'. Hard ET ceiling too.
+                                    ceil = min(int((float(mn) + 2) * 60), 125 * 60)
                                 elif banked_ht:
                                     ceil = 92 * 60           # 2nd-half estimate: never past 90'(+stoppage) without a minute
                                 else:
