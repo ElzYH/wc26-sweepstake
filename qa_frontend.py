@@ -211,6 +211,14 @@ ck("the rules panel explains the pool", "The pool (leftover teams):" in HTML and
 _setup = open(os.path.join(REPO, "setup.html")).read() if os.path.exists(os.path.join(REPO, "setup.html")) else ""
 ck("setup explains both leftover options plainly", "belong to no one and score points for no one" in _setup, None)
 
+# ---- the Alerts tab must not flicker: refreshStatus has to keep it in lockstep with STATUS (same as the Bets tab) ----
+print("\n== Alerts tab stays put on refresh/logout ==")
+_rs = HTML[HTML.index("async function refreshStatus()"):HTML.index("async function refreshStatus()") + 2600]
+ck("refreshStatus re-syncs the Bets tab from STATUS", "getElementById('betsTab')" in _rs and "style.display=STATUS.wagering_enabled" in _rs, None)
+ck("refreshStatus ALSO re-syncs the Alerts tab (else it vanishes until the next poll)",
+   "getElementById('notifyTab')" in _rs and "STATUS.wagering_enabled||STATUS.discord_oauth" in _rs, None)
+ck("the Alerts tab reveal in render() uses the same condition", "STATUS.wagering_enabled||STATUS.discord_oauth" in HTML, None)
+
 # ---- this round: betting revert, layout, stable join link, leaner copy ----
 print("\n== iOS betting fix + layout + join link ==")
 ck("the broken noFloat/scrollBy keyboard hack is gone", "noFloat" not in HTML and "scrollBy" not in HTML, None)

@@ -2109,6 +2109,7 @@ async function refreshStatus(){
   try{ window.__stageCaps = Array.isArray(STATUS.stage_caps)?STATUS.stage_caps:null;
        window.__stageCapStr = window.__stageCaps ? window.__stageCaps.map(function(s){ return s.label+' — max '+s.cap+(s.from?(' (from '+s.from+')'):''); }).join(' · ') : ''; }catch(e){ window.__stageCapStr=''; }
   const bt=document.getElementById('betsTab'); if(bt) bt.style.display=STATUS.wagering_enabled?'':'none';
+  const nt=document.getElementById('notifyTab'); if(nt) nt.style.display=(STATUS.wagering_enabled||STATUS.discord_oauth)?'':'none';   // keep the Alerts tab in lockstep with STATUS (same as bets) — otherwise it vanishes until the next 30s poll
   const m=STATUS.scoring_mode||DATA.default_mode||'hybrid';
   const ml={points:'Points',survival:'Survival',hybrid:'Points + survival'}[m]||m;
   const dm={fair:'Fair',weighted:'Weighted',random:'Random (even)'}[STATUS.draw_mode]||STATUS.draw_mode||'—';
