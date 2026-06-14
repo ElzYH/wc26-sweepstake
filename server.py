@@ -135,7 +135,18 @@ HOST = os.environ.get("HOST", "0.0.0.0")   # set HOST=127.0.0.1 when behind a re
 STATIC = {"tracker.html", "wheel.html", "setup.html", "me.html", "watch.html",
           "teams.json", "tracker_data.json", "draw_result.json", "sw.js",
           "manifest.webmanifest", "icon.svg"}
-_lock = threading.RLock()   # reentrant: callers may hold it while update_now re-acquires for the wager settle
+_lock = threading.RLock()
+NEUTRAL_COMPOSITE = 34.0   # an unknown / unmatched team is priced ~mid-table, never as exploitable free money
+def _comp(teams, name):
+    """A team's composite for pricing, with a safe fallback. A name that isn't in teams.json (e.g. a feed
+    spelling we haven't aliased yet) must NOT collapse to 0 — that would price its opponent at ~98%. Fall
+    back to a neutral mid-table strength so a stray name can never become a value bet against the house."""
+    t = teams.get(name)
+    if isinstance(t, dict):
+        c = t.get("composite", NEUTRAL_COMPOSITE)
+        if isinstance(c, (int, float)) and c > 0:
+            return c
+    return NEUTRAL_COMPOSITE   # reentrant: callers may hold it while update_now re-acquires for the wager settle
 _last_manual_poll = [0.0]
 MANUAL_POLL_MIN_INTERVAL = 25.0   # seconds; cap manual /api/poll upstream fetches so spamming can't burn the API quota
 
@@ -2097,8 +2108,8 @@ def discord_command(name, opts, uid=None, interaction_id=None):
                 return "Couldn't load the data to place that bet."
             raw = next((x for x in results.get("matches", []) if wager_mod.match_id(x) == m["matchId"]), None)
             _M = results.get("matches", [])
-            ch = wager_mod.live_strength((teams.get(m["home"], {}) or {}).get("composite", 0), m["home"], _M)
-            ca = wager_mod.live_strength((teams.get(m["away"], {}) or {}).get("composite", 0), m["away"], _M)
+            ch = wager_mod.live_strength(_comp(teams, m["home"]), m["home"], _M)
+            ca = wager_mod.live_strength(_comp(teams, m["away"]), m["away"], _M)
             with _lock:
                 wl = load_wagers()
                 dup = _dedup_wager(wl, player, interaction_id)
@@ -2191,8 +2202,8 @@ def discord_command(name, opts, uid=None, interaction_id=None):
             return "Couldn't load the data to place that bet."
         raw = next((x for x in results.get("matches", []) if wager_mod.match_id(x) == m["matchId"]), None)
         _M = results.get("matches", [])
-        ch = wager_mod.live_strength((teams.get(m["home"], {}) or {}).get("composite", 0), m["home"], _M)
-        ca = wager_mod.live_strength((teams.get(m["away"], {}) or {}).get("composite", 0), m["away"], _M)
+        ch = wager_mod.live_strength(_comp(teams, m["home"]), m["home"], _M)
+        ca = wager_mod.live_strength(_comp(teams, m["away"]), m["away"], _M)
         with _lock:
             wl = load_wagers()
             dup = _dedup_wager(wl, player, interaction_id)     # Discord retries reuse the interaction id -> no double bet
@@ -3793,8 +3804,8 @@ class Handler(BaseHTTPRequestHandler):
                 _M = json.load(open("results.json")).get("matches", [])
             except Exception:
                 _M = []
-            ch = wager_mod.live_strength((teams.get(match.get("home"), {}) or {}).get("composite", 0), match.get("home"), _M)
-            ca = wager_mod.live_strength((teams.get(match.get("away"), {}) or {}).get("composite", 0), match.get("away"), _M)
+            ch = wager_mod.live_strength(_comp(teams, match.get("home")), match.get("home"), _M)
+            ca = wager_mod.live_strength(_comp(teams, match.get("away")), match.get("away"), _M)
             prow = next((p for p in (td.get("players") or []) if p.get("name") == player), {})
             settled = prow.get("points_settled")
             if settled is None:
@@ -3894,8 +3905,8 @@ class Handler(BaseHTTPRequestHandler):
                 selections.append({"match": m, "selection": str(lg.get("selection", "")).upper(),
                                    "market": str(lg.get("market", "result")).strip().lower() or "result",
                                    "line": lg.get("line"),
-                                   "comp_home": wager_mod.live_strength((teams.get(m.get("home"), {}) or {}).get("composite", 0), m.get("home"), results.get("matches", [])),
-                                   "comp_away": wager_mod.live_strength((teams.get(m.get("away"), {}) or {}).get("composite", 0), m.get("away"), results.get("matches", []))})
+                                   "comp_home": wager_mod.live_strength(_comp(teams, m.get("home")), m.get("home"), results.get("matches", [])),
+                                   "comp_away": wager_mod.live_strength(_comp(teams, m.get("away")), m.get("away"), results.get("matches", []))})
             prow = next((p for p in (td.get("players") or []) if p.get("name") == player), {})
             settled = prow.get("points_settled")
             if settled is None:

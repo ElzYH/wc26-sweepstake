@@ -96,6 +96,36 @@ ck("garbage scores -> never raises", not _crashed)
 print("\n== the audit must be READ-ONLY w.r.t. betting: it touches no wagers/odds, only config idempotency ==")
 ck("no wagers.json was created by the audit", not os.path.exists(os.path.join(_T, "wagers.json")))
 
+print("\n== _comp: unmatched team prices NEUTRAL (not 0 -> would make its opponent ~98%) ==")
+ck("a known team returns its real composite", abs(S._comp(teams, "France") - teams["France"]["composite"]) < 1e-9)
+ck("an UNMATCHED name returns the neutral default, never 0", S._comp(teams, "Quuxland") == S.NEUTRAL_COMPOSITE)
+ck("a None/garbage record returns neutral (no crash)", S._comp({"X": None}, "X") == S.NEUTRAL_COMPOSITE)
+ck("a 0/negative composite is treated as neutral", S._comp({"X": {"composite": 0}}, "X") == S.NEUTRAL_COMPOSITE)
+ck("neutral default is mid-table, not a phantom minnow (10..60)", 10 <= S.NEUTRAL_COMPOSITE <= 60)
+
+print("\n== team-name resolver: the Bosnia hyphen form now maps to canonical (was mispriced as 0) ==")
+import update_results as U
+r = U.build_name_map(os.path.join(_T, "teams.json"))
+ck("'Bosnia-Herzegovina' resolves to the canonical team", r("Bosnia-Herzegovina") == "Bosnia & Herzegovina", r("Bosnia-Herzegovina"))
+ck("'Bosnia and Herzegovina' still resolves", r("Bosnia and Herzegovina") == "Bosnia & Herzegovina")
+ck("a real canonical name maps to itself", r("Brazil") == "Brazil")
+
+print("\n== calibrator: market inversion is monotone, exact and clamped ==")
+import calibrate_odds as C
+_pe = W._fair_probs(40.0, 40.0)[0]                       # home prob at equal strength (~0.35; draw eats 30%)
+ck("inverting the equal-strength prob recovers ~equal composite", abs(C.implied_composite(_pe, 40.0, "home") - 40.0) < 1.5,
+   C.implied_composite(_pe, 40.0, "home"))
+hi = C.implied_composite(0.70, 40.0, "home"); lo = C.implied_composite(0.30, 40.0, "home")
+ck("a higher target prob implies a higher composite (monotone)", hi > lo, (hi, lo))
+ck("implied composite is clamped to the search band", C.C_MIN <= C.implied_composite(0.999, 40.0, "home") <= C.C_MAX)
+# bounded-step property: build a fake market that wants a huge jump, confirm the move is capped
+def step(cur, target, cap):
+    return round(max(C.C_MIN, min(C.C_MAX, cur + max(-cap, min(cap, target - cur)))), 1)
+ck("a big gap is capped at max-step up", step(30.0, 90.0, 5.0) == 35.0)
+ck("a big gap is capped at max-step down", step(60.0, 5.0, 5.0) == 55.0)
+ck("a small gap moves only the gap", step(40.0, 42.0, 5.0) == 42.0)
+ck("the move is clamped to the composite band", step(104.0, 200.0, 5.0) <= C.C_MAX)
+
 shutil.rmtree(_T, ignore_errors=True)
 if FAILS:
     print("\nODDS-AUDIT QA FAILED (%d): %s" % (len(FAILS), ", ".join(FAILS)))

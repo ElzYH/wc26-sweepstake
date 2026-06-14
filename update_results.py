@@ -21,7 +21,7 @@ ALIASES = {
     "Türkiye": "Turkey", "Turkey": "Turkey", "Czechia": "Czech Republic",
     "Côte d'Ivoire": "Ivory Coast", "Cabo Verde": "Cape Verde",
     "Curaçao": "Curacao", "DR Congo": "DR Congo", "Congo DR": "DR Congo",
-    "Bosnia and Herzegovina": "Bosnia & Herzegovina",
+    "Bosnia and Herzegovina": "Bosnia & Herzegovina", "Bosnia-Herzegovina": "Bosnia & Herzegovina",
 }
 
 

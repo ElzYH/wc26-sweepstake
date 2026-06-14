@@ -42,6 +42,13 @@ try:
 except Exception as e:
     sys.exit("Could not import wager.py — run this from your repo folder. (%s)" % e)
 
+NEUTRAL_COMPOSITE = 34.0
+try:
+    import update_results as _UR          # reuse the app's feed-name -> teams.json resolver
+    _resolve_name = _UR.build_name_map("teams.json")
+except Exception:
+    _resolve_name = lambda n: n           # if it's not importable, fall back to raw names
+
 
 def _read_json_path(path):
     try:
@@ -171,11 +178,16 @@ def main():
         return
 
     def strength(team, this_match):
-        base = (teams.get(team) or {}).get("composite", 0) or 0
+        canon = _resolve_name(team)
+        rec = teams.get(canon) or teams.get(team)
+        base = (rec or {}).get("composite", 0) or 0
+        known = rec is not None and base > 0
+        if not known:
+            base = NEUTRAL_COMPOSITE            # unmatched name -> price ~mid-table (mirrors the app), and flag it
         if not args.live:
-            return base, (team in teams)
+            return base, known
         prior = [m for m in finished if m is not this_match]
-        return W.live_strength(base, team, prior), (team in teams)
+        return W.live_strength(base, canon if rec else team, prior), known
 
     print("\nWC2026 — match-odds audit (app vs %s%s)   [%s strengths]"
           % ("LIVE site" if args.url else "results",
