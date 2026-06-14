@@ -2566,23 +2566,28 @@ def poller():
         except Exception as e:
             print("[poller] loop error (continuing):", e)       # the thread keeps running no matter what
             mins = 10
-        # Adaptive cadence: poll roughly every minute while a game is live or about to kick off (so goal/kickoff/
-        # half-time alerts arrive promptly even with nobody watching the tracker), and back off to poll_minutes when idle.
+        # Adaptive cadence. Games often kick off a minute or two LATE, and the feed lags flipping TIMED -> IN_PLAY,
+        # so the "about to start" window runs from 15 min BEFORE the scheduled kickoff to 15 min AFTER — and while
+        # we're in that window we poll every 30s so a late start (and its first goals) shows up promptly. A game
+        # that's genuinely live polls every 60s; otherwise we back off to poll_minutes.
         try:
             fxs = (_load_tracker() or {}).get("fixtures") or []
             now_ts = time.time()
-            busy = any((m.get("status") in ("IN_PLAY", "PAUSED", "LIVE", "SUSPENDED")) for m in fxs)
-            if not busy:
-                for m in fxs:
-                    if m.get("status") in ("TIMED", "SCHEDULED"):
-                        try:
-                            ko = calendar.timegm(time.strptime((m.get("utcDate") or "")[:19], "%Y-%m-%dT%H:%M:%S"))
-                        except Exception:
-                            continue
-                        if 0 <= (ko - now_ts) <= 15 * 60:     # kicks off within 15 minutes
-                            busy = True
-                            break
-            if busy:
+            live = any((m.get("status") in ("IN_PLAY", "PAUSED", "LIVE", "SUSPENDED")) for m in fxs)
+            near_ko = False
+            for m in fxs:
+                if m.get("status") in ("TIMED", "SCHEDULED"):
+                    try:
+                        ko = calendar.timegm(time.strptime((m.get("utcDate") or "")[:19], "%Y-%m-%dT%H:%M:%S"))
+                    except Exception:
+                        continue
+                    if -15 * 60 <= (ko - now_ts) <= 15 * 60:    # within 15 min either side of the scheduled kickoff
+                        near_ko = True
+                        break
+            if near_ko:
+                time.sleep(30)        # poll hard right around kickoff — catch the real (often late) whistle fast
+                continue
+            if live:
                 time.sleep(60)
                 continue
         except Exception:

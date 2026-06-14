@@ -2705,7 +2705,10 @@ function _nextRefreshMs(){
   const now=Date.now(); let live=false, soon=false;
   ((DATA&&DATA.fixtures)||[]).forEach(f=>{
     if(['IN_PLAY','PAUSED','LIVE','SUSPENDED'].includes(f.status)) live=true;
-    if(f.status==='TIMED'||f.status==='SCHEDULED'){ const dt=new Date(f.utcDate||0).getTime()-now; if(dt>0 && dt<5*60000) soon=true; }
+    if(f.status==='TIMED'||f.status==='SCHEDULED'){ const dt=new Date(f.utcDate||0).getTime()-now;
+      // games often kick off a minute or two late, so keep polling fast from 5 min BEFORE the scheduled
+      // kickoff until 15 min AFTER — i.e. until the feed actually flips the game live
+      if(dt < 5*60000 && dt > -15*60000) soon=true; }
   });
   return (live||soon)?8000:30000;
 }
