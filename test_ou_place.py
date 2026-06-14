@@ -38,12 +38,13 @@ offered = sorted(W.goals_odds(CH, CA).keys(), key=float)
 for good in offered:
     ok_g, _ = W.place([], "Erol", FUTURE, "OVER", 5, 100, CH, CA, now=NOW, market="ou", line=float(good))
     ck("offered line %s is accepted" % good, ok_g, None)
-# a line on the ladder but NOT offered for this game (one side near-certain -> would underround) is rejected, not mispriced
+# every line on the ladder is now offered (each is guaranteed to overround) — nothing is filtered out
 not_offered = [L for L in W.OU_LINES if W._line_key(L) not in W.goals_odds(CH, CA)]
-ck("some outer lines are filtered out for a typical game", len(not_offered) > 0, not_offered)
-if not_offered:
-    ok_n, msg_n = W.place([], "Erol", FUTURE, "OVER", 5, 100, CH, CA, now=NOW, market="ou", line=not_offered[0])
-    ck("a ladder line not offered for this game is rejected (can't be mispriced)", not ok_n, msg_n if ok_n else None)
+ck("every ladder line is offered for any game (none filtered)", not_offered == [], not_offered)
+ck("0.5 is offered even for a lopsided game", "0.5" in W.goals_odds(95.0, 1.0), sorted(W.goals_odds(95.0, 1.0).keys(), key=float))
+# a line that ISN'T on the ladder (e.g. 6.5) has no market and is rejected, not mispriced
+ok_n, msg_n = W.place([], "Erol", FUTURE, "OVER", 5, 100, CH, CA, now=NOW, market="ou", line=6.5)
+ck("an off-ladder line (6.5) is rejected (no such market)", not ok_n, msg_n if ok_n else None)
 
 print("\n== selection validation (O/U only takes OVER/UNDER) ==")
 for bad in ("HOME", "DRAW", "AWAY", "over ", "", "YES"):

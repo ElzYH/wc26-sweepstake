@@ -19,7 +19,7 @@ BASE = "https://api.football-data.org/v4"
 ALIASES = {
     "United States": "USA", "South Korea": "Korea Republic", "IR Iran": "Iran",
     "Türkiye": "Turkey", "Turkey": "Turkey", "Czechia": "Czech Republic",
-    "Côte d'Ivoire": "Ivory Coast", "Cabo Verde": "Cape Verde",
+    "Côte d'Ivoire": "Ivory Coast", "Cabo Verde": "Cape Verde", "Cape Verde Islands": "Cape Verde",
     "Curaçao": "Curacao", "DR Congo": "DR Congo", "Congo DR": "DR Congo",
     "Bosnia and Herzegovina": "Bosnia & Herzegovina", "Bosnia-Herzegovina": "Bosnia & Herzegovina",
 }

@@ -104,6 +104,27 @@ for k in ks:
     print("   O/U %s   OVER %-6s (%.2f)   UNDER %-6s (%.2f)" % (
         k, o[k]["OVER"]["frac"], dec(o[k]["OVER"]), o[k]["UNDER"]["frac"], dec(o[k]["UNDER"])))
 
+print("\n== every line (incl. 0.5) stays offered + house-positive across the full mismatch range ==")
+bad05 = under = nonmono = 0
+for ch in (0.1, 1, 12, 34, 50, 73, 100):
+    for ca in (0.1, 1, 12, 34, 50, 73, 100):
+        oo = W.goals_odds(ch, ca)
+        if sorted(oo.keys(), key=float) != ["0.5", "1.5", "2.5", "3.5", "4.5", "5.5"]:
+            bad05 += 1
+        for kk in oo:
+            if 1.0 / dec(oo[kk]["OVER"]) + 1.0 / dec(oo[kk]["UNDER"]) <= 1.0:
+                under += 1
+        ov = [dec(oo[kk]["OVER"]) for kk in sorted(oo.keys(), key=float)]
+        if any(ov[i] > ov[i + 1] + 1e-9 for i in range(len(ov) - 1)):
+            nonmono += 1
+ck("the full 0.5..5.5 ladder is offered for every matchup (0.5 never dropped)", bad05 == 0, bad05)
+ck("no offered line ever underrounds (house edge guaranteed)", under == 0, under)
+ck("Over odds stay monotone in the line for every matchup", nonmono == 0, nonmono)
+# the most extreme possible mismatch still prices 0.5 sensibly
+oe = W.goals_odds(100.0, 0.1)
+ck("extreme mismatch: 0.5 Over is very short", dec(oe["0.5"]["OVER"]) < 1.15, dec(oe["0.5"]["OVER"]))
+ck("extreme mismatch: 0.5 Under is a long, house-positive price", dec(oe["0.5"]["UNDER"]) > 6.0, dec(oe["0.5"]["UNDER"]))
+
 print("\n" + ("All O/U odds-model QA passed." if not fails else "O/U ODDS-MODEL QA FAILED (%d): %s" % (len(fails), ", ".join(fails))))
 import sys
 sys.exit(1 if fails else 0)

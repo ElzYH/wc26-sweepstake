@@ -115,7 +115,8 @@ GOALS_LAMBDA_MIN = 1.6        # clamp the match goal expectation to a sane band 
 GOALS_LAMBDA_MAX = 4.2
 OU_OVERROUND = 1.13          # a touch more margin than the 1X2 book (1.08) -> O/U returns trimmed ~3-4%,
                              #   which also keeps multi-leg O/U accas from paying out silly amounts
-OU_LINES = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5]   # half-lines only -> a bet can never push
+OU_MIN_MARGIN = 0.02         # minimum book overround on any offered O/U line (so a near-certain line still has an edge)
+OU_LINES = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5]   # half-lines only -> a bet can never push; every one is always offered now
 
 
 def _finite_comp(x):
@@ -160,19 +161,33 @@ def goals_odds(comp_home, comp_away, lines=None):
     out = {}
     for L in (lines or OU_LINES):
         n = int(L)                              # floor of the half-line, e.g. 2.5 -> 2
-        p_under = _poisson_cdf(n, lam)          # total <= n
-        p_over = 1.0 - p_under                  # total >= n+1
+        p_under = min(0.999, max(1e-6, _poisson_cdf(n, lam)))   # total <= n
+        p_over = min(0.999, max(1e-6, 1.0 - p_under))           # total >= n+1
+        iO = min(MAX_PROB, p_over * OU_OVERROUND)
+        iU = min(MAX_PROB, p_under * OU_OVERROUND)
+        # Guarantee a house edge on EVERY line so even 0.5 on a lopsided game stays on the board (not dropped).
+        # On a line far from the expected total one side is near-certain and caps at MAX_PROB, which alone leaves
+        # the book < 100%. Lift the underdog (smaller) side to a minimum-margin book; it's still a long price, just
+        # not a bettor-edge one — exactly how a real book quotes a near-certain Over/Under.
+        target = 1.0 + OU_MIN_MARGIN
+        if iO + iU < target:
+            if iO <= iU:
+                iO = min(MAX_PROB, target - iU)
+            else:
+                iU = min(MAX_PROB, target - iO)
         leg = {}
-        for sel, p in (("OVER", p_over), ("UNDER", p_under)):
-            p = min(0.999, max(1e-6, p))
-            implied = min(MAX_PROB, p * OU_OVERROUND)
-            num, den = _nearest_fraction(1.0 / implied)
-            leg[sel] = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
-        # Only offer a line if the OFFERED book still overrounds. On lines far from the game's expected total one
-        # side is near-certain and its price hits the MAX_PROB cap, which would leave the book < 100% (a bettor
-        # edge). Skipping those keeps every offered goals market house-positive. The central lines always survive.
-        if (1.0 / leg["OVER"]["decimal"]) + (1.0 / leg["UNDER"]["decimal"]) > 1.0 + 1e-9:
-            out[_line_key(L)] = leg
+        for _ in range(8):                      # rebuild + re-check after fraction rounding; nudge the underdog if a round trip dipped the book under 100%
+            leg = {}
+            for sel, implied in (("OVER", iO), ("UNDER", iU)):
+                num, den = _nearest_fraction(1.0 / implied)
+                leg[sel] = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
+            if (1.0 / leg["OVER"]["decimal"]) + (1.0 / leg["UNDER"]["decimal"]) > 1.0 + 1e-6:
+                break
+            if iO <= iU:
+                iO = min(MAX_PROB, iO + 0.01)
+            else:
+                iU = min(MAX_PROB, iU + 0.01)
+        out[_line_key(L)] = leg                 # every line offered now — the loop guarantees it overrounds
     return out
 
 
