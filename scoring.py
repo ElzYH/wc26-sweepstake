@@ -513,17 +513,41 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
         if isinstance(_clocks, dict) and _clocks:
             _now = time.time()
             for f in data["fixtures"]:
-                st = f.get("status")
-                if st == "PAUSED":
-                    f["liveHT"] = True
-                elif st in ("IN_PLAY", "LIVE", "SUSPENDED"):
-                    rec = _clocks.get(f.get("matchId"))
-                    if isinstance(rec, dict) and rec.get("ko") is not None:
-                        el = _now - rec["ko"] - (rec.get("htp") or 0.0)
-                        if rec.get("ps"):
-                            el -= max(0.0, _now - rec["ps"])
-                        if el >= 0:
-                            f["liveSec"] = int(min(el, 135 * 60))   # cap (ET + stoppage ceiling); frontend caps display too
+                try:
+                    st = f.get("status")
+                    # A penalty shootout is NOT match time: stop the clock and let the UI show 'PENS'.
+                    in_shootout = bool(f.get("shootout")) or f.get("penHome") is not None or f.get("penAway") is not None
+                    if st == "PAUSED":
+                        f["liveHT"] = True
+                    elif st in ("IN_PLAY", "LIVE", "SUSPENDED") and not in_shootout:
+                        rec = _clocks.get(f.get("matchId"))
+                        if isinstance(rec, dict) and rec.get("ko") is not None:
+                            ko = float(rec["ko"])
+                            htp = float(rec.get("htp") or 0.0)
+                            if htp < 0 or htp != htp or htp > 60 * 60:    # guard a corrupt half-time bank (NaN/negative/absurd)
+                                htp = 0.0
+                            el = _now - ko - htp
+                            ps = rec.get("ps")
+                            if ps:
+                                el -= max(0.0, _now - float(ps))
+                            if el == el and 0 <= el < 1e9:                  # finite, non-negative (rejects NaN / ±inf)
+                                # Cap the clock so a half-time the feed never reported (no PAUSED) can't run it away
+                                # — the "72:00 when it's really 50:00" bug. WITH a real broadcast minute the clock is
+                                # re-locked to it upstream, so trust it up to the end-of-ET ceiling. WITHOUT a minute
+                                # we're estimating off wall-clock, so hold at the first-half ceiling until we've actually
+                                # banked a half-time, then the 90' ceiling. Either way it can never overshoot reality.
+                                mn = f.get("minute")
+                                has_minute = isinstance(mn, (int, float)) and mn is not None and mn >= 0
+                                banked_ht = htp > 60.0
+                                if has_minute:
+                                    ceil = 125 * 60          # re-locked to the feed clock -> trust up to end of extra time
+                                elif banked_ht:
+                                    ceil = 92 * 60           # 2nd-half estimate: never past 90'(+stoppage) without a minute
+                                else:
+                                    ceil = 47 * 60           # 1st-half estimate: never past 45'(+stoppage) until HT is seen
+                                f["liveSec"] = int(min(el, ceil))
+                except Exception:
+                    continue
     except Exception:
         pass
     data["history"] = _build_history(finished, teams, owner, [p["name"] for p in draw["players"]])

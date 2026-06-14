@@ -1291,8 +1291,8 @@ function liveClockText(status, minute, liveSec, pens){
   if(!(status==='IN_PLAY'||status==='LIVE'||status==='SUSPENDED')) return '';
   const ls=(liveSec===''||liveSec==null)?null:Number(liveSec);
   if(ls!=null&&!isNaN(ls)&&ls>=0){
-    let sec=ls+Math.min(150,Math.max(0,(Date.now()-FETCH_AT)/1000));  // tick on from the server value; catch-up capped
-    if(sec>130*60) sec=130*60;                                        // never beyond ~130:00 (ET + stoppage ceiling)
+    let sec=ls+Math.min(75,Math.max(0,(Date.now()-FETCH_AT)/1000));   // tick on from the server value; catch-up capped just over one poll so a stale/backgrounded tab can't run ahead
+    if(sec>125*60) sec=125*60;                                        // never beyond end of extra time — a shootout shows 'PENS', not a clock
     const mm=Math.floor(sec/60), ss=Math.floor(sec%60);
     return mm+':'+(ss<10?'0':'')+ss;
   }

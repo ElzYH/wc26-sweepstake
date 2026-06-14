@@ -397,7 +397,7 @@ ck("clock shows PENS during a shootout", liveClockText("IN_PLAY", null, 7200, "1
 ck("clock falls back to the feed minute", liveClockText("IN_PLAY", 52, null) === "52'");
 ck("clock falls back to LIVE with nothing", liveClockText("IN_PLAY", null, null) === "LIVE");
 ck("clock is blank when not live", liveClockText("FINISHED", 90, 5400) === "");
-ck("clock caps a runaway value at 130:00", liveClockText("IN_PLAY", null, 200*60) === "130:00")
+ck("clock caps a runaway value at the end-of-ET ceiling (125:00)", liveClockText("IN_PLAY", null, 200*60) === "125:00")
 ck("clock counts into extra time (e.g. 105:00)", liveClockText("IN_PLAY", null, 105*60) === "105:00");
 ck("clock pads single-digit seconds", liveClockText("IN_PLAY", null, 61) === "1:01");
 

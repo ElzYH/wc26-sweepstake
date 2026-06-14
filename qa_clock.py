@@ -109,6 +109,57 @@ td = scoring.compute(teams_path=os.path.join(t, "teams.json"), draw_path=os.path
 fx = td["fixtures"][0]
 ck("fixture carries liveSec ~52:00 (3120s)", abs(fx.get("liveSec", 0) - 3120) <= 2, fx.get("liveSec"))
 
+print("\n== clock hardening: a missed half-time (no PAUSED + no feed minute) can NEVER overshoot — the 72'-when-50' bug ==")
+def live_sec_via_scoring(clock_rec, fx_extra):
+    json.dump({"m1": clock_rec}, open(os.path.join(t, "match_clocks.json"), "w"))
+    base = {"id": "m1", "home": "Spain", "away": "France", "status": "IN_PLAY",
+            "homeScore": 1, "awayScore": 0, "stage": "GROUP_STAGE",
+            "utcDate": "2026-06-11T18:00:00Z", "group": "A"}
+    base.update(fx_extra)
+    json.dump({"matches": [base]}, open(os.path.join(t, "results.json"), "w"))
+    td2 = scoring.compute(teams_path=os.path.join(t, "teams.json"), draw_path=os.path.join(t, "draw_result.json"),
+                          results_path=os.path.join(t, "results.json"), out=os.path.join(t, "td.json"),
+                          clocks_path=os.path.join(t, "match_clocks.json"))
+    return td2["fixtures"][0].get("liveSec")
+now2 = _time.time()
+# wall-clock says 72 min since kickoff, but half-time was never banked and there's no feed minute -> MUST cap, not show 72
+ls = live_sec_via_scoring({"ko": now2 - 72 * 60, "htp": 0, "ps": None}, {"minute": None})
+ck("missed-HT + no-minute clock capped at the 1st-half ceiling (<=47:00), NEVER 72:00", ls is not None and ls <= 47 * 60 + 2 and ls < 60 * 60, ls)
+# once a real half-time IS banked, the 2nd-half clock is accurate (~50:00) and not capped away
+ls = live_sec_via_scoring({"ko": now2 - 65 * 60, "htp": 15 * 60, "ps": None}, {"minute": None})
+ck("2nd half with a banked HT reads ~50:00 (accurate)", ls is not None and abs(ls - 50 * 60) <= 2, ls)
+# a real feed minute is trusted into extra time
+ls = live_sec_via_scoring({"ko": now2 - 105 * 60, "htp": 0, "ps": None}, {"minute": 105})
+ck("a real feed minute is trusted into extra time (~105:00)", ls is not None and abs(ls - 105 * 60) <= 60, ls)
+
+print("\n== clock hardening: stop at a penalty shootout (clock freezes, UI shows PENS) ==")
+ls = live_sec_via_scoring({"ko": now2 - 125 * 60, "htp": 0, "ps": None}, {"minute": None, "shootout": True})
+ck("a shootout does NOT tick a match clock (no liveSec)", ls is None, ls)
+ls = live_sec_via_scoring({"ko": now2 - 125 * 60, "htp": 0, "ps": None}, {"minute": None, "penHome": 3, "penAway": 2})
+ck("a pens score present also stops the clock", ls is None, ls)
+
+print("\n== clock hardening: corrupt/garbage clock data can never crash or run the clock away ==")
+for bad in (float("nan"), -9999, 9e9):
+    ls = live_sec_via_scoring({"ko": now2 - 50 * 60, "htp": bad, "ps": None}, {"minute": None})
+    ck("corrupt htp=%r -> clock stays sane (<=47:00)" % (bad,), ls is None or ls <= 47 * 60 + 2, ls)
+ls = live_sec_via_scoring({"ko": now2 + 600, "htp": 0, "ps": None}, {"minute": None})   # kickoff in the FUTURE (clock skew)
+ck("kickoff in the future -> no negative clock (clock simply absent)", ls is None, ls)
+for badko in (float("nan"), float("inf"), float("-inf")):
+    ls = live_sec_via_scoring({"ko": badko, "htp": 0, "ps": None}, {"minute": None})
+    ck("corrupt ko=%r -> no clock (never crashes)" % (badko,), ls is None, ls)
+ls = live_sec_via_scoring("not-a-dict", {"minute": None})   # corrupt clock record type
+ck("a non-dict clock record -> no clock (never crashes)", ls is None, ls)
+# restore the canonical fixture for the sections below
+json.dump({"m1": {"ko": nowc - 3120, "htp": 0, "ps": None}}, open(os.path.join(t, "match_clocks.json"), "w"))
+json.dump({"matches": [{"id": "m1", "home": "Spain", "away": "France", "status": "IN_PLAY",
+                        "homeScore": 1, "awayScore": 0, "stage": "GROUP_STAGE",
+                        "utcDate": "2026-06-11T18:00:00Z", "group": "A", "minute": 52}]},
+          open(os.path.join(t, "results.json"), "w"))
+td = scoring.compute(teams_path=os.path.join(t, "teams.json"), draw_path=os.path.join(t, "draw_result.json"),
+                     results_path=os.path.join(t, "results.json"), out=os.path.join(t, "td.json"),
+                     clocks_path=os.path.join(t, "match_clocks.json"))
+fx = td["fixtures"][0]
+
 print("\n== live-bet 'winning/level/losing' data contract: a bet's matchId matches the live fixture + score ==")
 import wager
 _m = {"id": "m1", "home": "Spain", "away": "France", "stage": "GROUP_STAGE", "utcDate": "2026-06-11T18:00:00Z"}
