@@ -400,6 +400,7 @@ def run():
     B = wager.STAGE_BUDGET
     g1 = "2026-06-15T18:00:00Z"; g2 = "2026-06-25T18:00:00Z"
     mid = wager._utc_ts("2026-06-20T00:00:00Z")          # split the group stage in half here
+    g1_now = wager._utc_ts("2026-06-15T17:30:00Z")       # anchor "now" just before g1 kicks off so these stay time-independent
     ck("fresh epoch budget == STAGE_BUDGET", wager.budget_remaining([], "Erol", "GROUP_1") == B)
     ck("group first/second halves are different epochs",
        wager.epoch_of(fx(utc=g1), mid) == "GROUP_1" and wager.epoch_of(fx(utc=g2), mid) == "GROUP_2")
@@ -415,7 +416,7 @@ def run():
        wager.budget_remaining(topped, "Erol", "GROUP_1"))
     locked = [{"player": "Erol", "epoch": "GROUP_1", "stake": 100, "status": "lost", "return": 0}]
     ck("budget can hit 0", wager.budget_remaining(locked, "Erol", "GROUP_1") == 0)
-    lk_ok, lk_msg = wager.place(locked, "Erol", fx(mid="lk1", utc=g1), "HOME", 1, 500, 80, 40, group_mid_ts=mid)
+    lk_ok, lk_msg = wager.place(locked, "Erol", fx(mid="lk1", utc=g1), "HOME", 1, 500, 80, 40, group_mid_ts=mid, now=g1_now)
     ck("0 budget = locked out of this epoch", not lk_ok and "budget" in lk_msg.lower(), lk_msg)
     ck("a different epoch is unaffected by GROUP_1 losses (and carries its own +5/round budget)",
        wager.budget_remaining(locked, "Erol", "GROUP_2") == wager.stage_budget("GROUP_2")
@@ -425,11 +426,11 @@ def run():
        == [50, 55, 60, 65, 70, 75, 80]
        and all(wager.stage_budget(e) == wager.stage_max_stake(s) + 20
                for e, s in (("GROUP_1", "GROUP_STAGE"), ("LAST_32", "LAST_32"), ("FINAL", "FINAL"))))
-    cap_ok, cap_msg = wager.place([], "Erol", fx(mid="cp1", utc=g1), "HOME", 40, 500, 80, 40, group_mid_ts=mid)
+    cap_ok, cap_msg = wager.place([], "Erol", fx(mid="cp1", utc=g1), "HOME", 40, 500, 80, 40, group_mid_ts=mid, now=g1_now)
     ck("per-bet cap (30) still applies even with full budget", not cap_ok and "30" in cap_msg, cap_msg)
     # a real placement lands in the right epoch and reduces that epoch's budget
     liveb = []
-    wager.place(liveb, "Erol", fx(mid="e1", utc=g1), "HOME", 20, 500, 80, 40, group_mid_ts=mid)
+    wager.place(liveb, "Erol", fx(mid="e1", utc=g1), "HOME", 20, 500, 80, 40, group_mid_ts=mid, now=g1_now)
     ck("placement tags the epoch + spends from it", liveb[0]["epoch"] == "GROUP_1"
        and wager.budget_remaining(liveb, "Erol", "GROUP_1") == B - 20, liveb[0].get("epoch"))
 

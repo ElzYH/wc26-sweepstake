@@ -852,10 +852,18 @@ def _free_bet_drops():
         weeks.setdefault(int((day_ts[d] - first) // (7 * DAY)), []).append(d)
     pick = [rnd.choice(sorted(weeks[wk])) for wk in sorted(weeks)]   # ~one drop per week (deterministic)
     pick = sorted(pick)[: max(0, 5 - len(drops))]        # at most 5 drops total (the pre-drop counts as one)
+    # Each match-day drop is claimable for the WHOLE day (00:00 → 24:00 UTC), not just up to the first kickoff,
+    # and if a day ends with NOBODY having claimed it the window rolls forward a couple of days so it isn't simply
+    # lost — that "extra day" is exactly the case where everyone missed the original window.
+    GRACE = 2 * DAY
+    _claims = cfg.get("free_bet_claims") if isinstance(cfg.get("free_bet_claims"), dict) else {}
     for d in pick:
         midnight = wager_mod._utc_ts(d + "T00:00:00Z")   # 00:00 UTC of that match-day
         if midnight is not None:
-            drops.append({"id": d, "opens": midnight, "closes": day_ts[d]})   # open until that day's first kickoff
+            close = midnight + DAY                        # the whole match-day
+            if not (_claims.get(d) or {}):                # nobody claimed it yet -> keep it open a couple more days
+                close += GRACE
+            drops.append({"id": d, "opens": midnight, "closes": close})
     return sorted(drops, key=lambda x: x["opens"])
 
 

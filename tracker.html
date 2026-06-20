@@ -91,6 +91,8 @@
   td.n{font-variant-numeric:tabular-nums;text-align:center}
   .owner{color:var(--gold);font-size:11px}
   .qual{box-shadow:inset 3px 0 0 var(--t2)}
+  .tpout{opacity:.5}
+  .tpcut td{padding:0!important;height:0;border:0;border-bottom:2px dashed var(--gold)}
 
   /* fixtures */
   .fx{display:flex;flex-direction:column;gap:8px}
@@ -531,7 +533,7 @@
     <div class="h2hsel"><select id="h2hA"></select><span class="vs">vs</span><select id="h2hB"></select></div>
     <div id="h2hBody"></div>
   </section>
-  <section id="groups"><div id="groupsPoolNote" style="font-size:12px;color:var(--muted);margin:0 0 12px"></div><div class="grid" id="groupsBody"></div></section>
+  <section id="groups"><div id="groupsPoolNote" style="font-size:12px;color:var(--muted);margin:0 0 12px"></div><div class="grid" id="groupsBody"></div><div id="thirdRace" style="margin-top:20px"></div></section>
   <section id="bracket"><div class="modesel" id="koRounds"></div><div id="bracketBody"></div></section>
   <section id="fixtures"><div class="fx" id="fixturesBody"></div></section>
   <section id="bets"><div id="betsBody"></div></section>
@@ -1500,6 +1502,25 @@ function render(d){
         <td class="n">${r.playedGames}</td><td class="n">${r.goalDifference>0?'+':''}${r.goalDifference}</td>
         <td class="n"><b>${r.points}</b></td></tr>`).join('')}
     </table>`).join('') : '<div class="empty">Group tables appear once the group stage kicks off (11 June).</div>';
+  // live third-place race: of the teams currently 3rd in their group, which sit inside the qualifying cut-off
+  const tpr=d.third_place_race, tpEl=document.getElementById('thirdRace');
+  if(tpEl){
+    if(tpr && tpr.table && tpr.table.length){
+      tpEl.innerHTML = `<table><caption>3rd-place race — best ${tpr.slots} of ${tpr.table.length} reach the Round of 32</caption>
+        <tr><th>#</th><th>Team</th><th>Grp</th><th>Owner</th><th>Pld</th><th>GD</th><th>Pts</th><th></th></tr>
+        ${tpr.table.map((r,i)=>`<tr class="${r.qualifying?'qual':'tpout'}">
+          <td class="n">${r.rank}</td><td>${flag(r.team)}${esc(r.team)}</td>
+          <td class="n">${esc(String(r.group).replace(/^group[_ ]?/i,''))}</td>
+          <td class="owner">${esc(r.owner)}</td>
+          <td class="n">${r.playedGames}</td>
+          <td class="n">${r.goalDifference>0?'+':''}${r.goalDifference}</td>
+          <td class="n"><b>${r.points}</b></td>
+          <td class="n" style="font-size:11px;font-weight:700;${r.qualifying?'color:var(--gold)':'color:var(--muted)'}">${r.qualifying?'IN':'OUT'}</td>
+        </tr>${i+1===tpr.slots && tpr.table.length>tpr.slots?'<tr class="tpcut"><td colspan="8"></td></tr>':''}`).join('')}
+      </table>
+      <p style="font-size:11.5px;color:var(--muted);margin:8px 2px 0">The team finishing 3rd in each group, ranked by points → goal difference → goals scored (no head-to-head — they're in different groups, so they never met). The dashed line is the qualification cut-off.${tpr.started?'':' Provisional until group games are played.'} Note: the final tie-breaks are fair-play/cards then FIFA ranking — card data isn\\'t in the feed, so team seeding stands in for ranking.</p>`;
+    } else tpEl.innerHTML='';
+  }
   // fixtures grouped by day
   const fb=document.getElementById('fixturesBody');
   if(!d.fixtures.length){fb.innerHTML='<div class="empty">Fixtures load from the API once results.json is populated.</div>';}
@@ -2012,6 +2033,45 @@ function renderChart(d){
 
 // ---- Monte Carlo: win % per scoring mode ----
 function simWinOdds(d,N){
+  // FIFA 2026 group tiebreaker (mirrors scoring.py _order_group_table): points -> head-to-head (pts,gd,gf among the
+  // level teams, recursive) -> overall GD -> overall GF -> ranking proxy (seeding composite). `tp` is overall
+  // {p,gd,gf} per team; `hh` maps "Home|Away" -> [homeGoals, awayGoals] for the games played among them.
+  function orderGroup2026(teamsIn, tp, hh, comp){
+    const cmpArr=(x,y)=>{ for(let k=0;k<x.length;k++){ if(x[k]!==y[k]) return x[k]-y[k]; } return 0; };
+    const overallKey=t=>[-tp[t].gd, -tp[t].gf, -(comp[t]||0)];
+    const pairStat=subset=>{
+      const agg={}; subset.forEach(t=>agg[t]=[0,0,0]);
+      for(let i=0;i<subset.length;i++)for(let j=i+1;j<subset.length;j++){
+        const a=subset[i],b=subset[j]; let r=hh[a+'|'+b],sa,sb;
+        if(r){sa=r[0];sb=r[1];} else { r=hh[b+'|'+a]; if(r){sa=r[1];sb=r[0];} else continue; }
+        agg[a][1]+=sa-sb; agg[b][1]+=sb-sa; agg[a][2]+=sa; agg[b][2]+=sb;
+        if(sa>sb)agg[a][0]+=3; else if(sb>sa)agg[b][0]+=3; else {agg[a][0]++;agg[b][0]++;}
+      }
+      return agg;
+    };
+    const orderLevel=subset=>{
+      if(subset.length<=1) return subset.slice();
+      const agg=pairStat(subset), hkey=t=>[-agg[t][0],-agg[t][1],-agg[t][2]];
+      const sorted=subset.slice().sort((x,y)=>cmpArr(hkey(x),hkey(y)));
+      const out=[]; let i=0;
+      while(i<sorted.length){
+        let j=i+1; while(j<sorted.length && cmpArr(hkey(sorted[j]),hkey(sorted[i]))===0) j++;
+        const bucket=sorted.slice(i,j);
+        if(bucket.length===1) out.push(bucket[0]);
+        else if(bucket.length===subset.length) out.push(...bucket.sort((x,y)=>cmpArr(overallKey(x),overallKey(y))));
+        else out.push(...orderLevel(bucket));            // head-to-head separated some -> re-compare the rest
+        i=j;
+      }
+      return out;
+    };
+    const names=teamsIn.slice().sort((x,y)=>tp[y].p-tp[x].p);
+    const res=[]; let i=0;
+    while(i<names.length){
+      let j=i+1; while(j<names.length && tp[names[j]].p===tp[names[i]].p) j++;
+      res.push(...orderLevel(names.slice(i,j))); i=j;
+    }
+    return res;
+  }
   // CURRENT forecast: seeded from the actual state. Finished games are locked (carried as base points),
   // eliminated teams can't win, and only the remaining games are simulated — so odds sharpen as results come in.
   const groups=d.groups||[], fx=d.fixtures||[], by={}, teamArr=[];
@@ -2050,6 +2110,7 @@ function simWinOdds(d,N){
   fx.filter(m=>m.stage==='GROUP_STAGE'&&(m.status==='FINISHED'||m.status==='AWARDED')&&m.home&&m.away)
     .forEach(m=>grpDone.add([m.home,m.away].sort().join('|')));
   const aliveKO=teamArr.filter(t=>!t.out);
+  const compN={}; teamArr.forEach(t=>compN[t.name]=t.comp||0);   // ranking-proxy numbers for the 2026 tiebreaker
 
   for(let s=0;s<N;s++){
     const pts={},stageReached={},alive={};
@@ -2062,18 +2123,23 @@ function simWinOdds(d,N){
     } else {
       // simulate only the UNPLAYED group games on top of the current table
       const tp={}; teamArr.forEach(t=>tp[t.name]={p:t.gp,gd:t.gd,gf:t.gf});
+      const hh={};   // head-to-head results among group teams this run: real games first, then the simulated ones
+      fx.filter(m=>m.stage==='GROUP_STAGE'&&(m.status==='FINISHED'||m.status==='AWARDED')&&m.home&&m.away&&m.homeScore!=null&&m.awayScore!=null)
+        .forEach(m=>{ hh[m.home+'|'+m.away]=[m.homeScore,m.awayScore]; });
       groups.forEach(g=>{ const gt=g.table.map(r=>r.team);
         for(let i=0;i<gt.length;i++)for(let j=i+1;j<gt.length;j++){
           const a=gt[i],b=gt[j]; if(grpDone.has([a,b].sort().join('|')))continue;
           const ga=pois(eg(a)),gb=pois(eg(b));
+          hh[a+'|'+b]=[ga,gb];
           pts[a]+=ga*pg;pts[b]+=gb*pg; tp[a].gf+=ga;tp[b].gf+=gb;tp[a].gd+=ga-gb;tp[b].gd+=gb-ga;
           if(gb===0)pts[a]+=pc; if(ga===0)pts[b]+=pc;
           if(ga>gb){pts[a]+=pw;tp[a].p+=3;}else if(gb>ga){pts[b]+=pw;tp[b].p+=3;}else{pts[a]+=pdr;pts[b]+=pdr;tp[a].p++;tp[b].p++;}
         }});
       const top2=[],thirds=[];
-      groups.forEach(g=>{ const gt=g.table.map(r=>r.team).sort((x,y)=>tp[y].p-tp[x].p||tp[y].gd-tp[x].gd||tp[y].gf-tp[x].gf);
+      groups.forEach(g=>{ const gt=orderGroup2026(g.table.map(r=>r.team), tp, hh, compN);   // FIFA 2026: head-to-head first
         top2.push(gt[0],gt[1]); if(gt[2])thirds.push(gt[2]); });
-      thirds.sort((x,y)=>by[y].comp-by[x].comp);
+      // best 8 third-placed teams: ranked Points -> GD -> GF -> ranking proxy (NO head-to-head; they never met)
+      thirds.sort((x,y)=>tp[y].p-tp[x].p||tp[y].gd-tp[x].gd||tp[y].gf-tp[x].gf||(by[y].comp-by[x].comp));
       bracket=top2.concat(thirds.slice(0,8));
       const inSet=new Set(bracket); teamArr.forEach(t=>{ if(!inSet.has(t.name))alive[t.name]=false; });
       startIdx=0;

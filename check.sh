@@ -121,6 +121,8 @@ if python3 qa_idempotency.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAI
 
 say "End-to-end integration QA (real HTTP bets, live settlement + scoring together, concurrent over the wire)"
 if python3 qa_integration.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_integration.py 2>&1 | tail -24; FAIL=1; fi
+echo "[qa] tiebreak + claim-window (FIFA 2026 group order, whole-day drops)"
+if python3 qa_tiebreak.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_tiebreak.py 2>&1 | tail -20; FAIL=1; fi
 
 say "Bet-race QA (~35 checks: kickoff/void flip rejects a bet — engine matrix + real-HTTP flip + concurrency around a flip)"
 if python3 qa_bet_race.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_bet_race.py 2>&1 | tail -30; FAIL=1; fi

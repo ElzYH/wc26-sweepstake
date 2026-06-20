@@ -113,6 +113,113 @@ def _numf(v, default=0.0):
         return default
 
 
+def _order_group_table(rows, gmatches):
+    """Re-rank a group's standing rows by the **FIFA 2026 World Cup** tiebreaker order and renumber `position`.
+
+    Order applied when teams are level on group points (Article 13):
+      1) group points
+      2) head-to-head AMONG the level teams: points, then goal difference, then goals scored
+      3) overall goal difference
+      4) overall goals scored
+      5) team conduct / fair-play card score   (only if card data is present; 0 otherwise)
+      6) FIFA-ranking stand-in (seeding composite) — deterministic last resort (lots is no longer used in 2026)
+
+    Head-to-head is RECURSIVE, exactly as FIFA/UEFA apply it: if it separates some of a level group, the teams
+    still tied are re-compared *from the top* using a head-to-head mini-table among only themselves.
+    `gmatches` = finished GROUP-stage results among these teams as (home, away, home_goals, away_goals)."""
+    rowby = {r.get("team"): r for r in rows if r.get("team")}
+    names = list(rowby.keys())
+    mlist = [(h, a, hg, ag) for (h, a, hg, ag) in gmatches
+             if h in rowby and a in rowby and hg is not None and ag is not None]
+
+    def _gd(r):
+        if r.get("goalDifference") is not None:
+            return _numf(r.get("goalDifference"))
+        return _numf(r.get("goalsFor", 0)) - _numf(r.get("goalsAgainst", 0))
+
+    def overall_key(t):
+        r = rowby[t]
+        return (-_gd(r), -_numf(r.get("goalsFor", 0)),
+                -_numf(r.get("conduct", 0)),       # higher conduct score = fewer cards = better (0 when no card data)
+                -_numf(r.get("composite", 0)),     # FIFA-ranking stand-in (seeding strength) — deterministic
+                str(t))
+
+    def h2h_stats(subset):
+        agg = {t: [0.0, 0.0, 0.0] for t in subset}   # [points, goal-diff, goals-for] among `subset` only
+        ss = set(subset)
+        for (h, a, hg, ag) in mlist:
+            if h in ss and a in ss:
+                agg[h][1] += hg - ag; agg[a][1] += ag - hg
+                agg[h][2] += hg;      agg[a][2] += ag
+                if hg > ag:   agg[h][0] += 3
+                elif ag > hg: agg[a][0] += 3
+                else:         agg[h][0] += 1; agg[a][0] += 1
+        return agg
+
+    def order_level(subset):
+        if len(subset) <= 1:
+            return list(subset)
+        agg = h2h_stats(subset)
+        def hkey(t): return (-agg[t][0], -agg[t][1], -agg[t][2])
+        ordered = sorted(subset, key=hkey)
+        out, i = [], 0
+        while i < len(ordered):
+            j = i + 1
+            while j < len(ordered) and hkey(ordered[j]) == hkey(ordered[i]):
+                j += 1
+            bucket = ordered[i:j]
+            if len(bucket) == 1:
+                out.append(bucket[0])
+            elif len(bucket) == len(subset):
+                out.extend(sorted(bucket, key=overall_key))   # head-to-head separated nobody -> overall criteria
+            else:
+                out.extend(order_level(bucket))                # separated some -> re-compare the rest from the top
+            i = j
+        return out
+
+    names.sort(key=lambda t: -_numf(rowby[t].get("points", 0)))
+    final, i = [], 0
+    while i < len(names):
+        j = i + 1
+        while j < len(names) and _numf(rowby[names[j]].get("points", 0)) == _numf(rowby[names[i]].get("points", 0)):
+            j += 1
+        final.extend(order_level(names[i:j]))
+        i = j
+    return [{**rowby[t], "position": pos} for pos, t in enumerate(final, 1)]
+
+
+def _third_place_table(group_tables):
+    """Live third-place race: take the team currently 3rd in each group and rank them across groups by the
+    FIFA 2026 third-placed criteria — points, overall goal difference, overall goals, conduct/cards, then
+    FIFA ranking. There is NO head-to-head step (third-placed teams are in different groups and never met).
+    Returns {slots, groups, started, table:[{team,group,owner,points,playedGames,goalDifference,goalsFor,rank,qualifying}]}.
+    `group_tables` is the already-ordered list of {group, table:[rows...]}; 12 groups -> best 8 advance."""
+    thirds = []
+    for g in group_tables:
+        tbl = g.get("table") or []
+        if len(tbl) >= 3:
+            thirds.append({**tbl[2], "group": g.get("group")})
+
+    def _gd(r):
+        if r.get("goalDifference") is not None:
+            return _numf(r.get("goalDifference"))
+        return _numf(r.get("goalsFor", 0)) - _numf(r.get("goalsAgainst", 0))
+
+    def _key(r):
+        return (-_numf(r.get("points", 0)), -_gd(r), -_numf(r.get("goalsFor", 0)),
+                -_numf(r.get("conduct", 0)), -_numf(r.get("composite", 0)), str(r.get("team")))
+
+    thirds.sort(key=_key)
+    ng = len(group_tables)
+    slots = max(0, min(ng, 32 - 2 * ng))             # 12 groups -> 8 advance; degrades sanely for other counts
+    started = any(_numf(r.get("playedGames", 0)) > 0 for r in thirds)
+    return {"slots": slots, "groups": ng, "started": started,
+            "table": [{"team": r.get("team"), "group": r.get("group"), "owner": r.get("owner", "—"),
+                       "points": r.get("points", 0), "playedGames": r.get("playedGames", 0),
+                       "goalDifference": _gd(r), "goalsFor": r.get("goalsFor", 0),
+                       "rank": i + 1, "qualifying": i < slots} for i, r in enumerate(thirds)]}
+
+
 def compute(teams_path="teams.json", draw_path="draw_result.json",
             results_path="results.json", out="tracker_data.json", default_mode="hybrid", wagers=None,
             clocks_path="match_clocks.json", group_mid_ts=None, composite_overrides=None):
@@ -511,6 +618,26 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                                     "runnerUp": (m["away"] if side == "HOME" else m["home"])}
             break
 
+    # --- group tables, re-ranked by the FIFA 2026 tiebreaker (head-to-head first), positions renumbered ---
+    _gmatch = {}
+    for _m in finished:
+        if _m.get("stage") == "GROUP_STAGE" and _m.get("homeScore") is not None and _m.get("awayScore") is not None:
+            _gmatch.setdefault(_m.get("group"), []).append(
+                (_m.get("home"), _m.get("away"), _m["homeScore"], _m["awayScore"]))
+    _groups_2026 = []
+    for s in results.get("standings", []):
+        if not (isinstance(s, dict) and isinstance(s.get("table"), list)):
+            continue
+        _rows = [{**r, "owner": owner.get(r.get("team"), "—"),
+                  "tier": teams.get(r.get("team"), {}).get("tier"),
+                  "composite": teams.get(r.get("team"), {}).get("composite", 0),
+                  "implied": teams.get(r.get("team"), {}).get("implied_prob", 0)}
+                 for r in s["table"] if isinstance(r, dict)]
+        _groups_2026.append({"group": s.get("group"),
+                             "table": _order_group_table(_rows, _gmatch.get(s.get("group"), []))})
+
+    third_place_race = _third_place_table(_groups_2026)
+
     data = {"updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "competition": results.get("competition", "WC"), "default_mode": default_mode,
             "scoring": {"points": SCORING, "survival": SURVIVAL_VALUE},
@@ -518,13 +645,8 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
             "leaderboards": {"points": board("points"), "survival": board("survival"), "hybrid": board("hybrid"), "fair": board("fair")},
             "champion": champ_board, "strength": strength_board, "stats": stats,
             "players": players_out,
-            "groups": [{"group": s.get("group"),
-                        "table": [{**r, "owner": owner.get(r.get("team"), "—"),
-                                   "tier": teams.get(r.get("team"), {}).get("tier"),
-                                   "composite": teams.get(r.get("team"), {}).get("composite", 0),
-                                   "implied": teams.get(r.get("team"), {}).get("implied_prob", 0)}
-                                  for r in s["table"] if isinstance(r, dict)]}
-                       for s in results.get("standings", []) if isinstance(s, dict) and isinstance(s.get("table"), list)],
+            "groups": _groups_2026,
+            "third_place_race": third_place_race,
             "fixtures": [{"utcDate": m.get("utcDate"), "stage": m.get("stage"), "group": m.get("group"),
                           "matchId": _mid(m),
                           "status": m.get("status"), "home": m.get("home"), "away": m.get("away"),
