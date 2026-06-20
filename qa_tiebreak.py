@@ -103,6 +103,14 @@ helim=SC._eliminated_teams(_st("D",hrows),hgms)
 ck("team that can't reach 3rd (lost H2H, max 3 pts) is flagged eliminated", "Haiti" in helim, sorted(helim))
 ck("elimination never over-fires (only Haiti out here)", helim=={"Haiti"}, sorted(helim))
 
+# Türkiye (TNT Sports, 20/06/2026): group leader already qualified, two rivals have beaten Türkiye head-to-head,
+# Türkiye can still reach 3 points but is still guaranteed bottom -> out. Different shape from Haiti above.
+trows=[{"team":"USA","points":6},{"team":"Australia","points":3},{"team":"Paraguay","points":3},{"team":"Turkiye","points":0}]
+tgms=[_m("D","USA","Australia",2,0), _m("D","USA","Paraguay",1,0), _m("D","Australia","Turkiye",2,0),
+      _m("D","Paraguay","Turkiye",1,0), _m("D","USA","Turkiye",None,None,"TIMED"), _m("D","Australia","Paraguay",None,None,"TIMED")]
+telim=SC._eliminated_teams(_st("D",trows),tgms)
+ck("Türkiye out though it can still reach 3 pts (can't pass qualified leader or win either head-to-head)", telim=={"Turkiye"}, sorted(telim))
+
 # soundness: teams level on points with games left and live paths are NOT eliminated
 srows=[{"team":"A","points":6},{"team":"B","points":3},{"team":"C","points":3},{"team":"D","points":3}]
 sgms=[_m("E","A","B",1,0),_m("E","A","C",1,0),_m("E","C","D",0,0),
@@ -114,6 +122,23 @@ erows=[{"team":"W","points":3},{"team":"X","points":0},{"team":"Y","points":1},{
 egms=[_m("F","W","X",1,0),_m("F","Y","Z",0,0),_m("F","W","Y",None,None,"TIMED"),
       _m("F","X","Z",None,None,"TIMED"),_m("F","W","Z",None,None,"TIMED"),_m("F","X","Y",None,None,"TIMED")]
 ck("early group stage: no team eliminated yet", SC._eliminated_teams(_st("F",erows),egms)==set())
+
+# ---- regression: blank `group` on not-yet-played fixtures must NOT cause false elimination ----
+def _mg(h,a,hg,ag,grp,status=FIN): return {"group":grp,"stage":"GROUP_STAGE","home":h,"away":a,"homeScore":hg,"awayScore":ag,"status":status}
+fstd={"group":"F","table":[{"team":"Netherlands","points":4},{"team":"Sweden","points":3},{"team":"Japan","points":1},{"team":"Tunisia","points":0}]}
+fgms=[_mg("Netherlands","Japan",1,1,"F"),_mg("Sweden","Tunisia",1,0,"F"),_mg("Netherlands","Sweden",2,1,"F"),
+      _mg("Netherlands","Tunisia",None,None,None,"TIMED"),_mg("Sweden","Japan",None,None,None,"TIMED"),_mg("Japan","Tunisia",None,None,None,"TIMED")]
+ck("bottom team with games left is NOT eliminated even when future fixtures have a blank group field", SC._eliminated_teams([fstd],fgms)==set(), sorted(SC._eliminated_teams([fstd],fgms)))
+
+# ---- regression: an out team stays out even with blank-group future fixtures ----
+tstd={"group":"D","table":[{"team":"USA","points":6},{"team":"Australia","points":3},{"team":"Paraguay","points":3},{"team":"Turkiye","points":0}]}
+tgms2=[_mg("USA","Australia",2,0,"D"),_mg("USA","Paraguay",1,0,"D"),_mg("Australia","Turkiye",2,0,"D"),_mg("Paraguay","Turkiye",1,0,"D"),
+       _mg("USA","Turkiye",None,None,None,"TIMED"),_mg("Australia","Paraguay",None,None,None,"TIMED")]
+ck("genuine elimination still fires when future fixtures have a blank group field", SC._eliminated_teams([tstd],tgms2)=={"Turkiye"}, sorted(SC._eliminated_teams([tstd],tgms2)))
+
+# ---- regression: incomplete fixture list (fewer than the full round-robin) -> never eliminate ----
+istd={"group":"G","table":[{"team":"P","points":6},{"team":"Q","points":0},{"team":"R","points":0},{"team":"Zz","points":0}]}
+ck("incomplete schedule never eliminates anyone (safe)", SC._eliminated_teams([istd],[_mg("P","Q",3,0,"G"),_mg("P","R",2,0,"G")])==set())
 
 # ================= free-points claim window =================
 t = tempfile.mkdtemp(prefix="wc26_tb_")

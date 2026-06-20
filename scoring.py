@@ -242,14 +242,18 @@ def _eliminated_teams(standings, group_matches):
         if len(teams) != 4:                      # only standard 4-team groups
             continue
         cur = {r.get("team"): _numf(r.get("points", 0)) for r in s["table"] if isinstance(r, dict) and r.get("team")}
-        gms = [m for m in group_matches if m.get("group") == s.get("group")]
+        # A group's games are simply the matches between two teams that are BOTH in this group's table — this is
+        # robust to the feed leaving the per-match `group` field blank on not-yet-played fixtures (the old
+        # `m.group == s.group` filter silently dropped those, which made the check think the table was already
+        # final and wrongly eliminated whichever team was currently bottom).
+        gms = [m for m in group_matches if m.get("home") in cur and m.get("away") in cur]
         played = [(m.get("home"), m.get("away"), m.get("homeScore"), m.get("awayScore"))
                   for m in gms if m.get("status") in FINAL_STATUSES
-                  and m.get("homeScore") is not None and m.get("awayScore") is not None
-                  and m.get("home") in cur and m.get("away") in cur]
-        remaining = [(m.get("home"), m.get("away")) for m in gms
-                     if m.get("status") not in FINAL_STATUSES and m.get("home") in cur and m.get("away") in cur]
-        if len(remaining) > 8:                   # safety valve; never happens for a 4-team group (max 6)
+                  and m.get("homeScore") is not None and m.get("awayScore") is not None]
+        remaining = [(m.get("home"), m.get("away")) for m in gms if m.get("status") not in FINAL_STATUSES]
+        # Safety: only judge elimination when the full group fixture list is visible (a 4-team group is a
+        # 6-game round-robin). If fewer than that are present, the schedule is incomplete -> never eliminate.
+        if len(played) + len(remaining) < (len(teams) * (len(teams) - 1)) // 2 or len(remaining) > 8:
             continue
         for T in teams:
             reachable = False
