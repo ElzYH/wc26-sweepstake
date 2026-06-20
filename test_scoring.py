@@ -163,6 +163,16 @@ def run():
     check("betting ON (wagers=[]) -> upcoming fixtures get odds (so the Bets tab isn't empty)",
           len(on_odds) >= 1, str(len(on_odds)))
 
+    # --- regression: the "No bets" leaderboard exists, mirrors Points when no bets are placed,
+    #     and is never moved by betting being switched on. ---
+    nb_off = {r["name"]: r["score"] for r in (d_off["leaderboards"].get("points_no_bets") or [])}
+    nb_on = {r["name"]: r["score"] for r in (d_on["leaderboards"].get("points_no_bets") or [])}
+    pts_off = {r["name"]: r["score"] for r in d_off["leaderboards"]["points"]}
+    check("'points_no_bets' leaderboard is present", len(nb_off) == len(pts_off) and len(nb_off) > 0,
+          f"nobets={len(nb_off)} points={len(pts_off)}")
+    check("No-bets == Points when betting is off", nb_off == pts_off, f"{nb_off} vs {pts_off}")
+    check("No-bets board unchanged whether betting is on or off", nb_off == nb_on, f"{nb_off} vs {nb_on}")
+
     print()
     if FAILS:
         print(f"FAILED ({len(FAILS)}): " + ", ".join(FAILS))

@@ -473,6 +473,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
         teams_out.sort(key=lambda x: -(x["points"] + x["survival"]))
         tot_p = sum(x["points"] for x in teams_out); tot_s = sum(x["survival"] for x in teams_out)
         players_out.append({"name": p["name"], "points": tot_p, "survival": tot_s, "hybrid": tot_p + tot_s,
+                            "points_no_bets": tot_p,   # match points only — never touched by the betting adjustment below
                             "live": sum(x["live"] for x in teams_out),
                             "alive_teams": sum(1 for x in teams_out if x["status"] == "alive"),
                             "total_teams": len(teams_out), "teams": teams_out})
@@ -734,7 +735,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
             "competition": results.get("competition", "WC"), "default_mode": default_mode,
             "scoring": {"points": SCORING, "survival": SURVIVAL_VALUE},
             "champion_decided": champion_decided,
-            "leaderboards": {"points": board("points"), "survival": board("survival"), "hybrid": board("hybrid"), "fair": board("fair")},
+            "leaderboards": {"points": board("points"), "survival": board("survival"), "hybrid": board("hybrid"), "fair": board("fair"), "points_no_bets": board("points_no_bets")},
             "champion": champ_board, "strength": strength_board, "stats": stats,
             "players": players_out,
             "groups": _groups_2026,

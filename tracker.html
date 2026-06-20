@@ -520,6 +520,7 @@
     <div class="winrow" id="winrow"></div>
     <div class="modesel" id="modesel">
       <button data-m="points">Points</button>
+      <button data-m="points_no_bets">No bets</button>
       <button data-m="survival">Survival</button>
       <button data-m="hybrid">Both</button>
       <button data-m="fair">Fair</button>
@@ -1435,7 +1436,8 @@ function render(d){
   // leaderboard for the active mode
   MODE=d.default_mode||'hybrid';
   const sm=STATUS.scoring_mode||MODE||'hybrid';
-  const allowed = sm==='points' ? ['points','fair'] : sm==='survival' ? ['survival'] : ['points','survival','hybrid','fair'];
+  const allowed = (sm==='points' ? ['points','fair'] : sm==='survival' ? ['survival'] : ['points','survival','hybrid','fair']).slice();
+  if(STATUS.wagering_enabled && allowed.includes('points')) allowed.push('points_no_bets');  // only meaningful (differs from Points) when bets are on
   let lbm=LBMODE||MODE;
   if(!allowed.includes(lbm)) lbm = allowed.includes(sm)?sm:allowed[0];
   LBMODE=lbm;
@@ -1447,7 +1449,8 @@ function render(d){
     points:"<b>Points</b> — teams earn points for goals, wins (a penalty-shootout win counts), clean sheets, and escalating bonuses for each knockout round. Reaching the final and <b>winning the World Cup are worth by far the most</b>, but early goals and wins still count even for teams knocked out early.",
     survival:"<b>Survival</b> — ranked on how many of your teams are still alive and how far they go. Rewards backing teams that last.",
     hybrid:"<b>Both</b> — Points and Survival added into one number. A single winner: the squad that racks up points <b>and</b> survives deep.",
-    fair:"<b>Fair</b> — points scored <b>above or below what your squad was expected to score</b> (from the group + run model). Levels out lucky vs tough draws: beat your number to climb, no matter who you drew. Kicks in once games start."
+    fair:"<b>Fair</b> — points scored <b>above or below what your squad was expected to score</b> (from the group + run model). Levels out lucky vs tough draws: beat your number to climb, no matter who you drew. Kicks in once games start.",
+    points_no_bets:"<b>No bets</b> — the same team points as <b>Points</b>, but with all betting profit and loss stripped out. Pure team performance: goals, wins, clean sheets and knockout bonuses only. Use it to see the table as it would stand if no one had bet."
   };
   document.getElementById('modeCap').innerHTML=CAP[lbm]||'';
   const board=(d.leaderboards&&d.leaderboards[lbm])||[];
