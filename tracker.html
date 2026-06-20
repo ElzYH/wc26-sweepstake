@@ -1507,7 +1507,7 @@ function render(d){
   if(tpEl){
     if(tpr && tpr.table && tpr.table.length){
       tpEl.innerHTML = `<table><caption>3rd-place race — best ${tpr.slots} of ${tpr.table.length} reach the Round of 32</caption>
-        <tr><th>#</th><th>Team</th><th>Grp</th><th>Owner</th><th>Pld</th><th>GD</th><th>Pts</th><th></th></tr>
+        <tr><th>#</th><th>Team</th><th>Grp</th><th>Owner</th><th>Pld</th><th>GD</th><th>Pts</th><th>Q?</th></tr>
         ${tpr.table.map((r,i)=>`<tr class="${r.qualifying?'qual':'tpout'}">
           <td class="n">${r.rank}</td><td>${flag(r.team)}${esc(r.team)}</td>
           <td class="n">${esc(String(r.group).replace(/^group[_ ]?/i,''))}</td>
@@ -1515,10 +1515,10 @@ function render(d){
           <td class="n">${r.playedGames}</td>
           <td class="n">${r.goalDifference>0?'+':''}${r.goalDifference}</td>
           <td class="n"><b>${r.points}</b></td>
-          <td class="n" style="font-size:11px;font-weight:700;${r.qualifying?'color:var(--gold)':'color:var(--muted)'}">${r.qualifying?'IN':'OUT'}</td>
+          <td class="n" style="font-size:11px;font-weight:700;${r.qualifying?'color:var(--gold)':'color:var(--muted)'}" title="${r.qualifying?'inside the top 8 right now':'below the cut-off right now — NOT eliminated, can still climb'}">${r.qualifying?'IN':'▼'}</td>
         </tr>${i+1===tpr.slots && tpr.table.length>tpr.slots?'<tr class="tpcut"><td colspan="8"></td></tr>':''}`).join('')}
       </table>
-      <p style="font-size:11.5px;color:var(--muted);margin:8px 2px 0">The team finishing 3rd in each group, ranked by points → goal difference → goals scored (no head-to-head — they're in different groups, so they never met). The dashed line is the qualification cut-off.${tpr.started?'':' Provisional until group games are played.'} Note: the final tie-breaks are fair-play/cards then FIFA ranking — card data isn\\'t in the feed, so team seeding stands in for ranking.</p>`;
+      <p style="font-size:11.5px;color:var(--muted);margin:8px 2px 0">Live snapshot of the team currently 3rd in each group, ranked by points → goal difference → goals scored — no head-to-head, since these teams are in different groups and never met. The dashed line is the top-8 cut-off (▼ = below it). Positions move as games are played, and teams have games in hand (see Pld) — a team below the line is still in the tournament. Only a team that can no longer reach 3rd in its own group is actually eliminated. Final tie-breaks (fair-play cards, then FIFA ranking) fall back to team seeding, since card data is not in the feed.</p>`;
     } else tpEl.innerHTML='';
   }
   // fixtures grouped by day
