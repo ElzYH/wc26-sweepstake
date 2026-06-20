@@ -90,6 +90,31 @@ ck("ranks are 1..N", [r["rank"] for r in race["table"]] == [1, 2, 3, 4], race["t
 ck("qualifying flag matches the slot cut-off", [r["qualifying"] for r in race["table"]] == [r["rank"] <= race["slots"] for r in race["table"]], race)
 ck("started flag true once any third-placed team has played", race["started"] is True, race["started"])
 
+# ================= mid-group mathematical elimination =================
+FIN="FINISHED"
+def _st(group, rows): return [{"group":group,"table":rows}]
+def _m(group,h,a,hg,ag,status=FIN): return {"group":group,"stage":"GROUP_STAGE","home":h,"away":a,"homeScore":hg,"awayScore":ag,"status":status}
+
+# Haiti-like: lost both games (0 pts, one to play), lost the head-to-head to the 3rd-placed team -> can't reach 3rd
+hrows=[{"team":"Australia","points":6},{"team":"Paraguay","points":4},{"team":"Scotland","points":3},{"team":"Haiti","points":0}]
+hgms=[_m("D","Australia","Haiti",2,0), _m("D","Scotland","Haiti",1,0), _m("D","Australia","Paraguay",1,1),
+      _m("D","Paraguay","Scotland",2,1), _m("D","Australia","Scotland",2,0), _m("D","Paraguay","Haiti",None,None,"TIMED")]
+helim=SC._eliminated_teams(_st("D",hrows),hgms)
+ck("team that can't reach 3rd (lost H2H, max 3 pts) is flagged eliminated", "Haiti" in helim, sorted(helim))
+ck("elimination never over-fires (only Haiti out here)", helim=={"Haiti"}, sorted(helim))
+
+# soundness: teams level on points with games left and live paths are NOT eliminated
+srows=[{"team":"A","points":6},{"team":"B","points":3},{"team":"C","points":3},{"team":"D","points":3}]
+sgms=[_m("E","A","B",1,0),_m("E","A","C",1,0),_m("E","C","D",0,0),
+      _m("E","B","C",None,None,"TIMED"),_m("E","A","D",None,None,"TIMED"),_m("E","B","D",None,None,"TIMED")]
+ck("no team with a remaining path to 3rd is ever eliminated (soundness)", SC._eliminated_teams(_st("E",srows),sgms)==set())
+
+# early stage: one game played -> nobody out
+erows=[{"team":"W","points":3},{"team":"X","points":0},{"team":"Y","points":1},{"team":"Z","points":1}]
+egms=[_m("F","W","X",1,0),_m("F","Y","Z",0,0),_m("F","W","Y",None,None,"TIMED"),
+      _m("F","X","Z",None,None,"TIMED"),_m("F","W","Z",None,None,"TIMED"),_m("F","X","Y",None,None,"TIMED")]
+ck("early group stage: no team eliminated yet", SC._eliminated_teams(_st("F",erows),egms)==set())
+
 # ================= free-points claim window =================
 t = tempfile.mkdtemp(prefix="wc26_tb_")
 os.environ["WC26_DATA"] = t

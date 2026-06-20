@@ -220,6 +220,68 @@ def _third_place_table(group_tables):
                        "rank": i + 1, "qualifying": i < slots} for i, r in enumerate(thirds)]}
 
 
+def _eliminated_teams(standings, group_matches):
+    """Teams that can no longer mathematically reach 3rd place in their group, so they're out (4th never advances,
+    and the best-8 third-placed race is only open to teams that can still finish 3rd). This matches how a team like
+    Haiti/Turkey is declared out before its final game.
+
+    SOUND by design — it never flags a team that still has any path to 3rd:
+      * it enumerates every remaining group result (win/draw/loss for each unplayed game),
+      * it respects the 2026 head-to-head tiebreaker on points ties (a team that has lost the head-to-head and
+        can't replay it is treated as behind when level on points), and
+      * any tie it can't resolve from head-to-head points alone is resolved IN FAVOUR of the team being tested,
+        so goal-difference-only eliminations are conservatively treated as "still alive".
+    `standings` supplies the per-group team list + current points; `group_matches` supplies played results
+    (for head-to-head) and the fixtures still to play."""
+    import itertools
+    out = set()
+    for s in standings:
+        if not (isinstance(s, dict) and isinstance(s.get("table"), list)):
+            continue
+        teams = [r.get("team") for r in s["table"] if isinstance(r, dict) and r.get("team")]
+        if len(teams) != 4:                      # only standard 4-team groups
+            continue
+        cur = {r.get("team"): _numf(r.get("points", 0)) for r in s["table"] if isinstance(r, dict) and r.get("team")}
+        gms = [m for m in group_matches if m.get("group") == s.get("group")]
+        played = [(m.get("home"), m.get("away"), m.get("homeScore"), m.get("awayScore"))
+                  for m in gms if m.get("status") in FINAL_STATUSES
+                  and m.get("homeScore") is not None and m.get("awayScore") is not None
+                  and m.get("home") in cur and m.get("away") in cur]
+        remaining = [(m.get("home"), m.get("away")) for m in gms
+                     if m.get("status") not in FINAL_STATUSES and m.get("home") in cur and m.get("away") in cur]
+        if len(remaining) > 8:                   # safety valve; never happens for a 4-team group (max 6)
+            continue
+        for T in teams:
+            reachable = False
+            for combo in itertools.product((0, 1, 2), repeat=len(remaining)):   # 0 home win, 1 draw, 2 away win
+                fp = dict(cur)
+                h2h = {}
+                for (h, a, hg, ag) in played:
+                    h2h[(h, a)] = (3, 0) if hg > ag else ((0, 3) if ag > hg else (1, 1))
+                for gi, (h, a) in enumerate(remaining):
+                    o = combo[gi]
+                    if o == 0:   fp[h] += 3; h2h[(h, a)] = (3, 0)
+                    elif o == 2: fp[a] += 3; h2h[(h, a)] = (0, 3)
+                    else:        fp[h] += 1; fp[a] += 1; h2h[(h, a)] = (1, 1)
+                tp = fp[T]
+                above = sum(1 for x in teams if x != T and fp[x] > tp)
+                tied = [x for x in teams if x != T and fp[x] == tp]
+                tied_above = 0
+                if tied:
+                    grp = set(tied + [T])
+                    hp = {x: 0 for x in grp}
+                    for (h, a), (hs, as_) in h2h.items():
+                        if h in grp and a in grp:
+                            hp[h] += hs; hp[a] += as_
+                    tied_above = sum(1 for x in tied if hp[x] > hp[T])    # strictly ahead on head-to-head pts only
+                if above + tied_above <= 2:        # T is in the top 3 (not last) in at least one scenario
+                    reachable = True
+                    break
+            if not reachable:
+                out.add(T)
+    return out
+
+
 def compute(teams_path="teams.json", draw_path="draw_result.json",
             results_path="results.json", out="tracker_data.json", default_mode="hybrid", wagers=None,
             clocks_path="match_clocks.json", group_mid_ts=None, composite_overrides=None):
@@ -294,6 +356,9 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
     ko_matches = [m for m in matches if m["stage"] != "GROUP_STAGE"]
     ko_teams = {m["home"] for m in ko_matches} | {m["away"] for m in ko_matches}
     ko_started = any(m["status"] in FINAL_STATUSES + ("IN_PLAY", "PAUSED") for m in ko_matches)
+    # teams mathematically out of the group stage (can't reach 3rd) — flips them to "out" before the knockouts
+    eliminated_group = _eliminated_teams(results.get("standings", []),
+                                         [m for m in matches if m.get("stage") == "GROUP_STAGE"]) if not ko_started else set()
 
     pts = defaultdict(int); record = defaultdict(lambda: [0, 0, 0])
     gf = defaultdict(int); ga = defaultdict(int); cs = defaultdict(int)
@@ -368,6 +433,8 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
             return "alive", furthest_stage(team)
         if ko_started:
             return "out", "GROUP_STAGE"
+        if team in eliminated_group:
+            return "out", "GROUP_STAGE"          # can no longer reach 3rd in its group -> out
         return "alive", "GROUP_STAGE"
 
     players_out = []
@@ -633,8 +700,10 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                   "composite": teams.get(r.get("team"), {}).get("composite", 0),
                   "implied": teams.get(r.get("team"), {}).get("implied_prob", 0)}
                  for r in s["table"] if isinstance(r, dict)]
-        _groups_2026.append({"group": s.get("group"),
-                             "table": _order_group_table(_rows, _gmatch.get(s.get("group"), []))})
+        _ordered = _order_group_table(_rows, _gmatch.get(s.get("group"), []))
+        for _r in _ordered:
+            _r["eliminated"] = _r.get("team") in eliminated_group
+        _groups_2026.append({"group": s.get("group"), "table": _ordered})
 
     third_place_race = _third_place_table(_groups_2026)
 

@@ -1497,8 +1497,8 @@ function render(d){
   gb.innerHTML = d.groups.length? d.groups.map(g=>`
     <table><caption>${/^group/i.test(g.group)?g.group:"Group "+g.group}</caption>
       <tr><th>#</th><th>Team</th><th>Owner</th><th>Pld</th><th>GD</th><th>Pts</th></tr>
-      ${g.table.map(r=>`<tr class="${r.position<=2?'qual':''}">
-        <td class="n">${r.position}</td><td>${flag(r.team)}${esc(r.team)}</td><td class="owner">${esc(r.owner)}</td>
+      ${g.table.map(r=>`<tr class="${r.eliminated?'tpout':(r.position<=2?'qual':'')}">
+        <td class="n">${r.position}</td><td>${flag(r.team)}${r.eliminated?'<s>'+esc(r.team)+'</s> <span style="font-size:10px;font-weight:700;color:var(--muted)">OUT</span>':esc(r.team)}</td><td class="owner">${esc(r.owner)}</td>
         <td class="n">${r.playedGames}</td><td class="n">${r.goalDifference>0?'+':''}${r.goalDifference}</td>
         <td class="n"><b>${r.points}</b></td></tr>`).join('')}
     </table>`).join('') : '<div class="empty">Group tables appear once the group stage kicks off (11 June).</div>';
