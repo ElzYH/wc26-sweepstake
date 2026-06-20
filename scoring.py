@@ -113,6 +113,24 @@ def _numf(v, default=0.0):
         return default
 
 
+def _conduct_of(t):
+    """FIFA 2026 Team Conduct Score (fair-play tiebreaker), closer to zero is better. Two ways to supply it on a
+    team's record in teams.json, since the free feed carries no card data:
+      * a ready-made score:   "conduct": -3                      (organiser reads the official TCS off FIFA/broadcast)
+      * a card breakdown:     "cards": {"yellow": 4, "second_yellow_red": 0, "straight_red": 2, "yellow_then_red": 0}
+        scored per FIFA's table — yellow -1, red from two yellows -3, straight red -4, yellow then straight red -5.
+    Returns 0 when nothing is provided (so the ranking simply falls through to the FIFA-ranking proxy, as before)."""
+    if not isinstance(t, dict):
+        return 0
+    if t.get("conduct") is not None:
+        return _numf(t.get("conduct"))
+    c = t.get("cards")
+    if isinstance(c, dict):
+        return -(1 * _numf(c.get("yellow", 0)) + 3 * _numf(c.get("second_yellow_red", 0))
+                 + 4 * _numf(c.get("straight_red", 0)) + 5 * _numf(c.get("yellow_then_red", 0)))
+    return 0
+
+
 def _order_group_table(rows, gmatches):
     """Re-rank a group's standing rows by the **FIFA 2026 World Cup** tiebreaker order and renumber `position`.
 
@@ -702,6 +720,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
         _rows = [{**r, "owner": owner.get(r.get("team"), "—"),
                   "tier": teams.get(r.get("team"), {}).get("tier"),
                   "composite": teams.get(r.get("team"), {}).get("composite", 0),
+                  "conduct": _conduct_of(teams.get(r.get("team"), {})),
                   "implied": teams.get(r.get("team"), {}).get("implied_prob", 0)}
                  for r in s["table"] if isinstance(r, dict)]
         _ordered = _order_group_table(_rows, _gmatch.get(s.get("group"), []))

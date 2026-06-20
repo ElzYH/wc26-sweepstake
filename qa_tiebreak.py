@@ -140,6 +140,21 @@ ck("genuine elimination still fires when future fixtures have a blank group fiel
 istd={"group":"G","table":[{"team":"P","points":6},{"team":"Q","points":0},{"team":"R","points":0},{"team":"Zz","points":0}]}
 ck("incomplete schedule never eliminates anyone (safe)", SC._eliminated_teams([istd],[_mg("P","Q",3,0,"G"),_mg("P","R",2,0,"G")])==set())
 
+# ================= FIFA 2026 Team Conduct Score (fair-play tiebreaker) =================
+ck("TCS formula: South Africa example (4 yellow + 2 straight red) = -12", SC._conduct_of({"cards":{"yellow":4,"straight_red":2}})==-12, SC._conduct_of({"cards":{"yellow":4,"straight_red":2}}))
+ck("TCS formula: yellow -1, two-yellow red -3, yellow+red -5 sum correctly", SC._conduct_of({"cards":{"yellow":1,"second_yellow_red":1,"yellow_then_red":1}})==-9)
+ck("TCS: a ready-made conduct value is used directly", SC._conduct_of({"conduct":-4})==-4)
+ck("TCS: no card data -> 0 (falls through to the ranking proxy, unchanged behaviour)", SC._conduct_of({})==0 and SC._conduct_of(None)==0)
+# conduct breaks an otherwise-dead tie and overrides alphabetical/seeding
+crows=[{"team":"A","points":4,"goalsFor":3,"goalsAgainst":1,"goalDifference":2,"composite":50,"conduct":-5},
+       {"team":"B","points":4,"goalsFor":3,"goalsAgainst":1,"goalDifference":2,"composite":50,"conduct":-1},
+       {"team":"C","points":0,"goalsFor":0,"goalsAgainst":4,"goalDifference":-4,"composite":40,"conduct":0}]
+cgm=[("A","B",1,1),("A","C",2,0),("B","C",2,0)]
+ck("group sort: cleaner fair-play record wins a points/H2H/GD/goals dead-heat", [r["team"] for r in SC._order_group_table(crows,cgm)][:2]==["B","A"], [r["team"] for r in SC._order_group_table(crows,cgm)])
+cgt=[{"group":"X","table":[{"team":"x1","points":9},{"team":"x2","points":6},{"team":"Worse","points":3,"goalDifference":0,"goalsFor":2,"goalsAgainst":2,"playedGames":3,"composite":50,"conduct":-6}]},
+     {"group":"Y","table":[{"team":"y1","points":9},{"team":"y2","points":6},{"team":"Better","points":3,"goalDifference":0,"goalsFor":2,"goalsAgainst":2,"playedGames":3,"composite":50,"conduct":-1}]}]
+ck("third-place race: fair-play record breaks a tie between level third-placed teams", [r["team"] for r in SC._third_place_table(cgt)["table"]]==["Better","Worse"])
+
 # ================= free-points claim window =================
 t = tempfile.mkdtemp(prefix="wc26_tb_")
 os.environ["WC26_DATA"] = t
