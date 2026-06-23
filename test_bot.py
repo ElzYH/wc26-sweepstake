@@ -571,7 +571,7 @@ _dms.clear(); server._bot_dm_player("Erol", "ping", match_id="MID1")
 if _dms:
     fails.append(("mute", "muted game still DM'd: %r" % _dms))
 _dms.clear(); server._bot_dm_player("Erol", "ping", match_id="MID2")
-if ("900", "ping") not in _dms:
+if not any(u == "900" and "ping" in t for u, t in _dms):
     fails.append(("mute-other", "a non-muted game was not DM'd: %r" % _dms))
 # the /mute + /unmute commands resolve a game and store/remove it
 _cfgn = server.load_config(); _cfgn.pop("discord_mutes", None); server.save_config(_cfgn)

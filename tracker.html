@@ -1097,6 +1097,16 @@ function alertToggleHTML(id, on, label){
   return '<button class="atog" id="'+id+'" data-on="'+(on?'1':'0')+'" style="border:none;cursor:pointer;border-radius:999px;padding:5px 12px;font-weight:700;font-size:12.5px;'
     +(on?'background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1205':'background:#21262d;color:var(--muted)')+'">'+label+'</button>';
 }
+let NOTIFYFEEDTS=0;
+async function refreshNotifyFeed(force){
+  const fe=document.getElementById('notifFeed'); if(!fe||!NOTIFYPLAYER) return;
+  const now=Date.now(); if(!force && now-NOTIFYFEEDTS<12000) return; NOTIFYFEEDTS=now;
+  try{ const fj=await fetch('/api/feed?player='+encodeURIComponent(NOTIFYPLAYER)).then(function(r){return r.json();});
+    const evs=(fj.events||[]);
+    const fh=evs.length?evs.map(function(e){ const t=e.ts?new Date(e.ts*1000).toLocaleString(undefined,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''; return '<div style="padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;line-height:1.45">'+esc(e.text)+'<div style="color:var(--muted);font-size:11px">'+esc(t)+(e.player==='*'?' \u00b7 everyone':'')+'</div></div>'; }).join(''):'<div class="empty">No alerts yet \u2014 match events and your bet results will show here.</div>';
+    const cur=document.getElementById('notifFeed'); if(cur && cur.innerHTML!==fh) cur.innerHTML=fh;
+  }catch(e){}
+}
 async function renderNotifyTab(){
   const el=document.getElementById('notifyBody'); if(!el) return;
   if(!STATUS.wagering_enabled && !STATUS.discord_oauth){ el.innerHTML='<div class="empty">Alerts aren\'t set up for this sweepstake.</div>'; return; }
@@ -1142,6 +1152,11 @@ async function renderNotifyTab(){
     +'<div class="modesel" id="notifRoute">'
     +['both','dm','feed'].map(function(r){return '<button data-r="'+r+'"'+((st.route||'both')===r?' class="on"':'')+'>'+({both:'Both',dm:'Discord DM',feed:'In-app only'}[r])+'</button>';}).join('')
     +'</div><div style="color:var(--muted);font-size:11.5px;margin-top:6px">In-app alerts show in your feed below \u2014 no Discord needed. Both sends a DM and logs it here.</div></div>';
+  html+='<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px">'
+    +'<div style="font-size:13.5px;margin-bottom:6px"><b>Delay my alerts</b> <span style="color:var(--muted);font-weight:400">(your own spoiler control)</span></div>'
+    +'<select id="myDelaySel" style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 8px"><option value="0">Real-time</option><option value="30">Hold 30 sec</option><option value="60">Hold 1 min</option><option value="120">Hold 2 min</option><option value="300">Hold 5 min</option><option value="600">Hold 10 min</option><option value="900">Hold 15 min</option></select>'
+    +'<div style="color:var(--muted);font-size:11.5px;margin-top:6px">Holds your own DMs and in-app alerts this long, so you are not spoiled when watching on a delay \u2014 each still shows when it actually happened.</div>'
+    +'<div class="hint" id="myDelayMsg" style="color:var(--muted);font-size:11.5px;margin-top:4px"></div></div>';
   if(('serviceWorker' in navigator)&&('PushManager' in window)&&STATUS.push_enabled&&STATUS.vapid_public){
     html+='<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px">'
       +'<div style="font-size:13.5px;margin-bottom:6px"><b>Phone push (this device)</b><div style="color:var(--muted);font-size:12px">Pop-up alerts on this phone or laptop, even when the app is closed \u2014 separate from Discord.</div></div>'
@@ -1162,8 +1177,12 @@ async function renderNotifyTab(){
   }).join('');
   html+='<div style="margin-top:14px"><div style="font-size:11.5px;color:var(--muted);font-weight:700;letter-spacing:.06em;margin:4px 0 6px">YOUR ALERT FEED</div><div id="notifFeed"><div class="empty">Loading\u2026</div></div></div>';
   el.innerHTML=html; wireWho(); NOTIFYBUSY=false;
+  { const ds=document.getElementById('myDelaySel'); if(ds){ ds.value=String(st.delay||0);
+      ds.onchange=async function(){ const mm=document.getElementById('myDelayMsg'); if(mm) mm.textContent='Saving\u2026'; const v=parseInt(ds.value,10)||0;
+        try{ const r=await fetch('/api/my_delay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:NOTIFYPLAYER,pin:pin,sec:v})}).then(function(x){return x.json();});
+          if(mm) mm.textContent=r.ok?(v?('Your alerts held '+(v<60?(v+' sec'):(v/60+' min'))+'.'):'Your alerts are real-time.'):(r.error||'Could not save.'); }catch(e){ if(mm) mm.textContent='Could not save.'; } }; } }
   document.querySelectorAll('#notifRoute button').forEach(function(b){ b.onclick=async function(){ document.querySelectorAll('#notifRoute button').forEach(function(x){x.classList.remove('on');}); b.classList.add('on'); try{ await fetch('/api/notif_route',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:NOTIFYPLAYER,pin:pin,route:b.dataset.r})}); }catch(e){} }; });
-  (async function(){ try{ const fj=await fetch('/api/feed?player='+encodeURIComponent(NOTIFYPLAYER)).then(function(r){return r.json();}); const fe=document.getElementById('notifFeed'); if(!fe) return; const evs=(fj.events||[]); fe.innerHTML=evs.length?evs.map(function(e){ const t=e.ts?new Date(e.ts*1000).toLocaleString(undefined,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''; return '<div style="padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;line-height:1.45">'+esc(e.text)+'<div style="color:var(--muted);font-size:11px">'+esc(t)+(e.player==='*'?' \u00b7 everyone':'')+'</div></div>'; }).join(''):'<div class="empty">No alerts yet \u2014 match events and your bet results will show here.</div>'; }catch(e){} })();
+  refreshNotifyFeed(true);
   { const po=document.getElementById('notifPushOn'), pt=document.getElementById('notifPushTest'), pm=document.getElementById('notifPushMsg');
     if(po) po.onclick=async function(){ if(pm) pm.textContent='Turning on\u2026'; const ok=await pushSubscribe(NOTIFYPLAYER); if(pm) pm.textContent=ok?'Push is on for this device.':'Could not turn on push here \u2014 allow notifications and try again.'; };
     if(pt) pt.onclick=async function(){ if(pm) pm.textContent='Sending\u2026'; try{ const j=await fetch('/api/push_test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:NOTIFYPLAYER})}).then(function(r){return r.json();}); if(pm) pm.textContent=(j.ok&&!j.failed)?'Sent \u2014 check your notifications.':(j.ok?('Sent to '+j.sent+' device(s), '+j.failed+' failed.'):'Turn on push here first.'); }catch(e){ if(pm) pm.textContent='Could not send.'; } }; }
@@ -1469,7 +1488,7 @@ function render(d){
   // Alerts tab: available whenever Discord notifications are possible (betting on, or Discord login configured)
   { const at=document.getElementById('notifyTab');
     if(at){ if(STATUS.wagering_enabled||STATUS.discord_oauth){ at.style.display='';
-        if(document.getElementById('notify').classList.contains('on') && !NOTIFYBUSY) renderNotifyTab(); }
+        if(document.getElementById('notify').classList.contains('on')){ if(!document.getElementById('notifyWho') && !NOTIFYBUSY) renderNotifyTab(); else refreshNotifyFeed(); } }
       else at.style.display='none'; } }
   // leaderboard for the active mode
   MODE=d.default_mode||'points';

@@ -610,15 +610,28 @@ def _uids_for_player(player):
 
 
 def _bot_dm_player(player, text, match_id=None):
-    """DM every Discord account known to be this player (default-on: betting-linked or /notifyme'd), unless they
-    turned DMs off or muted this specific game. If a DM can't be delivered AND the user explicitly opted in via
-    /notifyme, fall back to a channel @mention so an opt-in alert is never silently lost (betting-link-only users
-    are skipped silently, so the channel never gets noisier just because more people connected). Best-effort."""
+    """Entry for a personal alert: master-gated, time-stamped for game events (so a delayed alert still shows when
+    it actually happened), and held by the PLAYER's own spoiler delay when they set one. Otherwise delivers now."""
     try:
         if not player or player in ("—", "-"):
             return 0
         if not _notif_on():
             return 0
+        if match_id:
+            text = _stamp(text, match_id)        # show when it happened — on the DM and the in-app feed
+        d = _personal_delay_sec(player)
+        if d > 0:
+            _enqueue_notif(text, time.time() + d, kind="personal", player=player, mid=match_id)
+            return 0
+        return _deliver_personal(player, text, match_id)
+    except Exception as e:
+        log("bot dm player failed:", e)
+        return 0
+
+def _deliver_personal(player, text, match_id=None):
+    """Deliver a personal alert now: in-app feed per the player's route, then DM every linked account (unless they
+    turned DMs off or muted this game), with a channel @mention fallback for explicit /notifyme opt-ins. Best-effort."""
+    try:
         route = _player_route(player)
         if route in ("feed", "both"):
             _feed_add(player, text)
@@ -643,7 +656,7 @@ def _bot_dm_player(player, text, match_id=None):
             _mention_uids(failed, text)
         return sent
     except Exception as e:
-        log("bot dm player failed:", e)
+        log("deliver personal failed:", e)
         return 0
 
 
@@ -655,6 +668,15 @@ def _game_channel_on():
 
 # ---------------- notification controls: master switch, spoiler delay, time/minute stamps ----------------
 NOTIF_QUEUE_FILE = "notif_queue.json"      # admin spoiler-delay hold queue for communal channel posts
+_flush_lock = threading.Lock()
+_last_flush = [0.0]
+
+def _maybe_flush():
+    """Flush the hold queue, throttled, so delayed posts release promptly between recomputes. Cheap; never raises."""
+    now = time.time()
+    if now - _last_flush[0] >= 8:
+        _last_flush[0] = now
+        _flush_notif_queue()
 
 def _notif_on():
     """MASTER kill switch for ALL alert notifications (channel + DMs + @mentions + Telegram + web push). Default ON.
@@ -697,34 +719,44 @@ def _stamp(text, mid=None):
     tag = " \u00b7 ".join([x for x in (_now_tag(), (_match_minute(mid) if mid else "")) if x])
     return ("[%s] %s" % (tag, text)) if tag else text
 
-def _enqueue_notif(text, due):
+def _enqueue_notif(text, due, kind="channel", player=None, mid=None):
     try:
-        q = []
-        if os.path.exists(NOTIF_QUEUE_FILE):
-            with open(NOTIF_QUEUE_FILE) as f:
-                q = json.load(f) or []
-        q.append({"due": float(due), "text": str(text)})
-        with open(NOTIF_QUEUE_FILE, "w") as f:
-            json.dump(q[-500:], f)
+        with _flush_lock:
+            q = []
+            if os.path.exists(NOTIF_QUEUE_FILE):
+                with open(NOTIF_QUEUE_FILE) as f:
+                    q = json.load(f) or []
+            q.append({"due": float(due), "text": str(text), "kind": kind, "player": player, "mid": mid})
+            with open(NOTIF_QUEUE_FILE, "w") as f:
+                json.dump(q[-500:], f)
     except Exception as e:
         log("notif enqueue failed:", e)
 
 def _flush_notif_queue(force=False):
-    """Release queued channel posts whose spoiler hold has elapsed. Called from the recompute loop. Never raises."""
+    """Release queued alerts whose hold has elapsed: channel posts via the channel, personal alerts via DM+feed.
+    The file is updated under a lock (so concurrent callers cannot double-send); the actual sends happen outside the
+    lock (network can be slow). Never raises."""
     try:
-        if not os.path.exists(NOTIF_QUEUE_FILE):
-            return
-        with open(NOTIF_QUEUE_FILE) as f:
-            q = json.load(f) or []
-        if not q:
-            return
-        now = time.time()
-        due = [e for e in q if force or float(e.get("due", 0)) <= now]
-        rest = [e for e in q if not (force or float(e.get("due", 0)) <= now)]
+        with _flush_lock:
+            if not os.path.exists(NOTIF_QUEUE_FILE):
+                return
+            with open(NOTIF_QUEUE_FILE) as f:
+                q = json.load(f) or []
+            if not q:
+                return
+            now = time.time()
+            due = [e for e in q if force or float(e.get("due", 0)) <= now]
+            rest = [e for e in q if not (force or float(e.get("due", 0)) <= now)]
+            with open(NOTIF_QUEUE_FILE, "w") as f:
+                json.dump(rest, f)
         for e in due:
-            discord_send(str(e.get("text", "")))
-        with open(NOTIF_QUEUE_FILE, "w") as f:
-            json.dump(rest, f)
+            try:
+                if e.get("kind") == "personal" and e.get("player"):
+                    _deliver_personal(e["player"], str(e.get("text", "")), e.get("mid"))
+                else:
+                    discord_send(str(e.get("text", "")))
+            except Exception as ex:
+                log("notif deliver failed:", ex)
     except Exception as e:
         log("notif flush failed:", e)
 
@@ -747,6 +779,15 @@ def _player_route(player):
     r = load_config().get("notif_routes")
     v = r.get(player) if isinstance(r, dict) else None
     return v if v in ("dm", "feed", "both") else "both"
+
+def _personal_delay_sec(player):
+    """A player OWN spoiler delay for their personal alerts (DM + in-app feed), in seconds. 0 = off. Clamped 0..3600."""
+    d = load_config().get("notif_player_delay")
+    try:
+        s = int((d or {}).get(player, 0)) if isinstance(d, dict) else 0
+    except Exception:
+        s = 0
+    return max(0, min(s, 3600))
 
 def _feed_add(player, text, kind="alert"):
     """Append an event to the in-app feed (player None/'*' = everyone). Capped 400. Master-gated. Never raises."""
@@ -3512,6 +3553,7 @@ class Handler(BaseHTTPRequestHandler):
                 wl = [w for w in wl if w.get("player") == who]
             return self._send(200, json.dumps({"ok": True, "wagers": wl[-200:]}))
         if path == "/api/status":
+            _maybe_flush()           # release any spoiler-delayed posts whose hold elapsed (throttled, cheap)
             cfg = load_config()
             return self._send(200, json.dumps({
                 "configured": bool(cfg.get("players")), "has_token": bool(cfg.get("token")),
@@ -4001,7 +4043,7 @@ class Handler(BaseHTTPRequestHandler):
             player = str(body.get("player", "")).strip()
             valid = _pin_ok(player, body.get("pin"))
             return self._send(200, json.dumps({"ok": True, "valid": bool(valid)}))
-        if path in ("/api/my_alerts", "/api/game_mute", "/api/dm_master", "/api/notif_route"):
+        if path in ("/api/my_alerts", "/api/game_mute", "/api/dm_master", "/api/notif_route", "/api/my_delay"):
             # Per-player notification controls on the website. Authorised exactly like a bet: a logged-in Discord
             # session for this player, OR their passcode. They act on every Discord account known to be this
             # player (so muting on the site silences the same DMs as /mute on Discord).
@@ -4018,7 +4060,17 @@ class Handler(BaseHTTPRequestHandler):
                 mutesmap = cfg.get("discord_mutes") if isinstance(cfg.get("discord_mutes"), dict) else {}
                 muted = sorted({str(mid) for u in uids for mid in (mutesmap.get(u) or [])})
                 dm_off = bool(uids) and all(u in optout for u in uids)
-                return self._send(200, json.dumps({"ok": True, "connected": bool(uids), "dm_off": dm_off, "muted": muted, "route": _player_route(player)}))
+                return self._send(200, json.dumps({"ok": True, "connected": bool(uids), "dm_off": dm_off, "muted": muted, "route": _player_route(player), "delay": _personal_delay_sec(player)}))
+            if path == "/api/my_delay":               # the player own spoiler delay for their personal alerts (seconds)
+                try:
+                    sec = max(0, min(int(body.get("sec", 0) or 0), 3600))
+                except Exception:
+                    sec = 0
+                pd = cfg.get("notif_player_delay") if isinstance(cfg.get("notif_player_delay"), dict) else {}
+                pd[player] = sec
+                cfg["notif_player_delay"] = pd
+                save_config(cfg)
+                return self._send(200, json.dumps({"ok": True, "delay": sec}))
             if path == "/api/notif_route":            # where a player personal alerts go: dm / feed / both
                 rt = str(body.get("route", "")).strip()
                 if rt not in ("dm", "feed", "both"):
