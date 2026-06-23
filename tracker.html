@@ -1185,7 +1185,7 @@ function upsideTag(t){
   const nx=STAGE_NEXT[t.stage]; if(!nx) return '';         // already champion -> nothing further
   const sc=(DATA.scoring&&DATA.scoring.points)||{}, SB=sc.stage_bonus||{}, SV=(DATA.scoring&&DATA.scoring.survival)||{};
   const dp=(SB[nx]||0)-(SB[t.stage]||0), ds=(SV[nx]||0)-(SV[t.stage]||0);
-  if(dp<=0 && ds<=0) return '';
+  if(dp<10) return '';        // hide the small +5 early-round hints (group->R32, R32->R16); only show meaningful jumps (R16->QF +10 and up)
   const lbl=STAGE_LABEL[nx]||nx;
   const tip='If '+esc(t.name)+' reaches '+(STAGE_FULL[nx]||lbl)+': +'+dp+' Points'+(ds>0?' (and +'+ds+' Survival)':'')+' in bonus — goals & wins add more on top.';
   return ' <span class="up" title="'+tip+'">↑ +'+dp+' at '+lbl+'</span>';
@@ -1212,7 +1212,7 @@ async function load(){
            secs.forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';}); return; }
   gate.style.display='none'; tabs.style.display='';
   secs.forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='';});
-  render(DATA); await refreshStatus();        // wait for who-am-I before landing, so the right name shows (no flash)
+  render(DATA); await refreshStatus(); render(DATA);   // re-render once STATUS is in, so the No-bets tab (gated on wagering_enabled) shows on first paint, not only after a click
   if(loginParam && STATUS.wagering_enabled){ activateTab('bets'); }   // after a Discord login, drop you straight on the Bets tab
   else {                                                              // otherwise restore whatever tab you were last on, so a refresh keeps your place
     let saved=null; try{ saved=localStorage.getItem('wc26_tab'); }catch(e){}
