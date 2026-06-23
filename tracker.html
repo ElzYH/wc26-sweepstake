@@ -499,6 +499,7 @@
     <div class="tab on" data-s="overview">Overview</div>
     <div class="tab" data-s="live">Live</div>
     <div class="tab" data-s="lb">Leaderboard</div>
+    <div class="tab" data-s="history">📜 History</div>
     <div class="tab" data-s="players">Teams</div>
     <div class="tab" data-s="h2h">Head-to-head</div>
     <div class="tab" data-s="groups">Groups</div>
@@ -537,6 +538,8 @@
   <section id="bracket"><div class="modesel" id="koRounds"></div><div id="bracketBody"></div></section>
   <section id="fixtures"><div class="fx" id="fixturesBody"></div></section>
   <section id="bets"><div id="betsBody"></div></section>
+  <section id="history"><div id="historyBody"></div></section>
+
   <section id="notify"><div id="notifyBody"></div></section>
   <section id="odds">
     <div class="statgrid" id="statsBody"></div>
@@ -1207,7 +1210,7 @@ async function load(){
        if(wr.ok){ const wj=await wr.json(); ALLWAGERS=(wj.wagers||[]).filter(w=>w.status==='pending'&&!w.credit); } }
   catch(e){ /* breakdowns just fall back to live-only if this fails */ }
   const gate=document.getElementById('gate'), tabs=document.querySelector('.tabs');
-  const secs=['overview','live','lb','players','h2h','groups','bracket','fixtures','odds','bets'];
+  const secs=['overview','live','lb','history','players','h2h','groups','bracket','fixtures','odds','bets'];
   if(!ok){ gate.style.display='block'; tabs.style.display='none';
            secs.forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';}); return; }
   gate.style.display='none'; tabs.style.display='';
@@ -1427,6 +1430,7 @@ function render(d){
   document.getElementById('updated').textContent='Updated: '+fmtUpdated(d.updated_at);
   COMP={}; (d.groups||[]).forEach(g=>(g.table||[]).forEach(r=>COMP[r.team]=r.composite||0));
   checkNotify(d);
+  const _hs=document.getElementById('history'); if(_hs&&_hs.classList.contains('on')) renderHistory();   // keep the ledger live on the 30s refresh
   renderWinners(d);
   renderOverview(d);
   renderLive(d);
@@ -1629,6 +1633,7 @@ function activateTab(s){
   try{ localStorage.setItem('wc26_tab', s); }catch(e){}      // remember the tab so a refresh keeps you here
   if(s==='bets' && STATUS.wagering_enabled && !document.getElementById('betWho')) renderBets();
   if(s==='notify') renderNotifyTab();
+  if(s==='history') renderHistory();
 }
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>activateTab(t.dataset.s));
 (function(){ const mb=document.getElementById('menuBtn'), md=document.getElementById('menuDrop');
@@ -1926,6 +1931,72 @@ function renderOdds(d){
   document.getElementById('strengthBody').innerHTML=str.map(s=>`<div class="oddrow"><div class="nm">${esc(s.name)}</div><div class="oddbar"><i style="width:${Math.round(100*s.strength/smax)}%;background:linear-gradient(90deg,var(--t3),var(--t1))"></i></div><div class="pct" style="width:auto;color:var(--ink)">${s.strength}${s.favourites?` · ${s.favourites}★`:''}</div></div>`).join('');
   ensureSim(); renderSim(SIMSORT);
   renderChart(d);
+}
+
+// ---- points ledger: every gain/loss per player, in time order ----
+let HISTPLAYER='all';
+function buildLedger(d, wagers){
+  const fx=d.fixtures||[];
+  const SB=(d.scoring&&d.scoring.points&&d.scoring.points.stage_bonus)||{};
+  const SL={LAST_32:'Round of 32',LAST_16:'Round of 16',QUARTER_FINALS:'Quarter-final',SEMI_FINALS:'Semi-final',THIRD_PLACE:'3rd-place play-off',FINAL:'Final',WINNER:'Champion'};
+  const FIN=new Set(['FINISHED','AWARDED']);
+  const T=m=>(m&&m.utcDate)?Date.parse(m.utcDate):0;
+  const ev=[];
+  // 1) match performance — each owned team in each finished game
+  fx.forEach(m=>{
+    if(!FIN.has(m.status)||m.homeScore==null||m.awayScore==null) return;
+    [[m.homeOwner,m.home,m.away,m.homeScore,m.awayScore],[m.awayOwner,m.away,m.home,m.awayScore,m.homeScore]].forEach(function(r){
+      const ow=r[0],tm=r[1],opp=r[2],sc=r[3],co=r[4];
+      if(!ow||ow==='\u2014'||ow==='-') return;
+      const b=liveParts(sc,co); if(!(b.pts>0)) return;
+      ev.push({when:T(m),kind:'match',player:ow,team:tm,opp:opp,score:sc+'\u2013'+co,pts:b.pts,parts:b.parts.map(function(x){return x[0];})});
+    });
+  });
+  // 2) knockout bonus — one per owned team, dated at its latest finished game
+  (d.players||[]).forEach(function(p){ (p.teams||[]).forEach(function(tm){
+    const st=tm.stage; if(!st||!SB[st]) return;
+    const fins=fx.filter(function(m){return FIN.has(m.status)&&(m.home===tm.name||m.away===tm.name);}).map(T);
+    ev.push({when:fins.length?Math.max.apply(null,fins):Date.now(),kind:'bonus',player:p.name,team:tm.name,stage:st,label:SL[st]||st,pts:SB[st]});
+  });});
+  // 3) settled bets — won/lost, dated at the (last) game they rode on
+  (wagers||[]).forEach(function(w){
+    if(w.credit||(w.status!=='won'&&w.status!=='lost')) return;
+    let ds=[];
+    if(w.legs&&w.legs.length){ w.legs.forEach(function(l){ const fm=fx.find(function(m){return m.matchId===l.matchId;}); if(fm) ds.push(T(fm)); }); }
+    else { const fm=fx.find(function(m){return m.matchId===w.matchId;}); if(fm) ds.push(T(fm)); }
+    const net=w.status==='won'?Math.round(((w.return||0)-(w.stake||0))*100)/100:-(w.stake||0);
+    ev.push({when:ds.length?Math.max.apply(null,ds):0,kind:'bet',player:w.player,won:w.status==='won',net:net,label:betLabel(w).split(' \u2192 ')[0]});
+  });
+  ev.sort(function(a,b){return b.when-a.when;});
+  return ev;
+}
+async function renderHistory(){
+  const el=document.getElementById('historyBody'); if(!el) return;
+  let wagers=[]; try{ const j=await fetch('/api/wagers?'+Date.now()).then(function(r){return r.json();}); wagers=j.wagers||[]; }catch(e){}
+  const players=(DATA.players||[]).map(function(p){return p.name;});
+  if(HISTPLAYER!=='all' && players.indexOf(HISTPLAYER)<0) HISTPLAYER='all';
+  const ev=buildLedger(DATA,wagers).filter(function(e){return HISTPLAYER==='all'||e.player===HISTPLAYER;});
+  const sel='<div class="modesel" id="histSel" style="margin:0 0 12px;flex-wrap:wrap;gap:6px"><button data-h="all"'+(HISTPLAYER==='all'?' class="on"':'')+'>Everyone</button>'
+    +players.map(function(p){return '<button data-h="'+esc(p)+'"'+(HISTPLAYER===p?' class="on"':'')+'>'+esc(p)+'</button>';}).join('')+'</div>';
+  const intro='<div style="color:var(--muted);font-size:12.5px;margin:0 0 4px">Every points change as games finish and bets settle \u2014 newest first.</div>';
+  let body;
+  if(!ev.length){ body='<div class="empty">Nothing settled yet. Match points and bet results show up here as they happen.</div>'; }
+  else {
+    let lastDay='';
+    body=ev.map(function(e){
+      const dt=e.when?new Date(e.when):null;
+      const day=dt?dt.toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short'}):'\u2014';
+      const hdr=(day!==lastDay)?('<div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:14px 0 4px">'+day+'</div>'):''; lastDay=day;
+      const who=HISTPLAYER==='all'?('<b style="color:var(--ink)">'+esc(e.player)+'</b> \u00b7 '):'';
+      let text,delta,dcol;
+      if(e.kind==='match'){ text=who+flag(e.team)+esc(e.team)+' '+e.score+' '+esc(e.opp)+(e.parts.length?' <span style="opacity:.6">\u00b7 '+e.parts.join(', ')+'</span>':''); delta='+'+e.pts; dcol='#7ee787'; }
+      else if(e.kind==='bonus'){ const isW=e.stage==='WINNER'; text=who+(isW?'\ud83c\udfc6 ':'\ud83c\udfc5 ')+flag(e.team)+esc(e.team)+(isW?' won the tournament':' reached the '+esc(e.label)); delta='+'+e.pts; dcol='var(--gold)'; }
+      else { text=who+(e.won?'\ud83c\udfb2 won \u2014 ':'\ud83c\udfb2 lost \u2014 ')+esc(e.label); delta=(e.won?'+':'\u2212')+Math.abs(e.net); dcol=e.won?'#7ee787':'#ff7a7a'; }
+      return hdr+'<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;line-height:1.45"><div>'+text+'</div><div style="font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;color:'+dcol+'">'+delta+'</div></div>';
+    }).join('');
+  }
+  el.innerHTML=sel+intro+body;
+  el.querySelectorAll('#histSel button').forEach(function(b){ b.onclick=function(){ HISTPLAYER=b.dataset.h; renderHistory(); }; });
 }
 
 // ---- points / position line chart over time ----
