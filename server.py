@@ -2595,7 +2595,7 @@ def update_now(cfg):
             _update_match_clocks(json.load(open("results.json")).get("matches", []))
         except Exception:
             pass
-        scoring_mod.compute(out="tracker_data.json", default_mode=cfg.get("scoring_mode", "points"), wagers=wlist, group_mid_ts=_group_mid_ts(), composite_overrides=(_load_calibration().get("composites") or None))
+        scoring_mod.compute(out="tracker_data.json", default_mode=(cfg.get("scoring_mode") if cfg.get("scoring_mode") in ("points", "survival") else "points"), wagers=wlist, group_mid_ts=_group_mid_ts(), composite_overrides=(_load_calibration().get("composites") or None))
         cfg["last_update"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         save_config(cfg)
         notify_changes(old_snapshot)        # personalised alerts (if any subscribers)
@@ -3380,7 +3380,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, json.dumps({
                 "configured": bool(cfg.get("players")), "has_token": bool(cfg.get("token")),
                 "players": cfg.get("players", []), "draw_mode": cfg.get("draw_mode"),
-                "scoring_mode": cfg.get("scoring_mode"), "last_update": cfg.get("last_update"),
+                "scoring_mode": (cfg.get("scoring_mode") if cfg.get("scoring_mode") in ("points", "survival") else "points"), "last_update": cfg.get("last_update"),
                 "competition": cfg.get("competition", "WC"),
                 "drawn": draw_locked(), "needs_key": draw_locked(),
                 "leftover": cfg.get("leftover", "pool"),
@@ -3705,7 +3705,7 @@ class Handler(BaseHTTPRequestHandler):
                 wl = load_wagers() or None             # standing bets always count, even if NEW betting is switched off
                 try:                                 # rebuild the tracker from the restored data (no network needed)
                     scoring_mod.compute(out="tracker_data.json",
-                                        default_mode=cfg.get("scoring_mode", "points"), wagers=wl, group_mid_ts=_group_mid_ts(), composite_overrides=(_load_calibration().get("composites") or None))
+                                        default_mode=(cfg.get("scoring_mode") if cfg.get("scoring_mode") in ("points", "survival") else "points"), wagers=wl, group_mid_ts=_group_mid_ts(), composite_overrides=(_load_calibration().get("composites") or None))
                     ok, err = True, None
                 except Exception as e:
                     ok, err = False, str(e)
