@@ -489,6 +489,8 @@ def tg_player(player, text):
 
 def tg_broadcast(text):
     """Message every subscribed chat once."""
+    if not _notif_on():
+        return
     seen = set()
     for chats in _load_subs().values():
         for cid in chats:
@@ -514,6 +516,8 @@ def bot_username():
 # ---------------- Discord webhook (Path B) — pure stdlib, group channel ----------------
 def discord_send(text):
     cfg = load_config()
+    if not _notif_on():
+        return
     url = (cfg.get("discord_webhook") or "").strip()
     if not url.startswith("https://"):
         return
@@ -552,6 +556,8 @@ def _discord_subs():
 
 def _mention_uids(uids, text):
     """@mention specific Discord user-ids in the channel. Shared by discord_mention and the DM fallback."""
+    if not _notif_on():
+        return
     try:
         uids = [str(u) for u in uids][:25]
         if not uids:
@@ -611,6 +617,13 @@ def _bot_dm_player(player, text, match_id=None):
     try:
         if not player or player in ("—", "-"):
             return 0
+        if not _notif_on():
+            return 0
+        route = _player_route(player)
+        if route in ("feed", "both"):
+            _feed_add(player, text)
+        if route == "feed":
+            return 0          # in-app feed only — skip the Discord DM
         optout, mutes = _dm_optout(), _dm_mutes()
         cfg = load_config()
         subs = cfg.get("discord_subs") if isinstance(cfg.get("discord_subs"), dict) else {}
@@ -638,6 +651,122 @@ def _game_channel_on():
     """Admin kill switch for the COMMUNAL channel feed of game events (kickoff/HT/FT/goals). Default on.
     When off, personal DMs to opted-in players still go out — only the public channel posts are silenced."""
     return load_config().get("game_channel_alerts", True) is not False
+
+
+# ---------------- notification controls: master switch, spoiler delay, time/minute stamps ----------------
+NOTIF_QUEUE_FILE = "notif_queue.json"      # admin spoiler-delay hold queue for communal channel posts
+
+def _notif_on():
+    """MASTER kill switch for ALL alert notifications (channel + DMs + @mentions + Telegram + web push). Default ON.
+    Does NOT gate functional bot DMs (e.g. bet passcodes) — only the alert surface."""
+    return load_config().get("notifications_on", True) is not False
+
+def _notif_delay_sec():
+    """Admin spoiler delay for the communal channel game feed (minutes -> seconds). 0 = realtime. Clamped 0..60."""
+    try:
+        m = int(load_config().get("notif_delay_min", 0) or 0)
+    except Exception:
+        m = 0
+    return max(0, min(m, 60)) * 60
+
+def _now_tag():
+    try:
+        return time.strftime("%H:%M", time.localtime())
+    except Exception:
+        return ""
+
+def _match_minute(mid):
+    """Best-effort live minute from the real-time clock store. '' when unknown/paused. Never raises."""
+    try:
+        rec = (_load_match_clocks() or {}).get(str(mid))
+        if not isinstance(rec, dict) or rec.get("ps") or not rec.get("ko"):
+            return ""
+        mn = int((time.time() - float(rec["ko"]) - float(rec.get("htp") or 0.0)) / 60.0)
+        return ("%d'" % max(1, mn)) if 0 <= mn <= 130 else ""
+    except Exception:
+        return ""
+
+def _stamp(text, mid=None):
+    """Prepend [HH:MM . 73'] to a live channel line, baked at event time so a spoiler-delayed post still shows when
+    it actually happened."""
+    tag = " \u00b7 ".join([x for x in (_now_tag(), (_match_minute(mid) if mid else "")) if x])
+    return ("[%s] %s" % (tag, text)) if tag else text
+
+def _enqueue_notif(text, due):
+    try:
+        q = []
+        if os.path.exists(NOTIF_QUEUE_FILE):
+            with open(NOTIF_QUEUE_FILE) as f:
+                q = json.load(f) or []
+        q.append({"due": float(due), "text": str(text)})
+        with open(NOTIF_QUEUE_FILE, "w") as f:
+            json.dump(q[-500:], f)
+    except Exception as e:
+        log("notif enqueue failed:", e)
+
+def _flush_notif_queue(force=False):
+    """Release queued channel posts whose spoiler hold has elapsed. Called from the recompute loop. Never raises."""
+    try:
+        if not os.path.exists(NOTIF_QUEUE_FILE):
+            return
+        with open(NOTIF_QUEUE_FILE) as f:
+            q = json.load(f) or []
+        if not q:
+            return
+        now = time.time()
+        due = [e for e in q if force or float(e.get("due", 0)) <= now]
+        rest = [e for e in q if not (force or float(e.get("due", 0)) <= now)]
+        for e in due:
+            discord_send(str(e.get("text", "")))
+        with open(NOTIF_QUEUE_FILE, "w") as f:
+            json.dump(rest, f)
+    except Exception as e:
+        log("notif flush failed:", e)
+
+def _channel_event(text, mid=None):
+    """A communal-channel GAME-event line: respects the channel switch, stamps time/minute, and honours the admin
+    spoiler delay (queued when set). The MASTER switch is enforced inside discord_send."""
+    if not _game_channel_on():
+        return
+    line = _stamp(text, mid)
+    _feed_add("*", line)
+    if _notif_delay_sec() > 0:
+        _enqueue_notif(line, time.time() + _notif_delay_sec())
+    else:
+        discord_send(line)
+
+NOTIF_FEED_FILE = "notif_feed.json"        # in-app alert feed (per player; "*" = everyone)
+
+def _player_route(player):
+    """Where a player PERSONAL alerts go: 'dm' | 'feed' | 'both' (default both)."""
+    r = load_config().get("notif_routes")
+    v = r.get(player) if isinstance(r, dict) else None
+    return v if v in ("dm", "feed", "both") else "both"
+
+def _feed_add(player, text, kind="alert"):
+    """Append an event to the in-app feed (player None/'*' = everyone). Capped 400. Master-gated. Never raises."""
+    try:
+        if not _notif_on():
+            return
+        feed = []
+        if os.path.exists(NOTIF_FEED_FILE):
+            with open(NOTIF_FEED_FILE) as f:
+                feed = json.load(f) or []
+        feed.append({"ts": int(time.time()), "player": (player or "*"), "text": str(text)[:300], "kind": kind})
+        with open(NOTIF_FEED_FILE, "w") as f:
+            json.dump(feed[-400:], f)
+    except Exception as e:
+        log("feed add failed:", e)
+
+def _feed_for(player, limit=60):
+    """Recent in-app feed for a player: their personal alerts + everyone-events, newest first. Never raises."""
+    try:
+        with open(NOTIF_FEED_FILE) as f:
+            feed = json.load(f) or []
+    except Exception:
+        return []
+    out = [e for e in feed if isinstance(e, dict) and e.get("player") in (player, "*")]
+    return list(reversed(out))[:max(1, min(int(limit or 60), 200))]
 
 
 def _bettors_on_match(match_id):
@@ -1310,7 +1439,7 @@ def _webpush_one(sub, title, body):
 
 
 def push_player(player, etype, title, body):
-    if not push_enabled():
+    if not push_enabled() or not _notif_on():
         return
     subs = _load_push()
     lst = subs.get(player, [])
@@ -1499,8 +1628,7 @@ def notify_changes(old):
             if ow and ow not in ("—", "-"):
                 push_player(ow, etype, ti, bo)
                 _bot_dm_player(ow, "%s — %s" % (ti, bo), match_id=match_id)   # personal -> always DM (falls back to @mention for opt-ins)
-        if _game_channel_on():
-            discord_send(group_line)        # communal feed: every game event while the channel is on
+        _channel_event(group_line, match_id)        # communal feed: stamped + spoiler-delay aware (channel switch enforced inside)
         _dm_all_games(group_line, exclude_players=[r[0] for r in recipients])   # ...and DMs all-games opt-ins, minus owners who already got the personal DM
 
     def own(o):
@@ -1576,14 +1704,12 @@ def notify_changes(old):
                     if nhs > ohs and ho_ok:
                         push_player(ho, "goal", "%s scored! ⚽" % h, score)
                         _bot_dm_player(ho, "⚽ **%s** scored — %s" % (h, score), match_id=mid)     # personal -> DM
-                        if _game_channel_on():
-                            discord_send("⚽ **%s** (%s) scored — %s" % (h, ho, score))
+                        _channel_event("⚽ **%s** (%s) scored — %s" % (h, ho, score), mid)
                         _dm_all_games("⚽ **%s** (%s) scored — %s" % (h, ho, score), exclude_players=[ho])   # owner already got the personal DM above
                     if nas > oas and ao_ok:
                         push_player(ao, "goal", "%s scored! ⚽" % a, score)
                         _bot_dm_player(ao, "⚽ **%s** scored — %s" % (a, score), match_id=mid)     # personal -> DM
-                        if _game_channel_on():
-                            discord_send("⚽ **%s** (%s) scored — %s" % (a, ao, score))
+                        _channel_event("⚽ **%s** (%s) scored — %s" % (a, ao, score), mid)
                         _dm_all_games("⚽ **%s** (%s) scored — %s" % (a, ao, score), exclude_players=[ao])   # owner already got the personal DM above
     except Exception:
         pass
@@ -2599,6 +2725,7 @@ def update_now(cfg):
         cfg["last_update"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         save_config(cfg)
         notify_changes(old_snapshot)        # personalised alerts (if any subscribers)
+        _flush_notif_queue()                # release any spoiler-delayed channel posts whose hold elapsed
         backup_data()
         try:
             td = _load_tracker() or {}
@@ -3295,6 +3422,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, json.dumps({"logged_in": False, "oauth": _oauth_enabled()}))
             player = (load_config().get("wager_links") or {}).get(str(did))
             return self._send(200, json.dumps({"logged_in": True, "player": player, "oauth": True}))
+        if path == "/api/feed":                    # in-app alert feed for a player (their alerts + everyone-events)
+            q = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            pl = (q.get("player") or [""])[0]
+            return self._send(200, json.dumps({"ok": True, "events": _feed_for(pl), "route": _player_route(pl)}))
         if path == "/api/discord_login":           # start "Log in with Discord" (302 to Discord's consent screen)
             if not _oauth_enabled():
                 self.send_response(302); self.send_header("Location", "/tracker"); self.end_headers(); return
@@ -3402,6 +3533,8 @@ class Handler(BaseHTTPRequestHandler):
                 "discord_oauth": _oauth_enabled(),
                 "discord_guild_gate": _guild_gate_on(cfg),
                 "game_channel_alerts": load_config().get("game_channel_alerts", True) is not False,
+                "notifications_on": load_config().get("notifications_on", True) is not False,
+                "notif_delay_min": int(load_config().get("notif_delay_min", 0) or 0),
                 "wager_budget": (wager_mod.STAGE_BUDGET if wager_mod is not None else None),
                 "free_bet": ((lambda dr: {"open": True, "id": dr["id"], "closes": dr["closes"], "stake": wager_mod.FREE_BET_STAKE,
                                           "claimed": sorted((cfg.get("free_bet_claims", {}).get(dr["id"]) or {}).keys())}
@@ -3607,6 +3740,13 @@ class Handler(BaseHTTPRequestHandler):
                 cfg["digest_enabled"] = bool(body["digest_enabled"])
             if "game_channel_alerts" in body:        # admin kill switch for the communal channel feed (DMs still go out)
                 cfg["game_channel_alerts"] = bool(body["game_channel_alerts"])
+            if "notifications_on" in body:           # MASTER alert kill switch (channel + DMs + mentions + telegram + push)
+                cfg["notifications_on"] = bool(body["notifications_on"])
+            if "notif_delay_min" in body:            # admin spoiler delay for the channel game feed (minutes; 0 = realtime)
+                try:
+                    cfg["notif_delay_min"] = max(0, min(int(body["notif_delay_min"]), 60))
+                except Exception:
+                    pass
             if "wagering_enabled" in body:
                 cfg["wagering_enabled"] = bool(body["wagering_enabled"])
             if "wager_locked" in body:
@@ -3850,7 +3990,7 @@ class Handler(BaseHTTPRequestHandler):
             player = str(body.get("player", "")).strip()
             valid = _pin_ok(player, body.get("pin"))
             return self._send(200, json.dumps({"ok": True, "valid": bool(valid)}))
-        if path in ("/api/my_alerts", "/api/game_mute", "/api/dm_master"):
+        if path in ("/api/my_alerts", "/api/game_mute", "/api/dm_master", "/api/notif_route"):
             # Per-player notification controls on the website. Authorised exactly like a bet: a logged-in Discord
             # session for this player, OR their passcode. They act on every Discord account known to be this
             # player (so muting on the site silences the same DMs as /mute on Discord).
@@ -3867,7 +4007,16 @@ class Handler(BaseHTTPRequestHandler):
                 mutesmap = cfg.get("discord_mutes") if isinstance(cfg.get("discord_mutes"), dict) else {}
                 muted = sorted({str(mid) for u in uids for mid in (mutesmap.get(u) or [])})
                 dm_off = bool(uids) and all(u in optout for u in uids)
-                return self._send(200, json.dumps({"ok": True, "connected": bool(uids), "dm_off": dm_off, "muted": muted}))
+                return self._send(200, json.dumps({"ok": True, "connected": bool(uids), "dm_off": dm_off, "muted": muted, "route": _player_route(player)}))
+            if path == "/api/notif_route":            # where a player personal alerts go: dm / feed / both
+                rt = str(body.get("route", "")).strip()
+                if rt not in ("dm", "feed", "both"):
+                    return self._send(400, json.dumps({"ok": False, "error": "route must be dm, feed or both"}))
+                routes = cfg.get("notif_routes") if isinstance(cfg.get("notif_routes"), dict) else {}
+                routes[player] = rt
+                cfg["notif_routes"] = routes
+                save_config(cfg)
+                return self._send(200, json.dumps({"ok": True, "route": rt}))
             if not uids:
                 return self._send(400, json.dumps({"ok": False, "not_connected": True,
                     "error": "Connect Discord first — tap Connect Discord on the Bets tab (or run /notifyme), then come back."}))

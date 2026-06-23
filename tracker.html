@@ -391,6 +391,12 @@
         <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;margin-top:12px;border-top:1px solid var(--line);padding-top:12px"><input type="checkbox" id="setGameChannel"> Post live game events to the channel (kickoff / goals / full-time)</label>
         <p style="margin:4px 0 0;color:var(--muted);font-size:12px">Turn this <b>off</b> to silence the communal channel feed of game events for everyone — people who opted in for DMs still get their personal DMs. Bet, win and lead-change posts are unaffected.</p>
         <div class="hint" id="setGameChannelMsg" style="color:var(--muted);font-size:12px;margin-top:4px"></div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;margin-top:12px;border-top:1px solid var(--line);padding-top:12px"><input type="checkbox" id="setNotifMaster"> Master alerts switch <span style="color:var(--muted);font-weight:400">(everything)</span></label>
+        <p style="margin:4px 0 0;color:var(--muted);font-size:12px">The big kill switch. Turn <b>off</b> to silence <b>every</b> notification \u2014 channel posts, personal DMs, @mentions, Telegram and phone pop-ups \u2014 without touching individual settings. (Bet passcodes still get delivered.)</p>
+        <div class="hint" id="setNotifMasterMsg" style="color:var(--muted);font-size:12px;margin-top:4px"></div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;margin-top:12px">Spoiler delay on the channel feed <select id="setNotifDelay" style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 8px"><option value="0">Real-time</option><option value="2">Hold 2 min</option><option value="5">Hold 5 min</option><option value="15">Hold 15 min</option></select></label>
+        <p style="margin:4px 0 0;color:var(--muted);font-size:12px">Holds channel goal / kick-off / full-time posts this long so people watching on a delay are not spoiled. Each post still shows the real time &amp; minute it happened. Personal DMs are unaffected.</p>
+        <div class="hint" id="setNotifDelayMsg" style="color:var(--muted);font-size:12px;margin-top:4px"></div>
       </div>
       <div id="wagerSetup" style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
         <p style="margin:0 0 8px"><b>💷 Betting.</b> Let players stake the points they've earned on games (fractional odds, capped, no cash-out). Off until you switch it on.</p>
@@ -1131,6 +1137,11 @@ async function renderNotifyTab(){
   html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px">'
     +'<div style="font-size:13.5px"><b>Personal DMs</b><div style="color:var(--muted);font-size:12px">When on, I DM you when your teams play & score and for games you\'ve bet on.</div></div>'
     +alertToggleHTML('dmMaster', !st.dm_off, st.dm_off?'OFF':'ON')+'</div>';
+  html+='<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px">'
+    +'<div style="font-size:13.5px;margin-bottom:8px"><b>Where my alerts go</b></div>'
+    +'<div class="modesel" id="notifRoute">'
+    +['both','dm','feed'].map(function(r){return '<button data-r="'+r+'"'+((st.route||'both')===r?' class="on"':'')+'>'+({both:'Both',dm:'Discord DM',feed:'In-app only'}[r])+'</button>';}).join('')
+    +'</div><div style="color:var(--muted);font-size:11.5px;margin-top:6px">In-app alerts show in your feed below \u2014 no Discord needed. Both sends a DM and logs it here.</div></div>';
   html+='<div style="font-size:11.5px;color:var(--muted);font-weight:700;letter-spacing:.06em;margin:4px 0 6px">MUTE A SPECIFIC GAME'+(st.dm_off?' (your DMs are off above)':'')+'</div>';
   if(!games.length){ html+='<div class="empty">No upcoming games involving your teams or your open bets right now.</div>'; }
   else html+=games.map((f,i)=>{
@@ -1143,7 +1154,10 @@ async function renderNotifyTab(){
       +'<div style="color:var(--muted);font-size:11.5px">'+reason+' · '+when+'</div></div>'
       +alertToggleHTML('mute_'+i, !isMuted, isMuted?'MUTED':'ON')+'</div>';
   }).join('');
+  html+='<div style="margin-top:14px"><div style="font-size:11.5px;color:var(--muted);font-weight:700;letter-spacing:.06em;margin:4px 0 6px">YOUR ALERT FEED</div><div id="notifFeed"><div class="empty">Loading\u2026</div></div></div>';
   el.innerHTML=html; wireWho(); NOTIFYBUSY=false;
+  document.querySelectorAll('#notifRoute button').forEach(function(b){ b.onclick=async function(){ document.querySelectorAll('#notifRoute button').forEach(function(x){x.classList.remove('on');}); b.classList.add('on'); try{ await fetch('/api/notif_route',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:NOTIFYPLAYER,pin:pin,route:b.dataset.r})}); }catch(e){} }; });
+  (async function(){ try{ const fj=await fetch('/api/feed?player='+encodeURIComponent(NOTIFYPLAYER)).then(function(r){return r.json();}); const fe=document.getElementById('notifFeed'); if(!fe) return; const evs=(fj.events||[]); fe.innerHTML=evs.length?evs.map(function(e){ const t=e.ts?new Date(e.ts*1000).toLocaleString(undefined,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''; return '<div style="padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;line-height:1.45">'+esc(e.text)+'<div style="color:var(--muted);font-size:11px">'+esc(t)+(e.player==='*'?' \u00b7 everyone':'')+'</div></div>'; }).join(''):'<div class="empty">No alerts yet \u2014 match events and your bet results will show here.</div>'; }catch(e){} })();
   // master DM toggle
   const dm=document.getElementById('dmMaster');
   if(dm) dm.onclick=async()=>{ const turnOff=dm.dataset.on==='1'; dm.disabled=true;
@@ -2380,6 +2394,8 @@ async function refreshStatus(){
   const su=document.getElementById('setSite'); if(su && STATUS.site_url) su.value=STATUS.site_url;
   const dg=document.getElementById('setDigest'); if(dg) dg.checked=!!STATUS.digest_enabled;
   const gc=document.getElementById('setGameChannel'); if(gc) gc.checked=(STATUS.game_channel_alerts!==false);
+  const nmx=document.getElementById('setNotifMaster'); if(nmx) nmx.checked=(STATUS.notifications_on!==false);
+  const ndx=document.getElementById('setNotifDelay'); if(ndx) ndx.value=String(STATUS.notif_delay_min||0);
   const sw=document.getElementById('setWager'); if(sw) sw.checked=!!STATUS.wagering_enabled;
   const swl=document.getElementById('setWagerLock'); if(swl) swl.checked=!!STATUS.wager_locked;
   const caps=STATUS.wager_caps||{}; const mr=document.getElementById('setMaxReturn'), ma=document.getElementById('setMaxAcca');
@@ -2438,6 +2454,20 @@ document.getElementById('setSave').onclick=async()=>{
       else if(j.need_key){ m.textContent='Session expired — reopen Settings and unlock again.'; ADMINKEY=''; gc.checked=!gc.checked; }
       else { m.textContent=j.error||'Could not save.'; gc.checked=!gc.checked; }
     }catch(e){ m.textContent='Could not reach the server.'; gc.checked=!gc.checked; } }; }
+{ const nm=document.getElementById('setNotifMaster');
+  if(nm) nm.onchange=async()=>{ const m=document.getElementById('setNotifMasterMsg'); m.textContent='Saving\u2026';
+    try{ const j=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({notifications_on:nm.checked,admin_key:ADMINKEY})}).then(r=>r.json());
+      if(j.ok){ m.textContent=nm.checked?'All notifications ON.':'All notifications OFF \u2014 total silence (bet passcodes still delivered).'; refreshStatus(); }
+      else if(j.need_key){ m.textContent='Session expired \u2014 reopen Settings and unlock again.'; ADMINKEY=''; nm.checked=!nm.checked; }
+      else { m.textContent=j.error||'Could not save.'; nm.checked=!nm.checked; }
+    }catch(e){ m.textContent='Could not reach the server.'; nm.checked=!nm.checked; } }; }
+{ const nd=document.getElementById('setNotifDelay');
+  if(nd) nd.onchange=async()=>{ const m=document.getElementById('setNotifDelayMsg'); m.textContent='Saving\u2026';
+    try{ const v=parseInt(nd.value,10)||0; const j=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({notif_delay_min:v,admin_key:ADMINKEY})}).then(r=>r.json());
+      if(j.ok){ m.textContent=v?('Channel posts held '+v+' min for spoiler control.'):'Channel posts go out in real-time.'; refreshStatus(); }
+      else if(j.need_key){ m.textContent='Session expired \u2014 reopen Settings and unlock again.'; ADMINKEY=''; }
+      else { m.textContent=j.error||'Could not save.'; }
+    }catch(e){ m.textContent='Could not reach the server.'; } }; }
 document.getElementById('setSaveDiscord').onclick=async()=>{
   const m=document.getElementById('setDiscordMsg'); const v=document.getElementById('setDiscord').value.trim();
   if(v && !v.startsWith('https://')){ m.textContent='That doesn\'t look like a webhook URL (must start with https://).'; return; }
