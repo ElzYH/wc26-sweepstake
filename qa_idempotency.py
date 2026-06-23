@@ -105,7 +105,7 @@ try:
             {"id": "g2", "home": None, "away": None, "status": "SCHEDULED", "stage": "SEMI_FINAL"},
         ]}
         json.dump(results, open("results.json", "w"))
-        scoring.compute(out="tracker_data.json", default_mode="hybrid", wagers=[])
+        scoring.compute(out="tracker_data.json", default_mode="points", wagers=[])
         ok = os.path.exists("tracker_data.json"); err = ""
     else:
         ok = True; err = "skipped (no draw_result/teams in harness)"

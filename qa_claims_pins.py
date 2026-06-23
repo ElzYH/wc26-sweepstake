@@ -84,7 +84,7 @@ class Server:
                   open(os.path.join(self.tmp, "draw_result.json"), "w"))
         json.dump({"matches": results}, open(os.path.join(self.tmp, "results.json"), "w"))
         cfg = {"configured": True, "wagering_enabled": True, "players": ["Erol", "James"],
-               "admin_key": KEY, "token": "dummy", "scoring_mode": "hybrid", "free_bet_seed": 12345}
+               "admin_key": KEY, "token": "dummy", "scoring_mode": "points", "free_bet_seed": 12345}
         if pins is not None: cfg["wager_pins"] = pins
         if wager_locked: cfg["wager_locked"] = True
         json.dump(cfg, open(os.path.join(self.tmp, "config.json"), "w"))

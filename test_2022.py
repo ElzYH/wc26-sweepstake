@@ -77,8 +77,8 @@ d = scoring.compute(teams_path="teams_2022.json", draw_path="draw_result_2022.js
 def team(n):
     return next(t for p in d["players"] for t in p["teams"] if t["name"] == n)
 
-print("LEADERBOARD (hybrid):")
-for r in d["leaderboards"]["hybrid"]:
+print("LEADERBOARD (points):")
+for r in d["leaderboards"]["points"]:
     print(f"  {r['score']:>4}  {r['name']:6} ({r['alive_teams']}/{r['total_teams']} alive)")
 print()
 checks = {

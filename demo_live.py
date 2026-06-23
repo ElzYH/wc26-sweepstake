@@ -97,7 +97,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/status":
             return self._send(200, json.dumps({
-                "configured": True, "players": PLAYERS, "scoring_mode": "hybrid", "draw_mode": "fair",
+                "configured": True, "players": PLAYERS, "scoring_mode": "points", "draw_mode": "fair",
                 "competition": "WC", "drawn": True, "needs_key": True, "has_token": True,
                 "push_enabled": False, "discord": False, "has_invite": False, "bot_ready": False,
                 "digest_enabled": False, "leftover": "pool", "poll_minutes": 1, "site_url": "",
@@ -148,8 +148,8 @@ def preview_alerts(cur):
         return []
     out = []
     try:
-        ob = [p["name"] for p in prev["leaderboards"]["hybrid"]]
-        nb = [p["name"] for p in cur["leaderboards"]["hybrid"]]
+        ob = [p["name"] for p in prev["leaderboards"]["points"]]
+        nb = [p["name"] for p in cur["leaderboards"]["points"]]
         if ob and nb and ob[0] != nb[0]:
             out.append("\U0001F4C8 EVERYONE - New leader: %s now tops the table" % nb[0])
         orank = {n: i for i, n in enumerate(ob)}
@@ -319,7 +319,7 @@ def _seed_sample_bets(data):
 
 def show(label, data, pause):
     alerts = preview_alerts(data)
-    board = data["leaderboards"]["hybrid"]
+    board = data["leaderboards"]["points"]
     print("\n- %s -" % label)
     for i, p in enumerate(board):
         print("   %d. %-8s %3d  (%d teams in)" % (i + 1, p["name"], p["score"], p["alive_teams"]))

@@ -49,7 +49,7 @@ def run():
         json.dump({"teams": [{"name": "A", "tier": 1, "tier_label": "T1", "weight": 8,
                               "group": "X", "composite": 90, "implied_prob": 0.3}]},
                   open(os.path.join(tmp, "teams.json"), "w"))
-    json.dump({"players": ["Erol", "James"], "admin_key": KEY, "scoring_mode": "hybrid"},
+    json.dump({"players": ["Erol", "James"], "admin_key": KEY, "scoring_mode": "points"},
               open(os.path.join(tmp, "config.json"), "w"))
 
     env = dict(os.environ, WC26_DATA=tmp, WC26_CONFIG=os.path.join(tmp, "config.json"),

@@ -122,7 +122,7 @@ config = {
     "players": PLAYERS,
     "wagering_enabled": True,
     "wager_pins": {p: PASSCODE for p in PLAYERS},              # log in as anyone with passcode DEMO
-    "default_mode": "hybrid",
+    "default_mode": "points",
     "poll_minutes": 10,
     # A deliberately-INVALID token: the frontend auto-calls /api/poll, and update_now() with NO token would
     # rewrite results.json to an empty pre-tournament state (wiping the demo). With a token set, update_now
@@ -141,7 +141,7 @@ import scoring, wager
 cwd = os.getcwd()
 os.chdir(OUT)
 try:
-    scoring.compute(default_mode="hybrid", wagers=[])
+    scoring.compute(default_mode="points", wagers=[])
 finally:
     os.chdir(cwd)
 

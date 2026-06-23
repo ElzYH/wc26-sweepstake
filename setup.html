@@ -111,14 +111,12 @@
     <div class="card">
       <label>Scoring mode (this is the only board shown on the tracker)</label>
       <div class="opts" data-group="scoring_mode">
-        <div class="opt" data-v="points">Points<small>goals / wins</small></div>
+        <div class="opt on" data-v="points">Points<small>goals / wins</small></div>
         <div class="opt" data-v="survival">Survival<small>last team standing</small></div>
-        <div class="opt on" data-v="hybrid">Both<small>points + survival</small></div>
       </div>
       <div class="explain">
         <p><b>Points</b> — your teams earn points for goals, wins, clean sheets and bonuses for reaching each knockout round. Rewards teams that perform, even ones that go out early.</p>
         <p><b>Survival</b> — you're ranked on how many of your teams are still alive and how deep they go. Rewards backing teams that last, not flashy early form.</p>
-        <p><b>Both</b> — Points and Survival added into one number. A single winner: the player whose squad both racks up points <i>and</i> survives deep. (Default.)</p>
       </div>
     </div>
 
@@ -144,7 +142,7 @@
 </div>
 
 <script>
-const sel={draw_mode:"weighted",max_per_player:"",leftover:"pool",scoring_mode:"hybrid"};
+const sel={draw_mode:"weighted",max_per_player:"",leftover:"pool",scoring_mode:"points"};
 document.querySelectorAll('.opts[data-group]').forEach(g=>{
   g.querySelectorAll('.opt').forEach(o=>o.onclick=()=>{
     g.querySelectorAll('.opt').forEach(x=>x.classList.remove('on'));

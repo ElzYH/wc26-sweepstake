@@ -84,7 +84,7 @@ class Server:
         json.dump([], open(os.path.join(self.tmp, "wagers.json"), "w"))
         json.dump({"configured": True, "wagering_enabled": True, "players": ["Erol", "James"],
                    "admin_key": KEY, "token": "dummy-token-fails-closed",
-                   "wager_pins": {"Erol": "ABCD", "James": "WXYZ"}, "scoring_mode": "hybrid"},
+                   "wager_pins": {"Erol": "ABCD", "James": "WXYZ"}, "scoring_mode": "points"},
                   open(os.path.join(self.tmp, "config.json"), "w"))
         env = dict(os.environ, WC26_DATA=self.tmp, WC26_CONFIG=os.path.join(self.tmp, "config.json"),
                    PORT=str(self.port), HOST="127.0.0.1", ADMIN_KEY=KEY)

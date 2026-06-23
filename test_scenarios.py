@@ -90,7 +90,7 @@ def run():
         # the live "+N" delta = points coming from in-play games (all 5 are live here)
         _er = next(p for p in d["players"] if p["name"] == "Erol")
         check("live delta equals provisional live points (+5)", _er.get("live") == 5, _er.get("live"))
-        _row = next(r for r in d["leaderboards"]["hybrid"] if r["name"] == "Erol")
+        _row = next(r for r in d["leaderboards"]["points"] if r["name"] == "Erol")
         check("leaderboard row carries the live delta", _row.get("live") == 5, _row)
         check("both teams still alive during live group game",
               team_status(d, "Brazil") == "alive" and team_status(d, "Japan") == "alive", "")
@@ -170,7 +170,7 @@ def run():
               d.get("champion_decided"))
 
         # 11) THIRD-PLACE PLAY-OFF: both semi losers are OUT for survival (capped at the semi value, no bronze
-        #     survival bump), but the bronze game still earns POINTS so the winner is "seen in points/hybrid"
+        #     survival bump), but the bronze game still earns POINTS so the winner is "seen in points"
         tp = [M(20, "Brazil", "Japan", "FINISHED", stage="SEMI_FINALS", hs=1, as_=0, winner="HOME"),
               M(21, "Spain", "Ghana", "FINISHED", stage="SEMI_FINALS", hs=1, as_=0, winner="HOME"),
               M(22, "Japan", "Ghana", "FINISHED", stage="THIRD_PLACE", hs=2, as_=1, winner="HOME")]

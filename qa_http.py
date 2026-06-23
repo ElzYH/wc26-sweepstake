@@ -36,7 +36,7 @@ def run():
         if os.path.exists(os.path.join(repo, f)):
             shutil.copy2(os.path.join(repo, f), os.path.join(tmp, f))
     json.dump({"configured": True, "players": ["Erol", "James", "Louis"], "admin_key": KEY,
-               "scoring_mode": "hybrid", "wagering_enabled": True,
+               "scoring_mode": "points", "wagering_enabled": True,
                "wager_pins": {"Erol": "ABCD"}}, open(os.path.join(tmp, "config.json"), "w"))
     env = dict(os.environ, WC26_DATA=tmp, WC26_CONFIG=os.path.join(tmp, "config.json"),
                PORT=str(PORT), HOST="127.0.0.1", ADMIN_KEY=KEY)

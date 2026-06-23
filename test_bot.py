@@ -10,7 +10,7 @@ for f in ("server.py", "scoring.py", "draw.py", "players.py", "teams.json", "upd
 os.environ["WC26_CONFIG"] = os.path.join(D, "config.json")
 os.environ["WC26_DATA"] = D
 PLAYERS = ["Erol", "James", "Louis", "Ismail", "Reuben"]
-json.dump({"scoring_mode": "hybrid", "players": PLAYERS}, open(os.path.join(D, "config.json"), "w"))
+json.dump({"scoring_mode": "points", "players": PLAYERS}, open(os.path.join(D, "config.json"), "w"))
 os.chdir(D)
 
 import server, scoring  # noqa: E402
@@ -42,7 +42,7 @@ fails = []
 
 
 def run_all(tag):
-    scoring.compute(out="tracker_data.json", default_mode="hybrid")
+    scoring.compute(out="tracker_data.json", default_mode="points")
     local = []
     for cmd, opts in CMDS:
         try:
@@ -207,7 +207,7 @@ else:
 
 # summary: medal lines must surface the real leaderboard score (regression: was reading wrong key -> always 0)
 json.dump({"stats": {"matches_played": 104, "goals": 303, "goals_per_match": 2.91, "teams_remaining": 1},
-           "leaderboards": {"hybrid": [{"name": "Zed", "score": 42, "alive_teams": 1, "total_teams": 9}]},
+           "leaderboards": {"points": [{"name": "Zed", "score": 42, "alive_teams": 1, "total_teams": 9}]},
            "champion_decided": {"team": "Argentina", "owner": "Zed"}, "teams": []},
           open(os.path.join(D, "tracker_data.json"), "w"))
 _sm = server.build_summary()
@@ -225,7 +225,7 @@ server.push_broadcast = lambda *a, **k: None
 _sent.clear()
 _fin = {"stage": "FINAL", "status": "FINISHED", "home": "Brazil", "away": "Spain",
         "homeScore": 2, "awayScore": 1, "homeOwner": "Erol", "awayOwner": "James", "winner": "HOME_TEAM"}
-_lb = {"hybrid": [{"name": "Erol", "score": 120, "alive_teams": 1, "total_teams": 9}], "points": [], "survival": []}
+_lb = {"points": [{"name": "Erol", "score": 120, "alive_teams": 1, "total_teams": 9}], "survival": []}
 _new = {"stats": {"matches_played": 104, "teams_remaining": 1}, "fixtures": [_fin],
         "leaderboards": _lb, "players": [], "champion_decided": {"team": "Brazil", "owner": "Erol"}}
 _old = json.loads(json.dumps(_new)); _old["fixtures"][0]["status"] = "IN_PLAY"   # final not yet finished
@@ -244,12 +244,12 @@ _sent.clear()
 _dms = []
 _orig_dm = server._bot_dm_player
 server._bot_dm_player = lambda player, text, match_id=None: (_dms.append((player, text)) or 1)
-_lo = {"hybrid": [{"name": "A", "score": 50, "alive_teams": 3, "total_teams": 9},
+_lo = {"points": [{"name": "A", "score": 50, "alive_teams": 3, "total_teams": 9},
                   {"name": "B", "score": 40, "alive_teams": 3, "total_teams": 9},
-                  {"name": "C", "score": 30, "alive_teams": 3, "total_teams": 9}], "points": [], "survival": []}
-_ln = {"hybrid": [{"name": "A", "score": 50, "alive_teams": 3, "total_teams": 9},
+                  {"name": "C", "score": 30, "alive_teams": 3, "total_teams": 9}], "survival": []}
+_ln = {"points": [{"name": "A", "score": 50, "alive_teams": 3, "total_teams": 9},
                   {"name": "C", "score": 45, "alive_teams": 3, "total_teams": 9},
-                  {"name": "B", "score": 42, "alive_teams": 3, "total_teams": 9}], "points": [], "survival": []}
+                  {"name": "B", "score": 42, "alive_teams": 3, "total_teams": 9}], "survival": []}
 _oldr = {"stats": {"matches_played": 9}, "fixtures": [], "leaderboards": _lo, "players": []}
 _newr = {"stats": {"matches_played": 10}, "fixtures": [], "leaderboards": _ln, "players": []}   # a result just settled (9->10) and reordered the board -> overtake fires (live churn alone would NOT)
 json.dump(_newr, open(os.path.join(D, "tracker_data.json"), "w"))
@@ -288,7 +288,7 @@ _wd = {"stats": {"matches_played": 104, "goals": 250, "goals_per_match": 2.4, "t
                  "top_team_goals": 16, "teams_remaining": 1},
        "leaderboards": {"points": [{"name": "James", "score": 140}, {"name": "Erol", "score": 130}],
                         "survival": [{"name": "Louis", "score": 210}, {"name": "Erol", "score": 180}],
-                        "hybrid": [{"name": "Erol", "score": 300}, {"name": "James", "score": 290}, {"name": "Louis", "score": 270}]},
+                        },
        "champion_decided": {"team": "Brazil", "owner": "Erol", "runnerUp": "Spain"},
        "fixtures": [{"stage": "THIRD_PLACE", "status": "FINISHED", "home": "France", "away": "Germany",
                      "homeScore": 2, "awayScore": 1, "winner": "HOME"}],
@@ -296,12 +296,12 @@ _wd = {"stats": {"matches_played": 104, "goals": 250, "goals_per_match": 2.4, "t
 json.dump(_wd, open(os.path.join(D, "tracker_data.json"), "w"))
 _wt = "\n".join(server.build_wrapup())
 _need = ["Brazil", "Spain", "France", "Final table", "Golden-boot",
-         "Points winner", "Survival winner", "Both winner", "different winners"]
+         "Points winner", "Survival winner", "different winners"]
 _miss = [w for w in _need if w not in _wt]
 if _miss:
     fails.append(("wrapup", "missing from recap: %s" % _miss))
 else:
-    print("[wrapup] recap has champion + podium + three separate mode-winners + golden boot OK")
+    print("[wrapup] recap has champion + podium + two separate mode-winners + golden boot OK")
 
 shutil.rmtree(D, ignore_errors=True)
 
@@ -593,16 +593,16 @@ if not [f for f in fails if f[0] in ("uids", "default-dm", "optout", "reenable",
 
 # ===== overtake + leader-change post to the channel (the head-to-head 'global' messages) =====
 _sent.clear()
-json.dump({"leaderboards": {"hybrid": [{"name": "Erol"}, {"name": "Louis"}, {"name": "James"}]},
+json.dump({"leaderboards": {"points": [{"name": "Erol"}, {"name": "Louis"}, {"name": "James"}]},
            "stats": {"matches_played": 6}, "fixtures": []}, open("tracker_data.json", "w"))
-server.notify_changes({"leaderboards": {"hybrid": [{"name": "Erol"}, {"name": "James"}, {"name": "Louis"}]},
+server.notify_changes({"leaderboards": {"points": [{"name": "Erol"}, {"name": "James"}, {"name": "Louis"}]},
                        "stats": {"matches_played": 5}, "fixtures": []})
 if not any("overtakes" in s and "Louis" in s and "James" in s for s in _sent):
     fails.append(("rivalry-channel", "overtake channel message missing: %r" % _sent))
 _sent.clear()
-json.dump({"leaderboards": {"hybrid": [{"name": "James"}, {"name": "Erol"}]},
+json.dump({"leaderboards": {"points": [{"name": "James"}, {"name": "Erol"}]},
            "stats": {"matches_played": 7}, "fixtures": []}, open("tracker_data.json", "w"))
-server.notify_changes({"leaderboards": {"hybrid": [{"name": "Erol"}, {"name": "James"}]},
+server.notify_changes({"leaderboards": {"points": [{"name": "Erol"}, {"name": "James"}]},
                        "stats": {"matches_played": 6}, "fixtures": []})
 if not any("New leader" in s and "James" in s for s in _sent):
     fails.append(("leader-channel", "leader-change channel message missing: %r" % _sent))

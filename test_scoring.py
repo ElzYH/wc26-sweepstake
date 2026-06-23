@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unit tests for scoring.py — points, survival, hybrid, fair, and the over-time history replay.
+"""Unit tests for scoring.py — points, survival, fair, and the over-time history replay.
 
 Run: python3 test_scoring.py   (exit code 0 = all pass, non-zero = failure)
 Self-contained: writes tiny fixtures to a temp dir, no network, no real data touched.
@@ -112,11 +112,9 @@ def run():
                         results_path=fx["results.json"], out=None)
     pts = {p["name"]: p["points"] for p in d["players"]}
     surv = {p["name"]: p["survival"] for p in d["players"]}
-    hyb = {p["name"]: p["hybrid"] for p in d["players"]}
     check("A scores goals+win+clean-sheet (P1 = 6 + 2 = 8)", pts.get("P1") == 8, f"got {pts.get('P1')}")
     check("draw + loss tally (P2 = 0 + 2 = 2)", pts.get("P2") == 2, f"got {pts.get('P2')}")
     check("group stage gives no survival points", surv.get("P1") == 0 and surv.get("P2") == 0, f"{surv}")
-    check("hybrid == points + survival", all(hyb[k] == pts[k] + surv[k] for k in pts), f"{hyb}")
 
     lb = d["leaderboards"]
     check("points leaderboard ordered (P1 top)", lb["points"][0]["name"] == "P1", str(lb["points"]))

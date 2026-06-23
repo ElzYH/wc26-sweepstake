@@ -106,9 +106,9 @@ champ_w, _ = play(finalists, "FINAL", 34)
 
 json.dump({"competition": "WC", "matches": matches, "standings": standings}, open("results.json", "w"), indent=2)
 try:
-    mode = json.load(open("config.json")).get("scoring_mode", "hybrid")
+    mode = json.load(open("config.json")).get("scoring_mode", "points")
 except Exception:
-    mode = "hybrid"
+    mode = "points"
 data = scoring.compute(out="tracker_data.json", default_mode=mode)
 
 print(f"Simulated {len(matches)} matches.  Champion: {champ_w[0]}  (owner: "

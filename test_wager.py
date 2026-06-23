@@ -200,7 +200,7 @@ def run():
     ck("betting open mid-tournament", not wager.betting_locked({"stats": {"teams_remaining": 8, "matches_played": 50}}))
     ck("betting open pre-tournament", not wager.betting_locked({"stats": {"teams_remaining": 48, "matches_played": 0}}))
 
-    # --- example / integration: a bet flows through scoring into BOTH points and hybrid (survival untouched) ---
+    # --- example / integration: a bet flows through scoring into points (survival untouched) ---
     import json
     import tempfile
     import scoring
@@ -227,7 +227,7 @@ def run():
     dE = comp([])
     def _scores(d):
         return {m: [(r["name"], r["score"]) for r in (d.get("leaderboards") or {}).get(m, [])]
-                for m in ("points", "survival", "hybrid")}
+                for m in ("points", "survival")}
     ck("betting on with zero bets leaves every leaderboard identical", _scores(dE) == _scores(d0),
        (_scores(dE), _scores(d0)))
     bets = []
@@ -237,21 +237,17 @@ def run():
     d1 = comp(bets)
     e1 = next(p for p in d1["players"] if p["name"] == "Erol")
     # stake 10 with a 5 free bonus: the bonus covers 5, so 5 of Erol's real points are held off the board
-    ck("placing holds the (beyond-bonus) stake in points (and hybrid)", e1["points"] == e0["points"] - 5
-       and e1["hybrid"] == e0["hybrid"] - 5, (e0["points"], e1["points"], e0["hybrid"], e1["hybrid"]))
+    ck("placing holds the (beyond-bonus) stake in points", e1["points"] == e0["points"] - 5, (e0["points"], e1["points"]))
     ck("survival untouched by a bet", e1["survival"] == e0["survival"], (e0["survival"], e1["survival"]))
     pts_row = next(r for r in d1["leaderboards"]["points"] if r["name"] == "Erol")
-    hyb_row = next(r for r in d1["leaderboards"]["hybrid"] if r["name"] == "Erol")
-    ck("held stake shows in BOTH points and hybrid leaderboards",
-       pts_row["score"] == e0["points"] - 5 and hyb_row["score"] == e0["hybrid"] - 5, (pts_row["score"], hyb_row["score"]))
+    ck("held stake shows in the points leaderboard", pts_row["score"] == e0["points"] - 5, (pts_row["score"],))
     ms[1].update(status="FINISHED", homeScore=2, awayScore=0, winner="HOME")
     json.dump({"matches": ms}, open(t + "/results.json", "w"))
     wager.settle_all(bets, ms)
     d2 = comp(bets)
     e2 = next(p for p in d2["players"] if p["name"] == "Erol")
     profit = round(bets[0]["return"] - 10, 1)
-    ck("winning bet adds profit to points + hybrid", e2["points"] == round(e0["points"] + profit, 1)
-       and e2["hybrid"] == round(e0["hybrid"] + profit, 1), (e0["points"], e2["points"], profit))
+    ck("winning bet adds profit to points", e2["points"] == round(e0["points"] + profit, 1), (e0["points"], e2["points"], profit))
 
     # --- no underflow: heavy losses never push points or available below zero ---
     neg = []

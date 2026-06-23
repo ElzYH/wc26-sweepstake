@@ -94,10 +94,9 @@ def run_all():
     check("pens runner-up record shows a loss (0-0-1)", team(d, "Spain")["record"], "0-0-1")
     check("pens winner is champion", (d.get("champion_decided") or {}).get("team"), "Brazil")
 
-    # 3) Owner aggregation: Erol (champion Brazil) clearly outscores James (runner-up Spain) on points AND both.
+    # 3) Owner aggregation: Erol (champion Brazil) clearly outscores James (runner-up Spain) on points.
     d = run([M(1, "Brazil", "Spain", "FINAL", 2, 0, "HOME")], tmp)
     check("champion owner outscores on points", player(d, "Erol", "points") > player(d, "James", "points"), True)
-    check("champion owner outscores on hybrid", player(d, "Erol", "hybrid") > player(d, "James", "hybrid"), True)
     check("champion owner has a team still alive", player(d, "Erol", "alive_teams"), 1)
 
     # 4) Best defence = most clean sheets (not fewest conceded): Brazil keeps 2 clean sheets, Ghana 1.

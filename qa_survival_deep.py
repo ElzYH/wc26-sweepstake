@@ -33,7 +33,7 @@ def draw_json(assign, tj=None):
                                                 "group": tinfo.get(t, {}).get("group", "A")} for t in ts]}
                         for pl, ts in assign.items()]}
 
-def run(assign, matches, mode="hybrid", wagers=None, tj=None):
+def run(assign, matches, mode="points", wagers=None, tj=None):
     tj = tj or teams_json()
     json.dump(tj, open("teams.json", "w"))
     json.dump(draw_json(assign, tj), open("draw_result.json", "w"))
@@ -128,11 +128,11 @@ ck("champion board exists & sorted by odds desc", all(td["champion"][i]["odds"] 
 # ============================================================== LEADERBOARD ORDERING
 print("\n== LEADERBOARD ORDERING & TIE-BREAKS ==")
 td = run(A2, [M("m1", "Brazil", "Serbia", 3, 0), M("m2", "Spain", "Japan", 0, 0)])
-for key in ("points", "hybrid", "fair", "survival"):
+for key in ("points", "fair", "survival"):
     b = td["leaderboards"][key]
     ck("%s board sorted descending by score" % key, all(b[i]["score"] >= b[i+1]["score"] for i in range(len(b)-1)), b)
 ck("points board: the higher-scoring player is first", td["leaderboards"]["points"][0]["score"] >= td["leaderboards"]["points"][1]["score"], td["leaderboards"]["points"])
-ck("every board lists all players exactly once", all(len({r["name"] for r in td["leaderboards"][k]}) == len(td["players"]) for k in ("points", "hybrid", "fair", "survival")), "names")
+ck("every board lists all players exactly once", all(len({r["name"] for r in td["leaderboards"][k]}) == len(td["players"]) for k in ("points", "fair", "survival")), "names")
 # tie: two players equal points -> stable, both present
 td = run(A2, [M("m1", "Brazil", "Serbia", 1, 1)])   # 2-2 each side -> equal
 ck("a tie keeps both players on the board", len(td["leaderboards"]["points"]) == 2, td["leaderboards"]["points"])
@@ -220,7 +220,7 @@ def run_with_standings(standings, label):
     json.dump(draw_json(FULL, tj), open("draw_result.json", "w"))
     json.dump({"matches": [M("m1", "Brazil", "Serbia", 1, 0)], "standings": standings}, open("results.json", "w"))
     try:
-        scoring.compute(out="td.json", default_mode="hybrid", wagers=None)
+        scoring.compute(out="td.json", default_mode="points", wagers=None)
         return json.load(open("td.json")), None
     except Exception as e:
         return None, repr(e)

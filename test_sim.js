@@ -40,7 +40,6 @@ const ck = (name, cond, detail) => { console.log((cond ? '  PASS ' : '  FAIL ') 
 // CASE 1: pre-tournament — nothing played, no fixtures
 let r = simWinOdds({ groups, players: mkPlayers(() => ({})), fixtures: [], stats: { matches_played: 0, teams_remaining: 48 }, scoring }, 1500);
 ck('pre-tournament returns odds', !!r, 'null');
-ck('pre-tournament both% sums to ~100', Math.abs(sum(r, 'both') - 100) < 0.6, sum(r, 'both').toFixed(1));
 
 // CASE 2: mid-knockout — only T0..T7 alive (QF), and Reuben has NO alive team
 const alive = new Set(['T0', 'T1', 'T2', 'T3', 'T5', 'T6', 'T7', 'T8']); // none owned by Reuben (index%5==4 => T4,T9,...)
@@ -48,7 +47,6 @@ const stageOf = n => alive.has(n) ? { points: 40, status: 'alive', stage: 'QUART
 const koFix = [{ stage: 'QUARTER_FINALS', home: 'T0', away: 'T1', status: 'TIMED' }];
 r = simWinOdds({ groups, players: mkPlayers(stageOf), fixtures: koFix, stats: { matches_played: 104, teams_remaining: 8 }, scoring }, 4000);
 const reuben = r.find(x => x.name === 'Reuben');
-ck('mid-KO both% sums to ~100', Math.abs(sum(r, 'both') - 100) < 0.6, sum(r, 'both').toFixed(1));
 ck('mid-KO surv% sums to ~100', Math.abs(sum(r, 'surv') - 100) < 0.6, sum(r, 'surv').toFixed(1));
 ck('a player with no alive team cannot win Survival (0%)', reuben.surv === 0, 'Reuben surv=' + reuben.surv);
 ck('that player can still place on Points (>0%) from locked points', reuben.pts >= 0, 'Reuben pts=' + reuben.pts);

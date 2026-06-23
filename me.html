@@ -66,9 +66,9 @@
 <div class="toast" id="toast">Link copied</div>
 
 <script>
-const SAMPLE={"updated_at":"sample","players":[{"name":"Erol","points":0,"survival":0,"hybrid":0,"alive_teams":9,"total_teams":9,
+const SAMPLE={"updated_at":"sample","players":[{"name":"Erol","points":0,"survival":0,"alive_teams":9,"total_teams":9,
  "teams":[{"name":"France","tier":1,"group":"I","points":0,"survival":0,"status":"alive","stage":"GROUP_STAGE"}]}],
- "leaderboards":{"hybrid":[{"name":"Erol","score":0}]}};
+ "leaderboards":{"points":[{"name":"Erol","score":0}]}};
 const TIER={1:cv('--t1'),2:cv('--t2'),3:cv('--t3'),4:cv('--t4')};
 const STAGE={GROUP_STAGE:"Group",LAST_32:"R32",LAST_16:"R16",QUARTER_FINALS:"QF",SEMI_FINALS:"SF",THIRD_PLACE:"3rd",FINAL:"Final",WINNER:"Champions"};
 function cv(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
@@ -95,7 +95,7 @@ async function load(){
 }
 
 function rankOf(name){
-  const lb=(DATA.leaderboards&&DATA.leaderboards.hybrid)||[];
+  const lb=(DATA.leaderboards&&DATA.leaderboards.points)||[];
   const i=lb.findIndex(r=>r.name===name);return i<0?'—':('#'+(i+1)+' of '+lb.length);
 }
 function render(name){
@@ -103,7 +103,7 @@ function render(name){
   document.getElementById('card').innerHTML=`
     <div class="top">
       <div><div class="name">${esc(p.name)}</div><div class="rank">${rankOf(p.name)} · ${p.alive_teams}/${p.total_teams} still in</div></div>
-      <div class="scores"><b>${p.hybrid}</b><small>${p.points} pts · ${p.survival} surv</small></div>
+      <div class="scores"><b>${p.points}</b><small>${p.survival} surv</small></div>
     </div>
     <div class="tl">${p.teams.map(t=>`
       <div class="trow ${t.status==='out'?'out':''}">

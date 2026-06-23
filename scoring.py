@@ -3,7 +3,6 @@ Compute sweepstake standings in three modes from match results.
 
   points    - performance: goals, wins, draws, clean sheets + round bonuses
   survival  - progression only: how far your teams go / last-man-standing
-  hybrid    - both
 
 Knockout advancement/elimination uses each match's `winner` field, so games
 decided on penalties resolve correctly — and a knockout tie won on penalties
@@ -21,15 +20,15 @@ except Exception:
 
 SCORING = {
     "per_goal": 1, "win": 3, "draw": 1, "clean_sheet": 1,
-    "stage_bonus": {"LAST_32": 4, "LAST_16": 7, "QUARTER_FINALS": 11,
-                    "SEMI_FINALS": 16, "THIRD_PLACE": 20, "FINAL": 50, "WINNER": 100},
+    "stage_bonus": {"LAST_32": 5, "LAST_16": 10, "QUARTER_FINALS": 20,
+                    "SEMI_FINALS": 35, "THIRD_PLACE": 40, "FINAL": 50, "WINNER": 100},
 }
 SURVIVAL_VALUE = {"LAST_32": 18, "LAST_16": 26, "QUARTER_FINALS": 34,
                   "SEMI_FINALS": 44, "FINAL": 85, "WINNER": 135}
 KO_ORDER = ["LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "FINAL"]
 # The 3rd-place play-off isn't on the path to the final — both teams already lost their semi, so for SURVIVAL
 # they're eliminated (capped at the semi-final value; no THIRD_PLACE survival). It still awards a POINTS bonus to
-# its WINNER (bronze) and its goals/win count for points/hybrid, but it must not affect bracket advancement/survival.
+# its WINNER (bronze) and its goals/win count for points, but it must not affect bracket advancement/survival.
 BRACKET_KO = ("LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "FINAL")
 # A match counts as decided when FINISHED or AWARDED (a walkover/forfeit — the API gives it a winner + score).
 FINAL_STATUSES = ("FINISHED", "AWARDED")
@@ -85,13 +84,13 @@ def _player_totals(fin, teams, owner):
 
 
 def _build_history(finished, teams, owner, players):
-    """One snapshot per finished match, in chronological order — points/survival/hybrid per player."""
+    """One snapshot per finished match, in chronological order — points/survival per player."""
     fin = sorted([m for m in finished if m.get("homeScore") is not None],
                  key=lambda m: m.get("utcDate") or "")
     hist = []
     for i in range(1, len(fin) + 1):
         P, S = _player_totals(fin[:i], teams, owner)
-        hist.append({"m": i, "p": {pl: {"pts": P[pl], "srv": S[pl], "hyb": P[pl] + S[pl]}
+        hist.append({"m": i, "p": {pl: {"pts": P[pl], "srv": S[pl]}
                                    for pl in players}})
     return hist
 
@@ -372,7 +371,7 @@ def _clinched_top2(standings, group_matches):
 
 
 def compute(teams_path="teams.json", draw_path="draw_result.json",
-            results_path="results.json", out="tracker_data.json", default_mode="hybrid", wagers=None,
+            results_path="results.json", out="tracker_data.json", default_mode="points", wagers=None,
             clocks_path="match_clocks.json", group_mid_ts=None, composite_overrides=None):
     teams = {t["name"]: t for t in _load(teams_path)["teams"]}
     # Overlay calibrated composites (from the server's calibration.json) so the DISPLAYED odds are priced
@@ -551,7 +550,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                               "odds": teams.get(name, {}).get("implied_prob", 0)})
         teams_out.sort(key=lambda x: -(x["points"] + x["survival"]))
         tot_p = sum(x["points"] for x in teams_out); tot_s = sum(x["survival"] for x in teams_out)
-        players_out.append({"name": p["name"], "points": tot_p, "survival": tot_s, "hybrid": tot_p + tot_s,
+        players_out.append({"name": p["name"], "points": tot_p, "survival": tot_s,
                             "points_no_bets": tot_p,   # match points only — never touched by the betting adjustment below
                             "live": sum(x["live"] for x in teams_out),
                             "alive_teams": sum(1 for x in teams_out if x["status"] == "alive"),
@@ -593,7 +592,6 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                 if lnet or held_lb:
                     newp = max(0.0, round(p["points"] + lnet - held_lb, 1))
                     p["points"] = newp
-                    p["hybrid"] = round(newp + p["survival"], 1)
         except Exception:
             pass
 
@@ -814,7 +812,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
             "competition": results.get("competition", "WC"), "default_mode": default_mode,
             "scoring": {"points": SCORING, "survival": SURVIVAL_VALUE},
             "champion_decided": champion_decided,
-            "leaderboards": {"points": board("points"), "survival": board("survival"), "hybrid": board("hybrid"), "fair": board("fair"), "points_no_bets": board("points_no_bets")},
+            "leaderboards": {"points": board("points"), "survival": board("survival"), "fair": board("fair"), "points_no_bets": board("points_no_bets")},
             "champion": champ_board, "strength": strength_board, "stats": stats,
             "players": players_out,
             "groups": _groups_2026,

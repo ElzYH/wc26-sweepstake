@@ -265,7 +265,7 @@ try:
       players:[{name:'E',teams:[{name:'Brazil',status:'alive'},{name:'Japan',status:'alive'}]}],
       fixtures:[{home:'Brazil',away:'Serbia',homeScore:2,awayScore:0,status:'FINISHED',stage:'GROUP_STAGE',utcDate:'2026-06-10T12:00:00Z'},
                 {home:'Japan',away:'Spain',homeScore:1,awayScore:0,status:'IN_PLAY',stage:'GROUP_STAGE',utcDate:'2026-06-13T12:00:00Z'}],
-      leaderboards:{points:[{name:'E',score:11.2,live:5}],hybrid:[{name:'E',score:11.2,live:5}]}};
+      leaderboards:{points:[{name:'E',score:11.2,live:5}]}};
     const hist=buildHistory(d);console.log(hist[hist.length-1].p['E'].pts);"""
     open("/tmp/_bh.js", "w").write(_h)
     _now = float(_sp2.run(["node", "/tmp/_bh.js"], capture_output=True, text=True).stdout.strip())
@@ -295,7 +295,7 @@ try:
         _json.dump({"players": [{"name": "P1", "teams": [{"name": "TT1"}]}, {"name": "P2", "teams": [{"name": "TT2"}]}]}, open(os.path.join(_d, "draw.json"), "w"))
         _json.dump({"matches": [{"home": "TT1", "away": "TT2", "homeScore": _hs, "awayScore": _as, "status": "IN_PLAY", "stage": "GROUP_STAGE", "utcDate": "2026-06-12T17:00:00Z", "matchId": 1}]}, open(os.path.join(_d, "results.json"), "w"))
         _o = os.path.join(_d, "out.json")
-        _scoring.compute(os.path.join(_d, "teams.json"), os.path.join(_d, "draw.json"), os.path.join(_d, "results.json"), _o, "hybrid")
+        _scoring.compute(os.path.join(_d, "teams.json"), os.path.join(_d, "draw.json"), os.path.join(_d, "results.json"), _o, "points")
         _jj = _json.load(open(_o))
         _server.append(tuple([p for p in _jj["players"] if p["name"] == n][0]["live"] for n in ("P1", "P2")))
     _src = re.search(r"(function liveParts\(scored, conceded\)\{.*?\n\})", HTML, re.S).group(1)
@@ -472,7 +472,7 @@ ck("O/U half-line is never level", provResult({selection:"OVER",market:"ou",line
   //    the leaderboard has him on 0.2 from a settled bet) — earlier points stay match-only
   const d4 = {players:[{name:"James",teams:[{name:"Mexico",status:"alive"}]},{name:"Erol",teams:[{name:"Brazil",status:"alive"}]}], scoring:SCO,
               fixtures:[{home:"Mexico",away:"South Africa",status:"FINISHED",homeScore:2,awayScore:0,winner:"HOME",stage:"GROUP_STAGE",utcDate:"2026-06-11T19:00:00Z"}],
-              leaderboards:{points:[{name:"James",score:6},{name:"Erol",score:0.2}], hybrid:[{name:"James",score:6},{name:"Erol",score:0.2}]}};
+              leaderboards:{points:[{name:"James",score:6},{name:"Erol",score:0.2}]}};
   ck("chart now-point includes betting (Erol 0 -> 0.2)", ptsOf(d4).map(x=>x.Erol).join(",") === "0,0.2");
   ck("chart baseline stays at zero (betting not back-dated)", ptsOf(d4)[0].Erol === 0);
 }

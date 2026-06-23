@@ -1508,8 +1508,8 @@ def notify_changes(old):
 
     # overall (Both) leader change -> everyone
     try:
-        ol = (old["leaderboards"]["hybrid"][0] or {}).get("name")
-        nl = (new["leaderboards"]["hybrid"][0] or {}).get("name")
+        ol = (old["leaderboards"]["points"][0] or {}).get("name")
+        nl = (new["leaderboards"]["points"][0] or {}).get("name")
         if _mp > _old_mp and nl and ol and nl != ol:   # only when a match SETTLES — points accrue live, so a single goal must not ping "new leader"
             alert_all("leader", "New leader 📈", "%s now tops the table." % nl,
                       "📈 New leader: **%s** now tops the table." % nl)
@@ -1602,8 +1602,8 @@ def notify_changes(old):
         oc, nc = _final_result(old), _final_result(new)
         if nc[0] and nc != oc:
             team, owner = nc
-            mode = (load_config().get("scoring_mode") or "hybrid")
-            mode = mode if mode in ("points", "survival", "hybrid") else "hybrid"
+            mode = (load_config().get("scoring_mode") or "points")
+            mode = mode if mode in ("points", "survival") else "points"
             board = (new.get("leaderboards") or {}).get(mode) or []
             entry = next((p for p in board if p.get("name") == owner), None)
             tail = (" — %s finishes on %s pts." % (owner, entry.get("score", 0))) if (entry and own(owner) != "—") else "."
@@ -1636,9 +1636,9 @@ def build_summary():
     if not mp and not _live_now:
         return ["📊 WC26 Sweepstake", "Tournament hasn't kicked off yet — the summary fills in once games start (11 June)."]
     today = time.strftime("%a %d %b", time.gmtime())
-    mode = (load_config().get("scoring_mode") or "hybrid")
-    mode = mode if mode in ("points", "survival", "hybrid") else "hybrid"
-    label = {"points": "pts", "survival": "teams in", "hybrid": "total"}[mode]
+    mode = (load_config().get("scoring_mode") or "points")
+    mode = mode if mode in ("points", "survival") else "points"
+    label = {"points": "pts", "survival": "teams in"}[mode]
     lines = ["📊 **WC26 Sweepstake** — %s" % today]
     board = (d.get("leaderboards") or {}).get(mode) or []
     medals = ["🥇", "🥈", "🥉"]
@@ -1762,7 +1762,7 @@ def build_wrapup():
         lines.append("🥉 Third place: %s (%s)" % (third, _owner_of(d, third)))
     board = (d.get("leaderboards") or {}).get(mode) or []
     if board:
-        lbl = {"points": "Points", "survival": "Survival", "hybrid": "Both"}.get(mode, "Both")
+        lbl = {"points": "Points", "survival": "Survival"}.get(mode, "Points")
         lines.append("")
         lines.append("**Final table — %s**" % lbl)
         medals = ["🥇", "🥈", "🥉"]
@@ -1773,7 +1773,7 @@ def build_wrapup():
     # three separate prizes — each mode can have a DIFFERENT winner
     lbs = d.get("leaderboards") or {}
     prizes = []
-    for key, name in (("points", "Points"), ("survival", "Survival"), ("hybrid", "Both")):
+    for key, name in (("points", "Points"), ("survival", "Survival")):
         b = lbs.get(key) or []
         if b:
             prizes.append("🏅 %s winner: **%s** (%s)" % (name, b[0].get("name", "?"), b[0].get("score", 0)))
@@ -1781,9 +1781,9 @@ def build_wrapup():
         lines.append("")
         lines.append("**Prizes** — one per scoring mode")
         lines += prizes
-        winners = {lbs[k][0]["name"] for k in ("points", "survival", "hybrid") if lbs.get(k)}
+        winners = {lbs[k][0]["name"] for k in ("points", "survival") if lbs.get(k)}
         if len(winners) > 1:
-            lines.append("(%d different winners across the three modes!)" % len(winners))
+            lines.append("(%d different winners across the modes!)" % len(winners))
     if stats.get("top_team"):
         lines.append("⚽ Golden-boot team: %s (%s) — %s goals"
                      % (stats["top_team"], _owner_of(d, stats["top_team"]), stats.get("top_team_goals", 0)))
@@ -1823,8 +1823,8 @@ def build_draw_announcement():
 
 
 def _active_mode():
-    m = (load_config().get("scoring_mode") or "hybrid")
-    return m if m in ("points", "survival", "hybrid") else "hybrid"
+    m = (load_config().get("scoring_mode") or "points")
+    return m if m in ("points", "survival") else "points"
 
 
 def _bet_match_choices(partial=""):
@@ -2352,7 +2352,7 @@ def discord_command(name, opts, uid=None, interaction_id=None):
         board = (d.get("leaderboards") or {}).get(mode) or []
         if not board:
             return "No standings yet — the tournament hasn't started."
-        rows = ["**Leaderboard** (%s)" % ("Both" if mode == "hybrid" else mode)]
+        rows = ["**Leaderboard** (%s)" % {"points": "Points", "survival": "Survival"}.get(mode, "Points")]
         for i, p in enumerate(board[:10]):
             rows.append("%2d. %s — %s %s" % (i + 1, p.get("name"), p.get(mode, 0), label))
         return "\n".join(rows)
@@ -2595,7 +2595,7 @@ def update_now(cfg):
             _update_match_clocks(json.load(open("results.json")).get("matches", []))
         except Exception:
             pass
-        scoring_mod.compute(out="tracker_data.json", default_mode=cfg.get("scoring_mode", "hybrid"), wagers=wlist, group_mid_ts=_group_mid_ts(), composite_overrides=(_load_calibration().get("composites") or None))
+        scoring_mod.compute(out="tracker_data.json", default_mode=cfg.get("scoring_mode", "points"), wagers=wlist, group_mid_ts=_group_mid_ts(), composite_overrides=(_load_calibration().get("composites") or None))
         cfg["last_update"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         save_config(cfg)
         notify_changes(old_snapshot)        # personalised alerts (if any subscribers)
@@ -3345,9 +3345,9 @@ class Handler(BaseHTTPRequestHandler):
             import csv
             buf = io.StringIO()
             w = csv.writer(buf)
-            w.writerow(["Player", "Points", "Survival", "Both", "Teams alive", "Total teams"])
+            w.writerow(["Player", "Points", "Survival", "Teams alive", "Total teams"])
             for p in (d.get("players") or []):
-                w.writerow([p.get("name"), p.get("points", 0), p.get("survival", 0), p.get("hybrid", 0),
+                w.writerow([p.get("name"), p.get("points", 0), p.get("survival", 0),
                             p.get("alive_teams", 0), p.get("total_teams", 0)])
             w.writerow([])
             w.writerow(["Player", "Team", "Group", "Status", "Points", "Survival", "Goals for", "Goals against"])
@@ -3511,7 +3511,7 @@ class Handler(BaseHTTPRequestHandler):
                 "max_per_player": (int(body["max_per_player"]) if body.get("max_per_player") else None),
                 "leftover": body.get("leftover", "pool"),
                 "t1_cap": body.get("t1_cap") or None,
-                "scoring_mode": body.get("scoring_mode", "hybrid"),
+                "scoring_mode": body.get("scoring_mode", "points"),
                 "poll_minutes": int(body.get("poll_minutes", 10)),
                 "competition": body.get("competition", "WC"),
             })
@@ -3705,7 +3705,7 @@ class Handler(BaseHTTPRequestHandler):
                 wl = load_wagers() or None             # standing bets always count, even if NEW betting is switched off
                 try:                                 # rebuild the tracker from the restored data (no network needed)
                     scoring_mod.compute(out="tracker_data.json",
-                                        default_mode=cfg.get("scoring_mode", "hybrid"), wagers=wl, group_mid_ts=_group_mid_ts(), composite_overrides=(_load_calibration().get("composites") or None))
+                                        default_mode=cfg.get("scoring_mode", "points"), wagers=wl, group_mid_ts=_group_mid_ts(), composite_overrides=(_load_calibration().get("composites") or None))
                     ok, err = True, None
                 except Exception as e:
                     ok, err = False, str(e)

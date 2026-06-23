@@ -29,7 +29,7 @@ def draw_json(assign):
     return {"players": [{"name": pl, "teams": [{"name": t, "tier": tinfo[t]["tier"], "group": tinfo[t]["group"]} for t in ts]}
                         for pl, ts in assign.items()]}
 
-def run(assign, matches, mode="hybrid", wagers=None):
+def run(assign, matches, mode="points", wagers=None):
     json.dump(teams_json(), open("teams.json", "w"))
     json.dump(draw_json(assign), open("draw_result.json", "w"))
     json.dump({"matches": matches}, open("results.json", "w"))
@@ -195,14 +195,12 @@ allp = td["players"]
 ck("every player's points are finite", all(math.isfinite(p["points"]) for p in allp), [p["points"] for p in allp])
 ck("every player's points are >= 0", all(p["points"] >= 0 for p in allp), [p["points"] for p in allp])
 ck("every player's survival is finite & >= 0", all(math.isfinite(p["survival"]) and p["survival"] >= 0 for p in allp), [p["survival"] for p in allp])
-ck("every player's hybrid == points + survival", all(abs(p["hybrid"] - (p["points"] + p["survival"])) < 0.5 for p in allp), [(p["hybrid"], p["points"], p["survival"]) for p in allp])
 ck("every team's points finite & >= 0", all(math.isfinite(t["points"]) and t["points"] >= 0 for p in allp for t in p["teams"]), "team pts")
 ck("every team's live points finite & >= 0", all(math.isfinite(t["live"]) and t["live"] >= 0 for p in allp for t in p["teams"]), "live")
 
 # ============================================================== MODES
-print("\n== MODES (points / survival / hybrid) ==")
+print("\n== MODES (points / survival) ==")
 td = run(A2, [M("m1", "Brazil", "Serbia", 2, 1), M("m2", "Spain", "Japan", 1, 0, stage="LAST_16")])
-ck("hybrid == points + survival per player", all(abs(p["hybrid"] - (p["points"] + p["survival"])) < 0.5 for p in td["players"]), td["players"])
 ck("a leaderboard exists for the active mode", "leaderboards" in td or "players" in td, list(td.keys()))
 
 # ============================================================== EMPTY / DEGENERATE
@@ -259,7 +257,7 @@ json.dump({"players": [{"name": "PA", "teams": [{"name": "BP1"}]}, {"name": "PB"
 json.dump({"matches": [{"home": "BP1", "away": "BP2", "homeScore": 2, "awayScore": 0, "status": "FINISHED", "stage": "GROUP_STAGE", "utcDate": "2026-06-10T17:00:00Z", "matchId": 1}]}, open(os.path.join(_bd, "results.json"), "w"))
 def _bp_run(_wl):
     _o = os.path.join(_bd, "out.json")
-    _SCO.compute(os.path.join(_bd, "teams.json"), os.path.join(_bd, "draw.json"), os.path.join(_bd, "results.json"), _o, "hybrid", wagers=_wl)
+    _SCO.compute(os.path.join(_bd, "teams.json"), os.path.join(_bd, "draw.json"), os.path.join(_bd, "results.json"), _o, "points", wagers=_wl)
     _j = json.load(open(_o))
     return {p["name"]: p for p in _j["players"]}, {r["name"]: r for r in _j["leaderboards"]["points"]}
 _BW = [{"id": "a", "player": "PA", "stake": 10, "return": 35, "status": "pending", "matchId": 9},

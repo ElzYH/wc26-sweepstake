@@ -34,10 +34,10 @@ S._dm_all_games = lambda text, exclude_players=None: (DMALL.append(text), DMALL_
 def reset():
     DISC.clear(); PUSH.clear(); MENT.clear(); DM.clear(); DMALL.clear(); DMALL_EXCL.clear()
 
-def tracker(matches_played, status, hs, as_, leader="Erol", hybrid=None):
+def tracker(matches_played, status, hs, as_, leader="Erol", order=None):
     return {"stats": {"matches_played": matches_played},
-            "leaderboards": {"hybrid": hybrid or [{"name": leader}, {"name": "James"}],
-                             "points": [{"name": leader}], "survival": [{"name": leader}]},
+            "leaderboards": {"points": order or [{"name": leader}, {"name": "James"}],
+                             "survival": [{"name": leader}]},
             "players": [{"name": "Erol"}, {"name": "James"}],
             "fixtures": [{"home": "Spain", "away": "France", "status": status,
                           "homeOwner": "Erol", "awayOwner": "James",
@@ -72,7 +72,7 @@ print("\n== channel feed (switch ON): EVERY game event posts to the channel — 
 def solo_tracker(status, hs, as_, stage="GROUP_STAGE"):
     # James owns the home team; the away team is unowned (pool) -> NOT head-to-head, but the channel still gets it
     return {"stats": {"matches_played": 0, "teams_remaining": 30, "goals": 0},
-            "leaderboards": {"hybrid": [{"name": "James"}], "points": [{"name": "James"}], "survival": [{"name": "James"}]},
+            "leaderboards": {"points": [{"name": "James"}], "survival": [{"name": "James"}]},
             "players": [{"name": "Erol"}, {"name": "James"}],
             "fixtures": [{"home": "Brazil", "away": "Panama", "status": status,
                           "homeOwner": "James", "awayOwner": "—",
@@ -101,19 +101,19 @@ ck("no spurious pushes before anything is live", PUSH == [], PUSH)
 
 print("\n== leaderboard pings stay quiet during live-only play (no settled result yet) ==")
 # leader changes in the live (matches_played==0) snapshot -> must NOT fire 'New leader' (avoids live-shuffle spam)
-old = tracker(0, "IN_PLAY", 0, 0, hybrid=[{"name": "Erol"}, {"name": "James"}])
-new = tracker(0, "IN_PLAY", 1, 0, hybrid=[{"name": "James"}, {"name": "Erol"}])   # live shuffle
+old = tracker(0, "IN_PLAY", 0, 0, order=[{"name": "Erol"}, {"name": "James"}])
+new = tracker(0, "IN_PLAY", 1, 0, order=[{"name": "James"}, {"name": "Erol"}])   # live shuffle
 transition(old, new)
 ck("no 'New leader' ping from a live-only shuffle", not any("New leader" in x for x in DISC), DISC)
 # but once a result is settled (matches_played>0), a genuine leader change DOES fire
-old = tracker(1, "FINISHED", 1, 0, hybrid=[{"name": "Erol"}, {"name": "James"}])
-new = tracker(2, "FINISHED", 1, 0, hybrid=[{"name": "James"}, {"name": "Erol"}])
+old = tracker(1, "FINISHED", 1, 0, order=[{"name": "Erol"}, {"name": "James"}])
+new = tracker(2, "FINISHED", 1, 0, order=[{"name": "James"}, {"name": "Erol"}])
 transition(old, new)
 ck("a settled leader change DOES post 'New leader'", any("New leader" in x for x in DISC), DISC)
 # the clutter case: a LIVE goal while earlier games are already finished (matches_played stays put) churns the
 # provisional board but NOTHING new settled -> must stay quiet (this is the per-goal spam the user hit)
-old = tracker(2, "IN_PLAY", 0, 0, hybrid=[{"name": "Erol"}, {"name": "James"}])
-new = tracker(2, "IN_PLAY", 1, 0, hybrid=[{"name": "James"}, {"name": "Erol"}])   # live goal flips the provisional order
+old = tracker(2, "IN_PLAY", 0, 0, order=[{"name": "Erol"}, {"name": "James"}])
+new = tracker(2, "IN_PLAY", 1, 0, order=[{"name": "James"}, {"name": "Erol"}])   # live goal flips the provisional order
 transition(old, new)
 ck("no 'New leader' ping when a live goal shuffles the board but no NEW result settled",
    not any("New leader" in x for x in DISC), DISC)
@@ -123,8 +123,8 @@ import time as _t
 _today = _t.strftime("%Y-%m-%d", _t.gmtime())
 def _digest_tracker(matches_played, fixtures):
     return {"stats": {"matches_played": matches_played, "teams_remaining": 30, "goals": 3, "goals_per_match": 1.5},
-            "leaderboards": {"hybrid": [{"name": "James", "score": 6}, {"name": "Erol", "score": 4}],
-                             "points": [{"name": "James", "score": 6}], "survival": [{"name": "James", "score": 1}]},
+            "leaderboards": {"points": [{"name": "James", "score": 6}, {"name": "Erol", "score": 4}],
+                             "survival": [{"name": "James", "score": 1}]},
             "players": [{"name": "Erol", "teams": []}, {"name": "James", "teams": []}],
             "fixtures": fixtures}
 

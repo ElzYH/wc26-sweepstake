@@ -80,6 +80,7 @@
   .trow.out{opacity:.42;text-decoration:line-through}
   .trow .tp{color:var(--gold);font-variant-numeric:tabular-nums;min-width:34px;text-align:right}
   .trow .stg{color:var(--muted);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase}
+  .trow .up{color:var(--gold);opacity:.66;font-size:10px;letter-spacing:.02em;font-weight:700;white-space:nowrap;margin-left:2px}
 
   /* groups */
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(330px,100%),1fr));gap:14px}
@@ -341,10 +342,8 @@
     <ul style="margin:4px 0 8px;padding-left:20px;line-height:1.7">
       <li><b>Points</b> — your teams earn points for goals, wins, clean sheets and for reaching each knockout round (plus, if betting is on, any betting winnings). It rewards <i>doing well</i>.</li>
       <li><b>Survival</b> — how far your teams go and how many are still alive. It rewards <i>lasting</i> — owning teams that keep advancing.</li>
-      <li><b>Both</b> — literally <b>Points + Survival added together</b> for each player, then ranked once. You win it by having a squad that both racks up points <i>and</i> goes deep.</li>
     </ul>
-    <p><b>Why is "Both" bigger than "Points"?</b> Both = Points + Survival. Owning deep-running teams makes Survival large, so Both is too — not a bug. The live example below shows the sum.</p>
-    <div id="scoringRules"></div>
+    <div id="scoringRules" class="scoringMount"></div>
     <p><b>Fixtures:</b> the bar under each match is the win chance (home / draw / away).</p>
     <p><b>Odds &amp; stats:</b> your live chance of owning the champion (from bookmaker prices), plus a simulator of your odds to win on each mode.</p>
     <p><b>📋 Summary:</b> the quick digest at the top of Overview — leaders, teams left, top team and goals. The same digest can be posted to Discord from Settings.</p>
@@ -522,10 +521,10 @@
       <button data-m="points">Points</button>
       <button data-m="points_no_bets">No bets</button>
       <button data-m="survival">Survival</button>
-      <button data-m="hybrid">Both</button>
       <button data-m="fair">Fair</button>
     </div>
     <div class="modecap" id="modeCap"></div>
+    <details style="margin:4px 0 2px"><summary style="cursor:pointer;color:var(--gold);font-weight:700;font-size:13px;padding:7px 0">ⓘ How scoring works — exact point values <span style="opacity:.55;font-weight:400">(tap to expand)</span></summary><div id="scoringRulesLb" class="scoringMount"></div></details>
     <div class="lb" id="lbBody"></div>
   </section>
   <section id="players"><div class="hint" style="color:var(--muted);font-size:12.5px;margin:0 0 10px">The number on the right of each team is the <b style="color:var(--ink)">points it has earned</b> that player. The G-tag is its group.</div><div class="pcards" id="playersBody"></div></section>
@@ -550,12 +549,12 @@
       <h4>Points &amp; position over time</h4>
       <p>How each player's <b>points</b> and <b>league position</b> have moved as matches are played — one line per player. Builds up over the tournament.</p>
       <div class="modesel" id="chartView" style="margin:10px 0 6px"><button data-v="val" class="on">Over time</button><button data-v="pos">Position</button></div>
-      <div class="modesel" id="chartMetric" style="margin:0 0 10px"><button data-c="pts" class="on">Points</button><button data-c="both">Both</button><button data-c="surv">Survival</button></div>
+      <div class="modesel" id="chartMetric" style="margin:0 0 10px"><button data-c="pts" class="on">Points</button><button data-c="surv">Survival</button></div>
       <div id="chartBody"></div>
     </div>
     <div class="panel" style="margin-top:20px">
       <h4>Win odds by scoring mode (simulated)</h4>
-      <p>The bars above are your <b>Survival</b> odds (owning the eventual winner). To estimate <b>Points</b> and <b>Both</b>, this runs thousands of full tournaments from team strength and counts how often each player tops that leaderboard. <b>Both</b> = highest Points + Survival combined, so you need a squad that piles up points <i>and</i> goes deep.</p>
+      <p>The bars above are your <b>Survival</b> odds (owning the eventual winner). To estimate <b>Points</b>, this runs thousands of full tournaments from team strength and counts how often each player tops that leaderboard.</p>
       <div class="hint" id="simNote" style="margin-top:6px"></div>
       <div id="simBody" style="margin-top:10px"></div>
     </div>
@@ -563,13 +562,12 @@
 </div>
 
 <script>
-const SAMPLE = {"updated_at":"pre-tournament","competition":"WC","default_mode":"hybrid",
+const SAMPLE = {"updated_at":"pre-tournament","competition":"WC","default_mode":"points",
  "leaderboards":{"points":[{"name":"Erol","score":0,"alive_teams":9,"total_teams":9}],
-   "survival":[{"name":"Erol","score":0,"alive_teams":9,"total_teams":9}],
-   "hybrid":[{"name":"Erol","score":0,"alive_teams":9,"total_teams":9}]},
+   "survival":[{"name":"Erol","score":0,"alive_teams":9,"total_teams":9}]},
  "players":[{"name":"Erol","points":0,"survival":0,"teams":[{"name":"France","tier":1,"group":"I","points":0,"survival":0,"status":"alive","stage":"GROUP_STAGE","record":"0-0-0"}]}],
  "groups":[],"fixtures":[]};
-let MODE="hybrid";
+let MODE="points";
 const FLAGS={"France": "🇫🇷", "Spain": "🇪🇸", "Argentina": "🇦🇷", "Brazil": "🇧🇷", "Portugal": "🇵🇹", "Germany": "🇩🇪", "Netherlands": "🇳🇱", "Morocco": "🇲🇦", "Belgium": "🇧🇪", "Croatia": "🇭🇷", "Colombia": "🇨🇴", "USA": "🇺🇸", "Senegal": "🇸🇳", "Mexico": "🇲🇽", "Uruguay": "🇺🇾", "Japan": "🇯🇵", "Switzerland": "🇨🇭", "Turkey": "🇹🇷", "Ecuador": "🇪🇨", "Iran": "🇮🇷", "Norway": "🇳🇴", "Austria": "🇦🇹", "Korea Republic": "🇰🇷", "Australia": "🇦🇺", "Egypt": "🇪🇬", "Algeria": "🇩🇿", "Canada": "🇨🇦", "Ivory Coast": "🇨🇮", "Sweden": "🇸🇪", "Panama": "🇵🇦", "Paraguay": "🇵🇾", "Czech Republic": "🇨🇿", "Tunisia": "🇹🇳", "DR Congo": "🇨🇩", "Uzbekistan": "🇺🇿", "Qatar": "🇶🇦", "Iraq": "🇮🇶", "South Africa": "🇿🇦", "Saudi Arabia": "🇸🇦", "Bosnia & Herzegovina": "🇧🇦", "Jordan": "🇯🇴", "Cape Verde": "🇨🇻", "Ghana": "🇬🇭", "Curacao": "🇨🇼", "Haiti": "🇭🇹", "New Zealand": "🇳🇿", "Bosnia-Herzegovina": "🇧🇦", "Bosnia and Herzegovina": "🇧🇦", "Cote d'Ivoire": "🇨🇮", "Côte d'Ivoire": "🇨🇮", "South Korea": "🇰🇷", "United States": "🇺🇸", "Czechia": "🇨🇿", "Curaçao": "🇨🇼", "Cape Verde Islands": "🇨🇻", "Türkiye": "🇹🇷", "Turkiye": "🇹🇷", "Congo DR": "🇨🇩", "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "Scotland": "🏴󠁧󠁢󠁳󠁣󠁴󠁿"};
 function flag(n){const f=FLAGS[n];return f?f+" ":"";}
 // (Gambling winnings are folded straight into each player's total — same as live match points —
@@ -1164,8 +1162,8 @@ function ownerOf(d,team){ for(const p of (d.players||[])){ for(const t of (p.tea
 function summaryLines(d){
   const st=d.stats||{}, mp=st.matches_played||0;
   if(!mp) return ["Tournament hasn't kicked off yet — this fills in once games start (11 June)."];
-  const mode=(STATUS.scoring_mode||'hybrid'); const m=['points','survival','hybrid'].includes(mode)?mode:'hybrid';
-  const label=m==='survival'?'survival':(m==='hybrid'?'total':'pts');
+  const mode=(STATUS.scoring_mode||'points'); const m=['points','survival'].includes(mode)?mode:'points';
+  const label=m==='survival'?'survival':'pts';
   const board=(d.leaderboards||{})[m]||[]; const medals=['🥇','🥈','🥉']; const out=[];
   board.slice(0,3).forEach((p,i)=>out.push(medals[i]+' '+p.name+' — '+(p.score??0)+' '+label));
   if(st.teams_remaining!=null) out.push('🛡️ Teams still in: '+st.teams_remaining);
@@ -1179,6 +1177,19 @@ let LBMODE=null;
 const TIER={1:cv('--t1'),2:cv('--t2'),3:cv('--t3'),4:cv('--t4')};
 function cv(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
 const STAGE_LABEL={GROUP_STAGE:"Group",LAST_32:"R32",LAST_16:"R16",QUARTER_FINALS:"QF",SEMI_FINALS:"SF",THIRD_PLACE:"3rd",FINAL:"Final",WINNER:"🏆 Champion"};
+// the next stage on the path to the title, used to show an ALIVE team the bonus it can still earn
+const STAGE_NEXT={GROUP_STAGE:'LAST_32',LAST_32:'LAST_16',LAST_16:'QUARTER_FINALS',QUARTER_FINALS:'SEMI_FINALS',SEMI_FINALS:'FINAL',FINAL:'WINNER'};
+const STAGE_FULL={LAST_32:'the Round of 32',LAST_16:'the Round of 16',QUARTER_FINALS:'the quarter-final',SEMI_FINALS:'the semi-final',FINAL:'the final',WINNER:'the title'};
+function upsideTag(t){
+  if(!t || t.status!=='alive') return '';                 // out = capped at its furthest round, no more bonus to win
+  const nx=STAGE_NEXT[t.stage]; if(!nx) return '';         // already champion -> nothing further
+  const sc=(DATA.scoring&&DATA.scoring.points)||{}, SB=sc.stage_bonus||{}, SV=(DATA.scoring&&DATA.scoring.survival)||{};
+  const dp=(SB[nx]||0)-(SB[t.stage]||0), ds=(SV[nx]||0)-(SV[t.stage]||0);
+  if(dp<=0 && ds<=0) return '';
+  const lbl=STAGE_LABEL[nx]||nx;
+  const tip='If '+esc(t.name)+' reaches '+(STAGE_FULL[nx]||lbl)+': +'+dp+' Points'+(ds>0?' (and +'+ds+' Survival)':'')+' in bonus — goals & wins add more on top.';
+  return ' <span class="up" title="'+tip+'">↑ +'+dp+' at '+lbl+'</span>';
+}
 const KO_STAGES=["LAST_32","LAST_16","QUARTER_FINALS","SEMI_FINALS","THIRD_PLACE","FINAL"];
 let KOROUND=null, KO_USER_SET=false;
 
@@ -1405,7 +1416,7 @@ function renderH2H(d){
   const teamList=p=>p.teams.slice().sort((x,y)=>(y.points||0)-(x.points||0)).map(t=>
     `<div class="h2hteam ${t.status==='out'?'out':''}"><span>${flag(t.name)}${esc(t.name)}</span><span>${t.points} pt</span></div>`).join('');
   body.innerHTML=
-    metric('Points','points')+metric('Survival','survival')+metric('Both','hybrid')
+    metric('Points','points')+metric('Survival','survival')
     +metric('Teams still in','alive_teams')+metric('Champion odds','champion_odds',v=>v+'%')
     +`<div class="h2hgrid" style="margin-top:14px">
         <div class="h2hcol"><h4>${esc(A.name)} <span class="w">${A.alive_teams}/${A.total_teams} in</span></h4>${teamList(A)}</div>
@@ -1421,8 +1432,8 @@ function render(d){
   renderLive(d);
   renderH2H(d);
   renderScoringRules(d);
-  const _betMode=(STATUS.scoring_mode||d.default_mode||'hybrid');     // betting stakes POINTS — only in points / Both
-  const _betOK=STATUS.wagering_enabled && (_betMode==='points'||_betMode==='hybrid');
+  const _betMode=(STATUS.scoring_mode||d.default_mode||'points');     // betting stakes POINTS — only in points mode
+  const _betOK=STATUS.wagering_enabled && _betMode==='points';
   if(_betOK){ const t=document.getElementById('betsTab'); if(t) t.style.display='';
     if(!document.getElementById('betWho')) renderBets();              // first build only
     else if(document.getElementById('bets').classList.contains('on')) refreshBetsLive(); }  // poll: refresh lists only, NEVER rebuild the stake/passcode box you're typing in
@@ -1434,9 +1445,9 @@ function render(d){
         if(document.getElementById('notify').classList.contains('on') && !NOTIFYBUSY) renderNotifyTab(); }
       else at.style.display='none'; } }
   // leaderboard for the active mode
-  MODE=d.default_mode||'hybrid';
-  const sm=STATUS.scoring_mode||MODE||'hybrid';
-  const allowed = (sm==='points' ? ['points','fair'] : sm==='survival' ? ['survival'] : ['points','survival','hybrid','fair']).slice();
+  MODE=d.default_mode||'points';
+  const sm=STATUS.scoring_mode||MODE||'points';
+  const allowed = (sm==='points' ? ['points','fair'] : sm==='survival' ? ['survival'] : ['points','survival','fair']).slice();
   if(STATUS.wagering_enabled && allowed.includes('points')) allowed.push('points_no_bets');  // only meaningful (differs from Points) when bets are on
   let lbm=LBMODE||MODE;
   if(!allowed.includes(lbm)) lbm = allowed.includes(sm)?sm:allowed[0];
@@ -1446,15 +1457,14 @@ function render(d){
     b.classList.toggle('on', b.dataset.m===lbm);
   });
   const CAP={
-    points:"<b>Points</b> — teams earn points for goals, wins (a penalty-shootout win counts), clean sheets, and escalating bonuses for each knockout round. Reaching the final and <b>winning the World Cup are worth by far the most</b>, but early goals and wins still count even for teams knocked out early.",
+    points:"<b>Points</b> — teams earn points for goals, wins (a penalty-shootout win counts), clean sheets, and a one-off bonus for each knockout round their teams reach — <b>that bonus is included right here in Points</b>. Reaching the final and <b>winning the World Cup are worth by far the most</b>, but early goals and wins still count even for teams knocked out early. (<b>Survival</b> is a separate, bigger reward on top.)",
     survival:"<b>Survival</b> — ranked on how many of your teams are still alive and how far they go. Rewards backing teams that last.",
-    hybrid:"<b>Both</b> — Points and Survival added into one number. A single winner: the squad that racks up points <b>and</b> survives deep.",
     fair:"<b>Fair</b> — points scored <b>above or below what your squad was expected to score</b> (from the group + run model). Levels out lucky vs tough draws: beat your number to climb, no matter who you drew. Kicks in once games start.",
     points_no_bets:"<b>No bets</b> — the same team points as <b>Points</b>, but with all betting profit and loss stripped out. Pure team performance: goals, wins, clean sheets and knockout bonuses only. Use it to see the table as it would stand if no one had bet."
   };
   document.getElementById('modeCap').innerHTML=CAP[lbm]||'';
   const board=(d.leaderboards&&d.leaderboards[lbm])||[];
-  const unit=lbm==='survival'?'STILL IN':(lbm==='hybrid'?'TOTAL':(lbm==='fair'?'VS PAR':'PTS'));
+  const unit=lbm==='survival'?'STILL IN':(lbm==='fair'?'VS PAR':'PTS');
   const disp=v=>lbm==='fair'?((v>0?'+':'')+v):v;
   const tbrule=lbm==='survival'
     ? 'Level on teams still in? The higher total survival value ranks first.'
@@ -1466,7 +1476,7 @@ function render(d){
     const rank=1+board.filter(q=> q.score>p.score || (!isSurv && q.score===p.score && (q.alive_teams||0)>al)).length;
     const tied=!isSurv && board.some((q,j)=> j!==i && q.score===p.score && (q.alive_teams||0)===al);
     const xtra=Math.round(((p.live||0)+(p.bet_potential||0))*100)/100;       // live + open-bet upside, combined
-    const canBreak=(lbm==='points'||lbm==='hybrid') && xtra>0;
+    const canBreak=(lbm==='points') && xtra>0;
     return `
     <div class="row ${rank===1&&p.score>0?'lead':''}">
       <div class="rank">${rank}</div>
@@ -1487,7 +1497,7 @@ function render(d){
       <div class="tl">${p.teams.map(t=>`
         <div class="trow ${t.status==='out'?'out':''}">
           <span class="dot" style="background:${TIER[t.tier]}"></span>
-          <span>${flag(t.name)}${esc(t.name)}<span class="stg"> · ${t.record} · ${STAGE_LABEL[t.stage]||t.stage}</span></span>
+          <span>${flag(t.name)}${esc(t.name)}<span class="stg"> · ${t.record} · ${STAGE_LABEL[t.stage]||t.stage}</span>${upsideTag(t)}</span>
           <span class="stg">G${esc(t.group)}</span>
           <span class="tp" title="points ${esc(t.name)} has earned ${esc(p.name)}">${t.points}${t.live>0?` <span class="livedelta" title="includes +${t.live} from a game in play right now">+${t.live} live</span>`:''}</span>
         </div>`).join('')}</div>
@@ -1639,32 +1649,26 @@ document.querySelectorAll('#chartMetric button').forEach(b=>b.onclick=()=>{
 });
 
 function leaderCells(lb,done){
-  const sm=STATUS.scoring_mode||'hybrid';
+  const sm=STATUS.scoring_mode||'points';
   const cell=(label,mode,unit,showlive)=>{const w=(lb[mode]||[])[0];
     const lv=(showlive && !done && w && w.live>0)?`<div class="wlive"><i>▲</i> +${w.live} live</div>`:'';
     return `<div class="wcard"><div class="l">${label} ${done?'WINNER 🏆':'LEADER'}</div><div class="nm">${w?esc(w.name):'—'}</div><div class="sc">${w?w.score+' '+unit:''}</div>${lv}</div>`;};
   if(sm==='points') return [cell('POINTS','points','pts',true)];
   if(sm==='survival') return [cell('SURVIVAL','survival','in',false)];
-  return [cell('POINTS','points','pts',true),cell('BOTH','hybrid','total',true),cell('SURVIVAL','survival','in',false)];
+  return [cell('POINTS','points','pts',true),cell('SURVIVAL','survival','in',false)];
 }
 function renderScoringRules(d){
-  const el=document.getElementById('scoringRules'); if(!el) return;
+  const mounts=document.querySelectorAll('.scoringMount'); if(!mounts.length) return;
   const SC=(d.scoring&&d.scoring.points)||{}, SV=(d.scoring&&d.scoring.survival)||{}, SB=SC.stage_bonus||{};
-  if(!SC.win){ el.innerHTML=''; return; }
-  // live "Both" example from whoever currently tops the Both table
-  let bothEx='';
-  const _pl=(d.players||[]).slice().sort((a,b)=>(b.hybrid||0)-(a.hybrid||0))[0];
-  if(_pl && (_pl.points!=null) && (_pl.survival!=null)){
-    const betLine=(STATUS.wagering_enabled && _pl.wager_net)?(' Their points already include a betting '+(_pl.wager_net>0?'win of +'+_pl.wager_net:'loss of '+_pl.wager_net)+'.'):'';
-    bothEx='<div style="background:#0a1f15;border:1px solid var(--gold);border-radius:10px;padding:9px 11px;margin-top:8px;font-size:12px"><b style="color:var(--gold)">“Both” right now (live example).</b> '+esc(_pl.name)+' has <b>'+_pl.points+' points</b> and <b>'+_pl.survival+' survival</b>, so their <b>Both</b> total is <b>'+_pl.points+' + '+_pl.survival+' = '+_pl.hybrid+'</b>. That\u2019s why their Both number looks bigger than their Points one \u2014 the gap is purely their Survival value from owning teams that are still in (or went deep).'+betLine+'</div>';
-  }
+  if(!SC.win){ mounts.forEach(e=>e.innerHTML=''); return; }
   const LBL={LAST_32:'Round of 32',LAST_16:'Round of 16',QUARTER_FINALS:'Quarter-final',SEMI_FINALS:'Semi-final',THIRD_PLACE:'3rd-place win',FINAL:'Final',WINNER:'Champion'};
   const order=['LAST_32','LAST_16','QUARTER_FINALS','SEMI_FINALS','FINAL','WINNER'];
   const pOrder=['LAST_32','LAST_16','QUARTER_FINALS','SEMI_FINALS','THIRD_PLACE','FINAL','WINNER'];
   const row=(k,v)=>`<tr><td style="padding:3px 0">${k}</td><td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600">${v}</td></tr>`;
-  el.innerHTML=
+  const el_html=
     '<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:10px 0">'
     +'<div style="font-family:\'Anton\';color:var(--gold);text-transform:uppercase;font-size:13px;margin-bottom:8px">How scoring works — exact values</div>'
+    +'<div style="background:#11202f;border:1px solid var(--line);border-radius:9px;padding:8px 10px;margin-bottom:10px;font-size:12px"><b style="color:#9fc4ff">The Points table includes the knockout bonus.</b> Reaching a round adds the bonus below straight into your <b>Points</b> total. <b>Survival</b> is a separate, bigger reward on top — it isn\u2019t in Points.</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">'
     +'<div><div style="font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:3px">Points (per team)</div>'
     +'<table style="width:100%;font-size:12.5px;border-collapse:collapse">'
@@ -1677,9 +1681,9 @@ function renderScoringRules(d){
     +order.filter(k=>SV[k]).map(k=>row(LBL[k]||k,SV[k])).join('')
     +'</table></div></div>'
     +'<div style="background:#0a1f15;border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-top:10px;font-size:12px"><b style="color:var(--gold)">Worked example.</b> Win a group game 2–0 → <b>+'+(2*(SC.per_goal||1))+'</b> goals, <b>+'+SC.win+'</b> win, <b>+'+SC.clean_sheet+'</b> clean sheet = <b>'+(2*(SC.per_goal||1)+SC.win+SC.clean_sheet)+' pts</b>. On top, going deep adds a <b>one-off bonus for your team\'s furthest round</b>'+(SB.LAST_16?' (Round of 16 +'+SB.LAST_16+', up to Champion +'+(SB.WINNER||100)+') — it\'s your <i>furthest</i> round only, so reaching the Round of 16 is +'+SB.LAST_16+' total, <b>not</b> +'+(SB.LAST_32||4)+' and +'+SB.LAST_16+'':'')+'. Going deep boosts your Points <i>and</i> your Survival. <b>Survival</b> (right) is a separate, bigger reward purely for how far teams go.</div>'
-    +bothEx
-    +'<div style="color:var(--muted);font-size:11.5px;margin-top:10px">Bonuses count your <b>furthest</b> round only — they don\'t stack per round, and winning the tournament is worth by far the most. A knockout tie won on <b>penalties counts as a win</b> (the loser takes the loss). The <b>3rd-place play-off</b> earns points but no extra survival — both teams are already out at the semi. <b>Survival</b> takes your furthest stage\'s value and also ranks on teams still alive. <b>Both</b> = Points + Survival added together. A green <b>+N live</b> next to a score is the points your teams are earning from games <b>in play right now</b> — it&#39;s provisional and settles the moment the game ends (a disallowed goal takes it back off).</div>'
+    +'<div style="color:var(--muted);font-size:11.5px;margin-top:10px">Bonuses count your <b>furthest</b> round only — they don\'t stack per round, and winning the tournament is worth by far the most. A knockout tie won on <b>penalties counts as a win</b> (the loser takes the loss). The <b>3rd-place play-off</b> earns points but no extra survival — both teams are already out at the semi. <b>Survival</b> takes your furthest stage\'s value and also ranks on teams still alive. A green <b>+N live</b> next to a score is the points your teams are earning from games <b>in play right now</b> — it&#39;s provisional and settles the moment the game ends (a disallowed goal takes it back off).</div>'
     +'</div>';
+  mounts.forEach(e=>e.innerHTML=el_html);
 }
 function renderWinners(d){  const lb=d.leaderboards||{}, done=(d.stats&&d.stats.teams_remaining<=1&&d.stats.matches_played>0);
   const cells=leaderCells(lb,done), el=document.getElementById('winrow');
@@ -1759,9 +1763,8 @@ function renderOverview(d){
     +cells.join('')+'</div></div>';
   // WIN ODDS — toggle Points / Survival / Both (gated by scoring mode)
   {
-    const sm=STATUS.scoring_mode||'hybrid';
-    const opts = sm==='points' ? [['pts','Points']] : sm==='survival' ? [['surv','Survival']]
-               : [['pts','Points'],['both','Both'],['surv','Survival']];
+    const sm=STATUS.scoring_mode||'points';
+    const opts = sm==='survival' ? [['surv','Survival']] : [['pts','Points'],['surv','Survival']];
     if(!WINODDSMODE || !opts.some(o=>o[0]===WINODDSMODE)) WINODDSMODE=opts[0][0];
     const toggle = opts.length>1 ? '<div class="modesel" id="ovOddsSel" style="margin:0 0 10px">'
         +opts.map(o=>`<button data-c="${o[0]}"${o[0]===WINODDSMODE?' class="on"':''}>${o[1]}</button>`).join('')+'</div>' : '';
@@ -1792,13 +1795,11 @@ function renderOverview(d){
 }
 let WINSLIDE=0, WINODDSMODE=null;
 function winSlides(d){
-  const lb=d.leaderboards||{}, sm=STATUS.scoring_mode||'hybrid';
+  const lb=d.leaderboards||{}, sm=STATUS.scoring_mode||'points';
   const betsOn=STATUS.wagering_enabled;
   const NOTE={points:'match points (goals, wins, clean sheets, round bonuses)'+(betsOn?' + any betting winnings':''),
-              hybrid:'Points + Survival added together — so it\u2019s higher than the Points score for anyone who owned deep teams',
               survival:'how far their teams lasted (last player standing)'};
-  const defs = sm==='points'?[['Points','points','pts']] : sm==='survival'?[['Survival','survival','teams still in']]
-             : [['Points','points','pts'],['Both','hybrid','total'],['Survival','survival','teams still in']];
+  const defs = sm==='survival'?[['Survival','survival','teams still in']] : [['Points','points','pts'],['Survival','survival','teams still in']];
   return defs.map(([label,mode,unit])=>{ const w=(lb[mode]||[])[0];
     return {label, player:w?w.name:'—', score:w?w.score+' '+unit:'', note:NOTE[mode]||''}; });
 }
@@ -1806,7 +1807,7 @@ const oddBar=(name,val,max)=>`<div class="oddrow"><div class="nm">${name}</div><
 function winOddsRows(d,mode){
   const done=(d.stats&&d.stats.teams_remaining<=1&&d.stats.matches_played>0);
   if(done){
-    const lbk = mode==='pts'?'points':(mode==='both'?'hybrid':'survival');
+    const lbk = mode==='pts'?'points':'survival';
     const rows=(d.leaderboards||{})[lbk]||[]; const max=Math.max(1,...rows.map(r=>r.score||0));
     return '<div style="color:var(--muted);font-size:12.5px;margin:0 0 8px">Tournament over — this is the <b>final result</b>.</div>'
       +rows.map((r,i)=>`<div class="oddrow"><div class="nm">${i===0?'🏆 ':''}${esc(r.name)}</div><div class="oddbar"><i style="width:${Math.round(100*(r.score||0)/max)}%;${i===0?'':'opacity:.55'}"></i></div><div class="pct" style="color:${i===0?'var(--gold)':'var(--ink)'}">${r.score}</div></div>`).join('');
@@ -1817,7 +1818,7 @@ function winOddsRows(d,mode){
     return '<div style="color:var(--muted);font-size:12.5px;margin:0 0 8px">Live chance of owning the World Cup winner (bookmaker odds, updates as teams go out).</div>'
       +c.map(x=>oddBar(x.name,x.odds,max)).join('');
   }
-  if(!SIMRES){ ensureSim(); return '<div class="empty" style="margin:6px 0">Calculating '+(mode==='pts'?'Points':'Both')+' odds…</div>'; }
+  if(!SIMRES){ ensureSim(); return '<div class="empty" style="margin:6px 0">Calculating Points odds…</div>'; }
   const rows=SIMRES.slice().sort((a,b)=>(b[mode]||0)-(a[mode]||0)), max=Math.max(1,...rows.map(r=>r[mode]||0));
   return '<div style="color:var(--muted);font-size:12.5px;margin:0 0 8px">Current forecast — eliminated teams are out, results so far are locked in, and only the remaining games are simulated. Updates as games finish.</div>'
     +rows.map(r=>oddBar(r.name,+(r[mode]||0).toFixed(1),max)).join('');
@@ -1855,8 +1856,8 @@ function bestBetsHTML(d){
 }
 function renderBettingStats(d){
   const el=document.getElementById('bettingStats'); if(!el) return;
-  const _m=(STATUS.scoring_mode||d.default_mode||'hybrid');
-  if(!STATUS.wagering_enabled || (_m!=='points'&&_m!=='hybrid')){ el.innerHTML=''; return; }   // betting only in Points / Both
+  const _m=(STATUS.scoring_mode||d.default_mode||'points');
+  if(!STATUS.wagering_enabled || _m!=='points'){ el.innerHTML=''; return; }   // betting only in Points mode
   const L=d.wager_leaders||{}, S=Object.values(d.wager_stats||{});
   // Each player's ACTUAL leaderboard impact from betting (free-points-cushioned) — this is the figure baked into
   // their Points. Won/Lost stay raw (the real bet outcomes); Net shows what actually moved the leaderboard.
@@ -1960,7 +1961,7 @@ function buildHistory(d){
   const base={}, reached={}, hist=[];
   // baseline: everyone on zero before a ball is kicked, so the line has a "start" anchor and the chart draws
   // as soon as the very first match finishes (x-axis is labelled start -> now). Survival starts at full squad size.
-  { const a0=aliveAt(0); hist.push({m:0, p:Object.fromEntries(players.map(p=>[p,{pts:0,srv:0,hyb:0,alv:a0[p]}]))}); }
+  { const a0=aliveAt(0); hist.push({m:0, p:Object.fromEntries(players.map(p=>[p,{pts:0,srv:0,alv:a0[p]}]))}); }
   fin.forEach((m,i)=>{
     const side=m.winner||(m.homeScore>m.awayScore?'HOME':(m.awayScore>m.homeScore?'AWAY':'DRAW'));
     [[m.home,m.homeScore,m.awayScore,'HOME'],[m.away,m.awayScore,m.homeScore,'AWAY']].forEach(([tm,sc,co,which])=>{
@@ -1979,7 +1980,7 @@ function buildHistory(d){
       if(rs) rs.forEach(s=>{ bonus=Math.max(bonus,SB[s]||0); surv=Math.max(surv,SV[s]||0); });
       P[owner[tm]]+=(base[tm]||0)+bonus; S[owner[tm]]+=surv; }
     const A=aliveAt(i+1);
-    hist.push({m:i+1, p:Object.fromEntries(players.map(p=>[p,{pts:P[p],srv:S[p],hyb:P[p]+S[p],alv:A[p]}]))});
+    hist.push({m:i+1, p:Object.fromEntries(players.map(p=>[p,{pts:P[p],srv:S[p],alv:A[p]}]))});
   });
   // Snap the "now" point to the authoritative leaderboard totals so the chart's latest value matches the headline
   // standings — but SUBTRACT live in-play provisional points. Those are volatile (they appear at kickoff and
@@ -1987,11 +1988,10 @@ function buildHistory(d){
   // Settled betting (a won/lost bet) is permanent, so it stays. Live is shown separately by the "+N live" chip.
   if(hist.length>=2){
     const lbP=new Map((((d.leaderboards||{}).points)||[]).map(r=>[r.name,r]));
-    const lbH=new Map((((d.leaderboards||{}).hybrid)||[]).map(r=>[r.name,r]));
     const last=hist[hist.length-1].p;
     const stable=r=>Math.max(0,Math.round(((r.score||0)-(r.live||0))*100)/100);   // drop the live "+N" so the line is settled-only
-    players.forEach(p=>{ if(last[p]){ const rp=lbP.get(p),rh=lbH.get(p);
-      if(rp) last[p].pts=stable(rp); if(rh) last[p].hyb=stable(rh); } });
+    players.forEach(p=>{ if(last[p]){ const rp=lbP.get(p);
+      if(rp) last[p].pts=stable(rp); } });
   }
   return hist;
 }
@@ -2001,7 +2001,7 @@ function renderChart(d){
   if(hist.length<2){ el.innerHTML='<div class="empty">Fills in as matches are played — points and survival per round. Come back once the tournament is under way.</div>'; return; }
   const names=Object.keys(hist[hist.length-1].p);
   const n=hist.length, pos=(CHARTVIEW==='pos');
-  const key = CHARTMETRIC==='both'?'hyb':(CHARTMETRIC==='surv'?'alv':'pts');   // survival view tracks teams-still-in
+  const key = CHARTMETRIC==='surv'?'alv':'pts';   // survival view tracks teams-still-in
   const series={}; names.forEach(nm=>series[nm]=[]);
   hist.forEach(h=>{
     if(pos){
@@ -2093,7 +2093,7 @@ function simWinOdds(d,N){
   // each player's locked-in betting result into the simulation. Future bets can't be known, so this is fixed.
   const bnet={}; (d.players||[]).forEach(p=>{ const fb=(p.teams||[]).reduce((s,t)=>s+(t.points||0),0); bnet[p.name]=(p.points||0)-fb; });
   if(!players.length) return null;
-  const wS={},wP={},wB={},sumPts={}; players.forEach(p=>{wS[p]=0;wP[p]=0;wB[p]=0;sumPts[p]=0;});
+  const wS={},wP={},sumPts={}; players.forEach(p=>{wS[p]=0;wP[p]=0;sumPts[p]=0;});
   // Credit a simulation win using the SAME tie-break as the leaderboard (most teams still in), and split a
   // genuine dead-heat (identical score AND identical teams-in) equally — so ties never bias to array order.
   const award=(wins,cmp)=>{ const ranked=players.slice().sort(cmp), top=ranked[0];
@@ -2178,11 +2178,10 @@ function simWinOdds(d,N){
     const ez=x=>Math.abs(x)<1e-9?0:x;
     award(wP, (a,b)=> ez(PT[b]-PT[a]) || (AL[b]-AL[a]));                 // points: teams-in breaks the tie
     award(wS, (a,b)=> (AL[b]-AL[a]) || ez(P[b]-P[a]));                   // survival: teams-in, then survival pts
-    award(wB, (a,b)=> ez((PT[b]+P[b])-(PT[a]+P[a])) || (AL[b]-AL[a]));   // both: teams-in breaks the tie
   }
-  return players.map(p=>({name:p,surv:100*wS[p]/N,pts:100*wP[p]/N,both:100*wB[p]/N,proj:sumPts[p]/N})).sort((a,b)=>b.both-a.both);
+  return players.map(p=>({name:p,surv:100*wS[p]/N,pts:100*wP[p]/N,proj:sumPts[p]/N})).sort((a,b)=>b.pts-a.pts);
 }
-let SIMRES=null, SIMSORT='both', SIM_STARTED=false, SIM_AT=-1;
+let SIMRES=null, SIMSORT='pts', SIM_STARTED=false, SIM_AT=-1;
 function ensureSim(){                          // auto-run the forecast; re-runs when a game finishes so odds stay current
   const mp=(DATA.stats&&DATA.stats.matches_played)||0;
   const done=(DATA.stats&&DATA.stats.teams_remaining<=1&&mp>0);
@@ -2193,8 +2192,8 @@ function ensureSim(){                          // auto-run the forecast; re-runs
     try{ SIMRES=simWinOdds(DATA,1500); SIM_AT=mp; }catch(e){ SIMRES=null; }
     SIM_STARTED=false;
     if(SIMRES){
-      const mode=STATUS.scoring_mode||'hybrid';
-      SIMSORT = mode==='points'?'pts':(mode==='survival'?'surv':'both');
+      const mode=STATUS.scoring_mode||'points';
+      SIMSORT = mode==='survival'?'surv':'pts';
       renderOverview(DATA); renderOdds(DATA);     // renderOdds re-renders the cards (so MOST POINTS picks up the sim) + the sim table
     }
   },30);
@@ -2205,12 +2204,12 @@ function renderSim(sortKey){
     const sn=document.getElementById('simNote'); if(sn) sn.textContent='';
     return;
   }
-  const mode=STATUS.scoring_mode||DATA.default_mode||'hybrid';
+  const mode=STATUS.scoring_mode||DATA.default_mode||'points';
   let cols;
   if(mode==='points') cols=[{k:'pts',label:'Points %'},{k:'proj',label:'Proj pts'}];
   else if(mode==='survival') cols=[{k:'surv',label:'Survival %'}];
-  else cols=[{k:'pts',label:'Points %'},{k:'both',label:'Both %'},{k:'surv',label:'Survival %'},{k:'proj',label:'Proj pts'}];
-  let sk=sortKey||SIMSORT; if(!cols.some(c=>c.k===sk)) sk=(mode==='points'?'pts':mode==='survival'?'surv':'both'); SIMSORT=sk;
+  else cols=[{k:'pts',label:'Points %'},{k:'surv',label:'Survival %'},{k:'proj',label:'Proj pts'}];
+  let sk=sortKey||SIMSORT; if(!cols.some(c=>c.k===sk)) sk=(mode==='survival'?'surv':'pts'); SIMSORT=sk;
   const rows=SIMRES.slice().sort((a,b)=>(b[sk]||0)-(a[sk]||0));
   const head='<tr style="color:var(--muted);text-align:left"><th style="padding:6px 8px">Player</th>'+
     cols.map(c=>`<th class="simh" data-k="${c.k}" style="cursor:pointer;padding:6px 8px;${c.k===sk?'color:var(--gold)':''}">${c.label}${c.k===sk?' ↓':' ↕'}</th>`).join('')+'</tr>';
@@ -2235,8 +2234,8 @@ async function refreshStatus(){
   const bt=document.getElementById('betsTab'); if(bt) bt.style.display=STATUS.wagering_enabled?'':'none';
   const nt=document.getElementById('notifyTab'); if(nt) nt.style.display=(STATUS.wagering_enabled||STATUS.discord_oauth)?'':'none';   // keep the Alerts tab in lockstep with STATUS (same as bets) — otherwise it vanishes until the next 30s poll
   renderGlobalClaim();          // 🎁 free-points claim shows on EVERY tab while a drop is open (not just the Bets tab)
-  const m=STATUS.scoring_mode||DATA.default_mode||'hybrid';
-  const ml={points:'Points',survival:'Survival',hybrid:'Points + survival'}[m]||m;
+  const m=STATUS.scoring_mode||DATA.default_mode||'points';
+  const ml={points:'Points',survival:'Survival'}[m]||m;
   const dm={fair:'Fair',weighted:'Weighted',random:'Random (even)'}[STATUS.draw_mode]||STATUS.draw_mode||'—';
   const live=STATUS.has_token;
   document.getElementById('badges').innerHTML=
@@ -2757,7 +2756,7 @@ function checkNotify(d){
   const myTeams=new Set(((d.players||[]).find(p=>p.name===me)||{teams:[]}).teams.map(t=>t.name));
   const fx={}; (d.fixtures||[]).forEach(m=>{ fx[m.home+'|'+m.away]={st:m.status,hs:m.homeScore,as:m.awayScore,h:m.home,a:m.away}; });
   const alive={}; ((d.players||[]).find(p=>p.name===me)||{teams:[]}).teams.forEach(t=>alive[t.name]=(t.status==='alive'));
-  const leader=((d.leaderboards||{}).hybrid||[])[0]; const leaderName=leader&&leader.name;
+  const leader=((d.leaderboards||{}).points||[])[0]; const leaderName=leader&&leader.name;
   const champ=finalResultName(d);
   const LIVE=['IN_PLAY','PAUSED','LIVE','SUSPENDED'], PLAY=['IN_PLAY','LIVE'];
   const snap={fx,alive,leaderName,champ};

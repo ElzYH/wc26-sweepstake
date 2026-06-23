@@ -40,7 +40,7 @@ class Server:
         json.dump(wagers or [], open(os.path.join(self.tmp, "wagers.json"), "w"))
         cfg = {"configured": True, "wagering_enabled": True, "players": ["Erol", "James"],
                "admin_key": KEY, "token": "dummy-token-so-fetch-fails-closed",
-               "wager_pins": {"Erol": "ABCD", "James": "WXYZ"}, "scoring_mode": "hybrid"}
+               "wager_pins": {"Erol": "ABCD", "James": "WXYZ"}, "scoring_mode": "points"}
         cfg.update(extra_cfg or {})
         json.dump(cfg, open(os.path.join(self.tmp, "config.json"), "w"))
         last_err = None

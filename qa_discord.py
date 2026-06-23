@@ -50,12 +50,12 @@ json.dump({"players": [{"name": "Erol", "teams": [{"name": NM[0], "tier": 1, "gr
 json.dump({"matches": [{"id": "m1", "home": NM[0], "away": NM[1], "homeScore": 2, "awayScore": 1,
                         "status": "FINISHED", "stage": "GROUP_STAGE", "winner": "HOME",
                         "utcDate": "2026-06-12T18:00:00Z"}]}, open(os.path.join(TMPA, "results.json"), "w"))
-json.dump({"configured": True, "wagering_enabled": True, "players": ["Erol", "James"], "scoring_mode": "hybrid"},
+json.dump({"configured": True, "wagering_enabled": True, "players": ["Erol", "James"], "scoring_mode": "points"},
           open(os.path.join(TMPA, "config.json"), "w"))
 os.environ["WC26_CONFIG"] = os.path.join(TMPA, "config.json")
 _cwd = os.getcwd(); os.chdir(TMPA); sys.path.insert(0, TMPA)
 import scoring as SC
-SC.compute(out="tracker_data.json", default_mode="hybrid")
+SC.compute(out="tracker_data.json", default_mode="points")
 import server as S
 
 def cmd(name, opts=None, uid=None):
@@ -121,7 +121,7 @@ def boot(cfg_extra):
     if os.path.exists(os.path.join(TMPA, "tracker_data.json")):
         shutil.copy2(os.path.join(TMPA, "tracker_data.json"), os.path.join(tmp, "tracker_data.json"))
     cfg = {"configured": True, "wagering_enabled": True, "players": ["Erol", "James"],
-           "admin_key": KEY, "scoring_mode": "hybrid"}
+           "admin_key": KEY, "scoring_mode": "points"}
     cfg.update(cfg_extra)
     json.dump(cfg, open(os.path.join(tmp, "config.json"), "w"))
     port = free_port()
