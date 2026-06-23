@@ -394,7 +394,7 @@
         <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;margin-top:12px;border-top:1px solid var(--line);padding-top:12px"><input type="checkbox" id="setNotifMaster"> Master alerts switch <span style="color:var(--muted);font-weight:400">(everything)</span></label>
         <p style="margin:4px 0 0;color:var(--muted);font-size:12px">The big kill switch. Turn <b>off</b> to silence <b>every</b> notification \u2014 channel posts, personal DMs, @mentions, Telegram and phone pop-ups \u2014 without touching individual settings. (Bet passcodes still get delivered.)</p>
         <div class="hint" id="setNotifMasterMsg" style="color:var(--muted);font-size:12px;margin-top:4px"></div>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;margin-top:12px">Spoiler delay on the channel feed <select id="setNotifDelay" style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 8px"><option value="0">Real-time</option><option value="2">Hold 2 min</option><option value="5">Hold 5 min</option><option value="15">Hold 15 min</option></select></label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;margin-top:12px">Spoiler delay on the channel feed <select id="setNotifDelay" style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 8px"><option value="0">Real-time</option><option value="30">Hold 30 sec</option><option value="60">Hold 1 min</option><option value="90">Hold 90 sec</option><option value="120">Hold 2 min</option><option value="300">Hold 5 min</option><option value="600">Hold 10 min</option><option value="900">Hold 15 min</option><option value="1800">Hold 30 min</option></select></label>
         <p style="margin:4px 0 0;color:var(--muted);font-size:12px">Holds channel goal / kick-off / full-time posts this long so people watching on a delay are not spoiled. Each post still shows the real time &amp; minute it happened. Personal DMs are unaffected.</p>
         <div class="hint" id="setNotifDelayMsg" style="color:var(--muted);font-size:12px;margin-top:4px"></div>
       </div>
@@ -1142,6 +1142,12 @@ async function renderNotifyTab(){
     +'<div class="modesel" id="notifRoute">'
     +['both','dm','feed'].map(function(r){return '<button data-r="'+r+'"'+((st.route||'both')===r?' class="on"':'')+'>'+({both:'Both',dm:'Discord DM',feed:'In-app only'}[r])+'</button>';}).join('')
     +'</div><div style="color:var(--muted);font-size:11.5px;margin-top:6px">In-app alerts show in your feed below \u2014 no Discord needed. Both sends a DM and logs it here.</div></div>';
+  if(('serviceWorker' in navigator)&&('PushManager' in window)&&STATUS.push_enabled&&STATUS.vapid_public){
+    html+='<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px">'
+      +'<div style="font-size:13.5px;margin-bottom:6px"><b>Phone push (this device)</b><div style="color:var(--muted);font-size:12px">Pop-up alerts on this phone or laptop, even when the app is closed \u2014 separate from Discord.</div></div>'
+      +'<div class="row2"><button class="mini" id="notifPushOn">Turn on push here</button><button class="mini" id="notifPushTest">Send a test push</button></div>'
+      +'<div class="hint" id="notifPushMsg" style="color:var(--muted);font-size:11.5px;margin-top:6px"></div></div>';
+  }
   html+='<div style="font-size:11.5px;color:var(--muted);font-weight:700;letter-spacing:.06em;margin:4px 0 6px">MUTE A SPECIFIC GAME'+(st.dm_off?' (your DMs are off above)':'')+'</div>';
   if(!games.length){ html+='<div class="empty">No upcoming games involving your teams or your open bets right now.</div>'; }
   else html+=games.map((f,i)=>{
@@ -1158,6 +1164,9 @@ async function renderNotifyTab(){
   el.innerHTML=html; wireWho(); NOTIFYBUSY=false;
   document.querySelectorAll('#notifRoute button').forEach(function(b){ b.onclick=async function(){ document.querySelectorAll('#notifRoute button').forEach(function(x){x.classList.remove('on');}); b.classList.add('on'); try{ await fetch('/api/notif_route',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:NOTIFYPLAYER,pin:pin,route:b.dataset.r})}); }catch(e){} }; });
   (async function(){ try{ const fj=await fetch('/api/feed?player='+encodeURIComponent(NOTIFYPLAYER)).then(function(r){return r.json();}); const fe=document.getElementById('notifFeed'); if(!fe) return; const evs=(fj.events||[]); fe.innerHTML=evs.length?evs.map(function(e){ const t=e.ts?new Date(e.ts*1000).toLocaleString(undefined,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''; return '<div style="padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;line-height:1.45">'+esc(e.text)+'<div style="color:var(--muted);font-size:11px">'+esc(t)+(e.player==='*'?' \u00b7 everyone':'')+'</div></div>'; }).join(''):'<div class="empty">No alerts yet \u2014 match events and your bet results will show here.</div>'; }catch(e){} })();
+  { const po=document.getElementById('notifPushOn'), pt=document.getElementById('notifPushTest'), pm=document.getElementById('notifPushMsg');
+    if(po) po.onclick=async function(){ if(pm) pm.textContent='Turning on\u2026'; const ok=await pushSubscribe(NOTIFYPLAYER); if(pm) pm.textContent=ok?'Push is on for this device.':'Could not turn on push here \u2014 allow notifications and try again.'; };
+    if(pt) pt.onclick=async function(){ if(pm) pm.textContent='Sending\u2026'; try{ const j=await fetch('/api/push_test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:NOTIFYPLAYER})}).then(function(r){return r.json();}); if(pm) pm.textContent=(j.ok&&!j.failed)?'Sent \u2014 check your notifications.':(j.ok?('Sent to '+j.sent+' device(s), '+j.failed+' failed.'):'Turn on push here first.'); }catch(e){ if(pm) pm.textContent='Could not send.'; } }; }
   // master DM toggle
   const dm=document.getElementById('dmMaster');
   if(dm) dm.onclick=async()=>{ const turnOff=dm.dataset.on==='1'; dm.disabled=true;
@@ -1687,18 +1696,14 @@ function renderScoringRules(d){
   const el_html=
     '<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:10px 0">'
     +'<div style="font-family:\'Anton\';color:var(--gold);text-transform:uppercase;font-size:13px;margin-bottom:8px">How scoring works — exact values</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">'
+    +'<div style="display:grid;grid-template-columns:1fr;gap:18px">'
     +'<div><div style="font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:3px">Points (per team)</div>'
     +'<table style="width:100%;font-size:12.5px;border-collapse:collapse">'
     +row('Each goal scored',`+${SC.per_goal}`)+row('Win',`+${SC.win}`)+row('Draw',`+${SC.draw}`)+row('Clean sheet',`+${SC.clean_sheet}`)
     +(Object.keys(SB).length?('<tr><td colspan="2" style="padding:7px 0 2px;color:var(--muted);font-size:11px">Plus a one-off bonus for the furthest knockout round reached:</td></tr>'
         +pOrder.filter(k=>SB[k]).map(k=>row(LBL[k]||k,`+${SB[k]}`)).join('')):'')
-    +'</table></div>'
-    +'<div><div style="font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:3px">Survival (furthest stage)</div>'
-    +'<table style="width:100%;font-size:12.5px;border-collapse:collapse">'
-    +order.filter(k=>SV[k]).map(k=>row(LBL[k]||k,SV[k])).join('')
     +'</table></div></div>'
-    +'<div style="color:var(--muted);font-size:11.5px;margin-top:10px">• Bonus counts your <b>furthest</b> round only — it doesn\'t stack.<br>• A knockout win on <b>penalties</b> counts as a win.<br>• A green <b>+N ▾</b> = live points + open-bet upside (tap for the split — only the live part is near-certain).</div>'
+    +'<div style="color:var(--muted);font-size:11.5px;margin-top:10px">• The <b>Survival</b> board uses no points of its own — it just ranks how many of your <b>teams are still in</b> (ties broken by goal difference, then goals). The knockout-round bonuses above count for <b>Points</b> only.<br>• Bonus counts your <b>furthest</b> round only — it doesn\'t stack.<br>• A knockout win on <b>penalties</b> counts as a win.<br>• A green <b>+N ▾</b> = live points + open-bet upside (tap for the split — only the live part is near-certain).</div>'
     +'</div>';
   mounts.forEach(e=>e.innerHTML=el_html);
 }
@@ -2395,7 +2400,7 @@ async function refreshStatus(){
   const dg=document.getElementById('setDigest'); if(dg) dg.checked=!!STATUS.digest_enabled;
   const gc=document.getElementById('setGameChannel'); if(gc) gc.checked=(STATUS.game_channel_alerts!==false);
   const nmx=document.getElementById('setNotifMaster'); if(nmx) nmx.checked=(STATUS.notifications_on!==false);
-  const ndx=document.getElementById('setNotifDelay'); if(ndx) ndx.value=String(STATUS.notif_delay_min||0);
+  const ndx=document.getElementById('setNotifDelay'); if(ndx) ndx.value=String(STATUS.notif_delay_sec||0);
   const sw=document.getElementById('setWager'); if(sw) sw.checked=!!STATUS.wagering_enabled;
   const swl=document.getElementById('setWagerLock'); if(swl) swl.checked=!!STATUS.wager_locked;
   const caps=STATUS.wager_caps||{}; const mr=document.getElementById('setMaxReturn'), ma=document.getElementById('setMaxAcca');
@@ -2463,8 +2468,8 @@ document.getElementById('setSave').onclick=async()=>{
     }catch(e){ m.textContent='Could not reach the server.'; nm.checked=!nm.checked; } }; }
 { const nd=document.getElementById('setNotifDelay');
   if(nd) nd.onchange=async()=>{ const m=document.getElementById('setNotifDelayMsg'); m.textContent='Saving\u2026';
-    try{ const v=parseInt(nd.value,10)||0; const j=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({notif_delay_min:v,admin_key:ADMINKEY})}).then(r=>r.json());
-      if(j.ok){ m.textContent=v?('Channel posts held '+v+' min for spoiler control.'):'Channel posts go out in real-time.'; refreshStatus(); }
+    try{ const v=parseInt(nd.value,10)||0; const j=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({notif_delay_sec:v,admin_key:ADMINKEY})}).then(r=>r.json());
+      if(j.ok){ m.textContent=v?('Channel posts held '+(v<60?(v+' sec'):((v%60?(v/60).toFixed(1):(v/60))+' min'))+' for spoiler control.'):'Channel posts go out in real-time.'; refreshStatus(); }
       else if(j.need_key){ m.textContent='Session expired \u2014 reopen Settings and unlock again.'; ADMINKEY=''; }
       else { m.textContent=j.error||'Could not save.'; }
     }catch(e){ m.textContent='Could not reach the server.'; } }; }

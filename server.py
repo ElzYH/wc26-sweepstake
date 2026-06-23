@@ -662,12 +662,17 @@ def _notif_on():
     return load_config().get("notifications_on", True) is not False
 
 def _notif_delay_sec():
-    """Admin spoiler delay for the communal channel game feed (minutes -> seconds). 0 = realtime. Clamped 0..60."""
+    """Admin spoiler delay for the communal channel game feed, in SECONDS. 0 = realtime. Clamped 0..3600.
+    Reads notif_delay_sec; falls back to the legacy notif_delay_min for older configs."""
+    cfg = load_config()
     try:
-        m = int(load_config().get("notif_delay_min", 0) or 0)
+        if cfg.get("notif_delay_sec") is not None:
+            s = int(cfg.get("notif_delay_sec") or 0)
+        else:
+            s = int(cfg.get("notif_delay_min", 0) or 0) * 60
     except Exception:
-        m = 0
-    return max(0, min(m, 60)) * 60
+        s = 0
+    return max(0, min(s, 3600))
 
 def _now_tag():
     try:
@@ -3535,6 +3540,7 @@ class Handler(BaseHTTPRequestHandler):
                 "game_channel_alerts": load_config().get("game_channel_alerts", True) is not False,
                 "notifications_on": load_config().get("notifications_on", True) is not False,
                 "notif_delay_min": int(load_config().get("notif_delay_min", 0) or 0),
+                "notif_delay_sec": _notif_delay_sec(),
                 "wager_budget": (wager_mod.STAGE_BUDGET if wager_mod is not None else None),
                 "free_bet": ((lambda dr: {"open": True, "id": dr["id"], "closes": dr["closes"], "stake": wager_mod.FREE_BET_STAKE,
                                           "claimed": sorted((cfg.get("free_bet_claims", {}).get(dr["id"]) or {}).keys())}
@@ -3742,9 +3748,14 @@ class Handler(BaseHTTPRequestHandler):
                 cfg["game_channel_alerts"] = bool(body["game_channel_alerts"])
             if "notifications_on" in body:           # MASTER alert kill switch (channel + DMs + mentions + telegram + push)
                 cfg["notifications_on"] = bool(body["notifications_on"])
-            if "notif_delay_min" in body:            # admin spoiler delay for the channel game feed (minutes; 0 = realtime)
+            if "notif_delay_min" in body:            # admin spoiler delay for the channel game feed (minutes; legacy)
                 try:
                     cfg["notif_delay_min"] = max(0, min(int(body["notif_delay_min"]), 60))
+                except Exception:
+                    pass
+            if "notif_delay_sec" in body:            # admin spoiler delay for the channel game feed (seconds; 0 = realtime)
+                try:
+                    cfg["notif_delay_sec"] = max(0, min(int(body["notif_delay_sec"]), 3600))
                 except Exception:
                     pass
             if "wagering_enabled" in body:
