@@ -140,6 +140,31 @@ ck("genuine elimination still fires when future fixtures have a blank group fiel
 istd={"group":"G","table":[{"team":"P","points":6},{"team":"Q","points":0},{"team":"R","points":0},{"team":"Zz","points":0}]}
 ck("incomplete schedule never eliminates anyone (safe)", SC._eliminated_teams([istd],[_mg("P","Q",3,0,"G"),_mg("P","R",2,0,"G")])==set())
 
+# ==== mathematical CLINCH of top-2 (mirror of elimination) — guaranteed qualifiers get R32 credit early ====
+# France & Norway (Group I, 23/06/2026): both 2-0-0 on 6 pts with only winless sides able to catch them and
+# their head-to-head decider still to play -> BOTH clinch top-2 no matter who wins it (incl. a draw).
+clrows=[{"team":"France","points":6},{"team":"Norway","points":6},{"team":"Senegal","points":0},{"team":"Iraq","points":0}]
+clgms=[_m("I","France","Senegal",3,1),_m("I","France","Iraq",3,0),_m("I","Norway","Senegal",3,2),_m("I","Norway","Iraq",4,1),
+       _m("I","France","Norway",None,None,"TIMED"),_m("I","Senegal","Iraq",None,None,"TIMED")]
+clin=SC._clinched_top2(_st("I",clrows),clgms)
+ck("both 6-pt sides clinch top-2 even with their own decider still to play", clin=={"France","Norway"}, sorted(clin))
+
+# Argentina (Group J): 6 pts with head-to-head wins over BOTH 3-pt chasers -> clinched even in the worst case
+arows=[{"team":"Argentina","points":6},{"team":"Austria","points":3},{"team":"Algeria","points":3},{"team":"Jordan","points":0}]
+agms=[_m("J","Argentina","Algeria",3,0),_m("J","Argentina","Austria",2,0),_m("J","Austria","Jordan",3,1),_m("J","Algeria","Jordan",2,1),
+      _m("J","Argentina","Jordan",None,None,"TIMED"),_m("J","Austria","Algeria",None,None,"TIMED")]
+aclin=SC._clinched_top2(_st("J",arows),agms)
+ck("leader with H2H wins over both chasers clinches (worst-case ties resolved against it, still top-2)", aclin=={"Argentina"}, sorted(aclin))
+
+# SOUNDNESS: a leader that can still be caught is NOT clinched (the very data that proves elimination soundness)
+ck("clinch never false-fires: a 6-pt leader two rivals can still overtake does NOT clinch", SC._clinched_top2(_st("E",srows),sgms)==set(), sorted(SC._clinched_top2(_st("E",srows),sgms)))
+# early stage (one game played) -> nobody has clinched yet
+ck("early group stage: no team has clinched top-2 yet", SC._clinched_top2(_st("F",erows),egms)==set())
+# incomplete fixture list -> never clinch (mirror of the elimination guard)
+ck("incomplete schedule never clinches anyone (safe)", SC._clinched_top2([istd],[_mg("P","Q",3,0,"G"),_mg("P","R",2,0,"G")])==set())
+# idempotent: clinch is set membership -> identical result on repeat calls (so the +R32 credit is added once)
+ck("clinch is deterministic / idempotent across repeated calls", SC._clinched_top2(_st("I",clrows),clgms)==SC._clinched_top2(_st("I",clrows),clgms))
+
 # ================= FIFA 2026 Team Conduct Score (fair-play tiebreaker) =================
 ck("TCS formula: South Africa example (4 yellow + 2 straight red) = -12", SC._conduct_of({"cards":{"yellow":4,"straight_red":2}})==-12, SC._conduct_of({"cards":{"yellow":4,"straight_red":2}}))
 ck("TCS formula: yellow -1, two-yellow red -3, yellow+red -5 sum correctly", SC._conduct_of({"cards":{"yellow":1,"second_yellow_red":1,"yellow_then_red":1}})==-9)

@@ -42,7 +42,7 @@ STAGE_BUDGET_MAP = {      # per-epoch budget — always 20 above that round's pe
 }
                           # Resets automatically because budget_remaining only sums bets within the same epoch.
 OVERROUND = 1.08          # ~8% bookmaker margin
-MAX_PROB = 0.95           # favourites can be priced shorter (down to ~1/20) so the margin holds on them too
+MAX_PROB = 0.857          # shortest price any selection can be is 1/6 (6/7 implied); floors near-certain O/U lines
 
 # Max stake rises as the tournament gets deeper: +5 per knockout round, and an extra +15 for the final.
 # WC2026 round dates (UTC, for reference — actual dates come from the live fixture feed):

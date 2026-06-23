@@ -304,6 +304,73 @@ def _eliminated_teams(standings, group_matches):
     return out
 
 
+def _clinched_top2(standings, group_matches):
+    """Teams that have MATHEMATICALLY clinched a top-2 group finish, so they're already through to the
+    Round of 32 even before the feed builds the bracket fixtures. This is the exact MIRROR of
+    _eliminated_teams, used so a team that has visibly qualified (e.g. France, Norway, Argentina on 6 pts
+    with only weaker sides able to catch them) gets its R32 credit immediately instead of waiting days for
+    the feed to publish the knockout draw.
+
+    SOUND by design — it never flags a team that still has any path OUT of the top 2:
+      * it enumerates every remaining group result (win/draw/loss for each unplayed game),
+      * it respects the 2026 head-to-head tiebreaker on points ties, and
+      * any tie it CANNOT resolve from head-to-head points alone is resolved AGAINST the team being tested
+        (the opposite of the elimination check) — so a team only clinches when it is top-2 even in the
+        worst case, never on a hopeful goal-difference assumption.
+    Best-third qualification is deliberately NOT inferred here (it depends on every other group's outcome);
+    those teams pick up their Round-of-32 credit the normal way once the bracket fixtures appear."""
+    import itertools
+    done = set()
+    for s in standings:
+        if not (isinstance(s, dict) and isinstance(s.get("table"), list)):
+            continue
+        teams = [r.get("team") for r in s["table"] if isinstance(r, dict) and r.get("team")]
+        if len(teams) != 4:                      # only standard 4-team groups
+            continue
+        cur = {r.get("team"): _numf(r.get("points", 0)) for r in s["table"] if isinstance(r, dict) and r.get("team")}
+        # Same group-detection as _eliminated_teams: a group's games are the matches between two teams that
+        # are BOTH in this group's table (robust to the feed leaving the per-match `group` field blank).
+        gms = [m for m in group_matches if m.get("home") in cur and m.get("away") in cur]
+        played = [(m.get("home"), m.get("away"), m.get("homeScore"), m.get("awayScore"))
+                  for m in gms if m.get("status") in FINAL_STATUSES
+                  and m.get("homeScore") is not None and m.get("awayScore") is not None]
+        remaining = [(m.get("home"), m.get("away")) for m in gms if m.get("status") not in FINAL_STATUSES]
+        # Only judge clinching when the full 6-game round-robin is visible — never clinch on a partial schedule.
+        if len(played) + len(remaining) < (len(teams) * (len(teams) - 1)) // 2 or len(remaining) > 8:
+            continue
+        for T in teams:
+            clinched = True
+            for combo in itertools.product((0, 1, 2), repeat=len(remaining)):   # 0 home win, 1 draw, 2 away win
+                fp = dict(cur)
+                h2h = {}
+                for (h, a, hg, ag) in played:
+                    h2h[(h, a)] = (3, 0) if hg > ag else ((0, 3) if ag > hg else (1, 1))
+                for gi, (h, a) in enumerate(remaining):
+                    o = combo[gi]
+                    if o == 0:   fp[h] += 3; h2h[(h, a)] = (3, 0)
+                    elif o == 2: fp[a] += 3; h2h[(h, a)] = (0, 3)
+                    else:        fp[h] += 1; fp[a] += 1; h2h[(h, a)] = (1, 1)
+                tp = fp[T]
+                above = sum(1 for x in teams if x != T and fp[x] > tp)
+                tied = [x for x in teams if x != T and fp[x] == tp]
+                tied_above = 0
+                if tied:
+                    grp = set(tied + [T])
+                    hp = {x: 0 for x in grp}
+                    for (h, a), (hs, as_) in h2h.items():
+                        if h in grp and a in grp:
+                            hp[h] += hs; hp[a] += as_
+                    # worst case for clinching: a tied team NOT strictly behind T on head-to-head points could
+                    # still be ranked above T (overall GD / goals / conduct / ranking might favour it) -> count it
+                    tied_above = sum(1 for x in tied if hp[x] >= hp[T])
+                if above + tied_above > 1:        # in THIS scenario T could finish 3rd or lower -> not safe yet
+                    clinched = False
+                    break
+            if clinched:
+                done.add(T)
+    return done
+
+
 def compute(teams_path="teams.json", draw_path="draw_result.json",
             results_path="results.json", out="tracker_data.json", default_mode="hybrid", wagers=None,
             clocks_path="match_clocks.json", group_mid_ts=None, composite_overrides=None):
@@ -381,6 +448,10 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
     # teams mathematically out of the group stage (can't reach 3rd) — flips them to "out" before the knockouts
     eliminated_group = _eliminated_teams(results.get("standings", []),
                                          [m for m in matches if m.get("stage") == "GROUP_STAGE"]) if not ko_started else set()
+    # teams that have mathematically CLINCHED top-2 in their group — through to the R32 even before the feed
+    # publishes the bracket fixtures (the mirror of the elimination check above; conservative, never false-clinches)
+    clinched_top2 = _clinched_top2(results.get("standings", []),
+                                   [m for m in matches if m.get("stage") == "GROUP_STAGE"]) if not ko_started else set()
 
     pts = defaultdict(int); record = defaultdict(lambda: [0, 0, 0])
     gf = defaultdict(int); ga = defaultdict(int); cs = defaultdict(int)
@@ -392,6 +463,12 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
             for s in ("home", "away"):
                 if m[s] in teams:
                     reached[m[s]].add(m["stage"])
+    # A clinched top-2 team is already in the Round of 32 — credit it now (idempotent: reached is a set and the
+    # stage bonus / survival value are the max over it, so this never double-counts and is superseded the moment
+    # the team actually reaches a deeper round).
+    for t in clinched_top2:
+        if t in teams:
+            reached[t].add("LAST_32")
 
     for m in scoring_matches:                          # match points — full-time AND live (provisional, from the current score)
         h, a, hs, as_ = m["home"], m["away"], m["homeScore"], m["awayScore"]
@@ -451,8 +528,10 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
     def status(team):
         if team in lost_ko_at:
             return "out", lost_ko_at[team]
-        if team in ko_teams:
-            return "alive", furthest_stage(team)
+        fs = furthest_stage(team)
+        # advanced if the feed has them in a KO fixture OR they've clinched top-2 (reached set carries LAST_32)
+        if team in ko_teams or fs != "GROUP_STAGE":
+            return "alive", fs
         if ko_started:
             return "out", "GROUP_STAGE"
         if team in eliminated_group:

@@ -49,7 +49,7 @@ ck("O/U 0.5 UNDER is long (>4.0)", dec(o["0.5"]["UNDER"]) > 4.0, dec(o["0.5"]["U
 # O/U 1.5 Over is the most common 'goals' bet — should sit roughly 1.25-1.6 for an even game.
 ck("O/U 1.5 OVER ~ 1.2-1.65", 1.20 <= dec(o["1.5"]["OVER"]) <= 1.65, dec(o["1.5"]["OVER"]))
 # Highest line offered for an even game (5.5): Over is a long shot, Under heavily odds-on.
-ck("O/U 5.5 OVER is a big price (>8)", dec(o["5.5"]["OVER"]) > 8, dec(o["5.5"]["OVER"]))
+ck("O/U 5.5 OVER stays the long side (compressed by the 1/6 floor on the odds-on Under, still >=5/1)", dec(o["5.5"]["OVER"]) >= 5.0, dec(o["5.5"]["OVER"]))
 ck("O/U 5.5 UNDER is odds-on (<1.20)", dec(o["5.5"]["UNDER"]) < 1.20, dec(o["5.5"]["UNDER"]))
 
 print("\n== bookmaker margin: EVERY offered line carries an overround (underround lines are filtered out) ==")
@@ -122,8 +122,11 @@ ck("no offered line ever underrounds (house edge guaranteed)", under == 0, under
 ck("Over odds stay monotone in the line for every matchup", nonmono == 0, nonmono)
 # the most extreme possible mismatch still prices 0.5 sensibly
 oe = W.goals_odds(100.0, 0.1)
-ck("extreme mismatch: 0.5 Over is very short", dec(oe["0.5"]["OVER"]) < 1.15, dec(oe["0.5"]["OVER"]))
-ck("extreme mismatch: 0.5 Under is a long, house-positive price", dec(oe["0.5"]["UNDER"]) > 6.0, dec(oe["0.5"]["UNDER"]))
+ck("extreme mismatch: 0.5 Over is floored at the 1/6 minimum price (no selection is ever shorter)", 1.15 <= dec(oe["0.5"]["OVER"]) <= 1.18, dec(oe["0.5"]["OVER"]))
+ck("extreme mismatch: 0.5 Under stays a long, house-positive price (>=5/1)", dec(oe["0.5"]["UNDER"]) >= 5.0, dec(oe["0.5"]["UNDER"]))
+# the 1/6 minimum-price floor (MAX_PROB) holds across the entire mismatch range — the new shortest-price rule
+shortest = min(min(dec(g[k]["OVER"]), dec(g[k]["UNDER"])) for ch in (0.1,1,12,34,50,73,100) for ca in (0.1,1,12,34,50,73,100) for g in [W.goals_odds(ch,ca)] for k in g)
+ck("no offered O/U price is ever shorter than the 1/6 floor", shortest >= 1.0 + 1.0/6 - 1e-6, round(shortest, 3))
 
 print("\n" + ("All O/U odds-model QA passed." if not fails else "O/U ODDS-MODEL QA FAILED (%d): %s" % (len(fails), ", ".join(fails))))
 import sys
