@@ -1447,7 +1447,7 @@ function render(d){
   // leaderboard for the active mode
   MODE=d.default_mode||'points';
   const sm=STATUS.scoring_mode||MODE||'points';
-  const allowed = (sm==='points' ? ['points','fair'] : sm==='survival' ? ['survival'] : ['points','survival','fair']).slice();
+  const allowed = (sm==='survival' ? ['survival'] : ['points','survival','fair']).slice();
   if(STATUS.wagering_enabled && allowed.includes('points')) allowed.push('points_no_bets');  // only meaningful (differs from Points) when bets are on
   let lbm=LBMODE||MODE;
   if(!allowed.includes(lbm)) lbm = allowed.includes(sm)?sm:allowed[0];
