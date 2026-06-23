@@ -617,9 +617,11 @@ def _bot_dm_player(player, text, match_id=None):
             return 0
         if not _notif_on():
             return 0
+        if _player_route(player) == "off":       # this player disallowed their personal alerts entirely
+            return 0
         if match_id:
             text = _stamp(text, match_id)        # show when it happened — on the DM and the in-app feed
-        d = _personal_delay_sec(player)
+        d = max(_master_dm_delay_sec(), _personal_delay_sec(player))   # admin master DM delay is a floor; players can add more
         if d > 0:
             _enqueue_notif(text, time.time() + d, kind="personal", player=player, mid=match_id)
             return 0
@@ -778,13 +780,21 @@ def _player_route(player):
     """Where a player PERSONAL alerts go: 'dm' | 'feed' | 'both' (default both)."""
     r = load_config().get("notif_routes")
     v = r.get(player) if isinstance(r, dict) else None
-    return v if v in ("dm", "feed", "both") else "both"
+    return v if v in ("off", "dm", "feed", "both") else "both"
 
 def _personal_delay_sec(player):
     """A player OWN spoiler delay for their personal alerts (DM + in-app feed), in seconds. 0 = off. Clamped 0..3600."""
     d = load_config().get("notif_player_delay")
     try:
         s = int((d or {}).get(player, 0)) if isinstance(d, dict) else 0
+    except Exception:
+        s = 0
+    return max(0, min(s, 3600))
+
+def _master_dm_delay_sec():
+    """Admin-set master spoiler delay applied to EVERYONE personal alerts (DM + in-app), in seconds. 0 = off. 0..3600."""
+    try:
+        s = int(load_config().get("notif_dm_delay_sec", 0) or 0)
     except Exception:
         s = 0
     return max(0, min(s, 3600))
@@ -1486,6 +1496,8 @@ def _webpush_one(sub, title, body):
 
 def push_player(player, etype, title, body):
     if not push_enabled() or not _notif_on():
+        return
+    if _player_route(player) == "off":           # disallowed: no push either
         return
     subs = _load_push()
     lst = subs.get(player, [])
@@ -3583,6 +3595,7 @@ class Handler(BaseHTTPRequestHandler):
                 "notifications_on": load_config().get("notifications_on", True) is not False,
                 "notif_delay_min": int(load_config().get("notif_delay_min", 0) or 0),
                 "notif_delay_sec": _notif_delay_sec(),
+                "notif_dm_delay_sec": _master_dm_delay_sec(),
                 "wager_budget": (wager_mod.STAGE_BUDGET if wager_mod is not None else None),
                 "free_bet": ((lambda dr: {"open": True, "id": dr["id"], "closes": dr["closes"], "stake": wager_mod.FREE_BET_STAKE,
                                           "claimed": sorted((cfg.get("free_bet_claims", {}).get(dr["id"]) or {}).keys())}
@@ -3798,6 +3811,11 @@ class Handler(BaseHTTPRequestHandler):
             if "notif_delay_sec" in body:            # admin spoiler delay for the channel game feed (seconds; 0 = realtime)
                 try:
                     cfg["notif_delay_sec"] = max(0, min(int(body["notif_delay_sec"]), 3600))
+                except Exception:
+                    pass
+            if "notif_dm_delay_sec" in body:         # admin master spoiler delay for everyone personal DMs/in-app (seconds)
+                try:
+                    cfg["notif_dm_delay_sec"] = max(0, min(int(body["notif_dm_delay_sec"]), 3600))
                 except Exception:
                     pass
             if "wagering_enabled" in body:
@@ -4073,8 +4091,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, json.dumps({"ok": True, "delay": sec}))
             if path == "/api/notif_route":            # where a player personal alerts go: dm / feed / both
                 rt = str(body.get("route", "")).strip()
-                if rt not in ("dm", "feed", "both"):
-                    return self._send(400, json.dumps({"ok": False, "error": "route must be dm, feed or both"}))
+                if rt not in ("off", "dm", "feed", "both"):
+                    return self._send(400, json.dumps({"ok": False, "error": "route must be off, dm, feed or both"}))
                 routes = cfg.get("notif_routes") if isinstance(cfg.get("notif_routes"), dict) else {}
                 routes[player] = rt
                 cfg["notif_routes"] = routes

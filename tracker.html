@@ -397,6 +397,8 @@
         <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;margin-top:12px">Spoiler delay on the channel feed <select id="setNotifDelay" style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 8px"><option value="0">Real-time</option><option value="30">Hold 30 sec</option><option value="60">Hold 1 min</option><option value="90">Hold 90 sec</option><option value="120">Hold 2 min</option><option value="300">Hold 5 min</option><option value="600">Hold 10 min</option><option value="900">Hold 15 min</option><option value="1800">Hold 30 min</option></select></label>
         <p style="margin:4px 0 0;color:var(--muted);font-size:12px">Holds channel goal / kick-off / full-time posts this long so people watching on a delay are not spoiled. Each post still shows the real time &amp; minute it happened. Personal DMs are unaffected.</p>
         <div class="hint" id="setNotifDelayMsg" style="color:var(--muted);font-size:12px;margin-top:4px"></div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;margin-top:12px">DM delay for everyone <select id="setDmDelay" style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 8px"><option value="0">Real-time</option><option value="30">Hold 30 sec</option><option value="60">Hold 1 min</option><option value="90">Hold 90 sec</option><option value="120">Hold 2 min</option><option value="300">Hold 5 min</option><option value="600">Hold 10 min</option><option value="900">Hold 15 min</option><option value="1800">Hold 30 min</option></select></label>
+        <div class="hint" id="setDmDelayMsg" style="color:var(--muted);font-size:12px;margin-top:4px">A floor for all personal DMs + in-app alerts. Each player can delay their own further, never less.</div>
       </div>
       <div id="wagerSetup" style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
         <p style="margin:0 0 8px"><b>💷 Betting.</b> Let players stake the points they've earned on games (fractional odds, capped, no cash-out). Off until you switch it on.</p>
@@ -1150,8 +1152,8 @@ async function renderNotifyTab(){
   html+='<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px">'
     +'<div style="font-size:13.5px;margin-bottom:8px"><b>Where my alerts go</b></div>'
     +'<div class="modesel" id="notifRoute">'
-    +['both','dm','feed'].map(function(r){return '<button data-r="'+r+'"'+((st.route||'both')===r?' class="on"':'')+'>'+({both:'Both',dm:'Discord DM',feed:'In-app only'}[r])+'</button>';}).join('')
-    +'</div><div style="color:var(--muted);font-size:11.5px;margin-top:6px">In-app alerts show in your feed below \u2014 no Discord needed. Both sends a DM and logs it here.</div></div>';
+    +['both','dm','feed','off'].map(function(r){return '<button data-r="'+r+'"'+((st.route||'both')===r?' class="on"':'')+'>'+({both:'Both',dm:'Discord DM',feed:'In-app only',off:'Off'}[r])+'</button>';}).join('')
+    +'</div><div style="color:var(--muted);font-size:11.5px;margin-top:6px">In-app alerts show in your feed below \u2014 no Discord needed. Both sends a DM and logs it here. <b>Off</b> turns all your alerts off.</div></div>';
   html+='<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px">'
     +'<div style="font-size:13.5px;margin-bottom:6px"><b>Delay my alerts</b> <span style="color:var(--muted);font-weight:400">(your own spoiler control)</span></div>'
     +'<select id="myDelaySel" style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 8px"><option value="0">Real-time</option><option value="30">Hold 30 sec</option><option value="60">Hold 1 min</option><option value="120">Hold 2 min</option><option value="300">Hold 5 min</option><option value="600">Hold 10 min</option><option value="900">Hold 15 min</option></select>'
@@ -2420,6 +2422,7 @@ async function refreshStatus(){
   const gc=document.getElementById('setGameChannel'); if(gc) gc.checked=(STATUS.game_channel_alerts!==false);
   const nmx=document.getElementById('setNotifMaster'); if(nmx) nmx.checked=(STATUS.notifications_on!==false);
   const ndx=document.getElementById('setNotifDelay'); if(ndx) ndx.value=String(STATUS.notif_delay_sec||0);
+  const ddx=document.getElementById('setDmDelay'); if(ddx) ddx.value=String(STATUS.notif_dm_delay_sec||0);
   const sw=document.getElementById('setWager'); if(sw) sw.checked=!!STATUS.wagering_enabled;
   const swl=document.getElementById('setWagerLock'); if(swl) swl.checked=!!STATUS.wager_locked;
   const caps=STATUS.wager_caps||{}; const mr=document.getElementById('setMaxReturn'), ma=document.getElementById('setMaxAcca');
@@ -2489,6 +2492,13 @@ document.getElementById('setSave').onclick=async()=>{
   if(nd) nd.onchange=async()=>{ const m=document.getElementById('setNotifDelayMsg'); m.textContent='Saving\u2026';
     try{ const v=parseInt(nd.value,10)||0; const j=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({notif_delay_sec:v,admin_key:ADMINKEY})}).then(r=>r.json());
       if(j.ok){ m.textContent=v?('Channel posts held '+(v<60?(v+' sec'):((v%60?(v/60).toFixed(1):(v/60))+' min'))+' for spoiler control.'):'Channel posts go out in real-time.'; refreshStatus(); }
+      else if(j.need_key){ m.textContent='Session expired \u2014 reopen Settings and unlock again.'; ADMINKEY=''; }
+      else { m.textContent=j.error||'Could not save.'; }
+    }catch(e){ m.textContent='Could not reach the server.'; } }; }
+{ const dd=document.getElementById('setDmDelay');
+  if(dd) dd.onchange=async()=>{ const m=document.getElementById('setDmDelayMsg'); m.textContent='Saving\u2026';
+    try{ const v=parseInt(dd.value,10)||0; const j=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({notif_dm_delay_sec:v,admin_key:ADMINKEY})}).then(r=>r.json());
+      if(j.ok){ m.textContent=v?('Everyone DMs + in-app held '+(v<60?(v+' sec'):((v%60?(v/60).toFixed(1):(v/60))+' min'))+' (players can add more).'):'Personal DMs go out in real-time (players can still set their own delay).'; refreshStatus(); }
       else if(j.need_key){ m.textContent='Session expired \u2014 reopen Settings and unlock again.'; ADMINKEY=''; }
       else { m.textContent=j.error||'Could not save.'; }
     }catch(e){ m.textContent='Could not reach the server.'; } }; }
