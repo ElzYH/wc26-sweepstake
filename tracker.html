@@ -1391,7 +1391,7 @@ function liveClockText(status, minute, liveSec, pens, clockAt){
     elapsed=Math.min(elapsed,15*60);                                  // backgrounded-tab safety; re-synced on focus
     let sec=ls+elapsed;
     const mnNum=(minute===''||minute==null)?null:Number(minute);
-    if(mnNum!=null&&!isNaN(mnNum)&&mnNum>=0) sec=Math.min(sec,(mnNum+5)*60);   // safety ceiling: the clock may run a little ahead of a lagging feed minute, but not run away
+    if(mnNum!=null&&!isNaN(mnNum)&&mnNum>=0) sec=Math.min(sec,(mnNum+2)*60);   // ceiling: keep the display within ~2 min of the official feed minute, so when the feed minute freezes near full-time the clock can't run ~6 min ahead (was +5)
     if(sec>125*60) sec=125*60;                                        // never beyond end of extra time — a shootout shows 'PENS', not a clock
     const mm=Math.floor(sec/60), ss=Math.floor(sec%60);
     return mm+':'+(ss<10?'0':'')+ss;
@@ -2080,10 +2080,25 @@ async function renderHistory(){
   if(!ev.length){ body='<div class="empty">Nothing settled yet. Match points and bet results show up here as they happen.</div>'; }
   else {
     let lastDay='';
+    const acc={}; (DATA.players||[]).forEach(function(p){ acc[p.name]={m:0,b:0,n:0,c:0}; });
+    const dayEnd={};
+    all.slice().sort(function(a,b){return a.when-b.when;}).forEach(function(e){
+      const o=acc[e.player];
+      if(o){ if(e.kind==='match')o.m+=e.pts; else if(e.kind==='bonus')o.b+=e.pts; else if(e.kind==='bet')o.n+=e.net; else if(e.kind==='free')o.c++; }
+      const dt=e.when?new Date(e.when):null; const dy=dt?dt.toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short'}):'—';
+      const snap={}; (DATA.players||[]).forEach(function(p){ const a=acc[p.name], cu=5+5*a.c, cn=a.n+Math.min(cu,Math.max(0,-a.n)); snap[p.name]=Math.round((a.m+a.b+cn)*10)/10; });
+      dayEnd[dy]=snap;
+    });
+    const standHTML=function(dy){ const snap=dayEnd[dy]||{};
+      if(HISTPLAYER!=='all'){ const v=snap[HISTPLAYER]; if(v==null) return '';
+        return '<div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin:6px 0 2px;font-size:11.5px;color:var(--muted)">Ended '+dy+' on <b style="color:var(--ink)">'+v+' pts</b></div>'; }
+      const nm=Object.keys(snap).sort(function(a,b){return snap[b]-snap[a];});
+      const parts=nm.map(function(n,i){ return (i+1)+'. '+esc(n)+' <b style="color:var(--ink)">'+snap[n]+'</b>'; }).join(' · ');
+      return '<div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin:6px 0 2px;font-size:11.5px;color:var(--muted);line-height:1.7"><span style="text-transform:uppercase;letter-spacing:.05em">Standings end of '+dy+'</span> · '+parts+'</div>'; };
     body=ev.map(function(e){
       const dt=e.when?new Date(e.when):null;
       const day=dt?dt.toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short'}):'\u2014';
-      const hdr=(day!==lastDay)?('<div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:14px 0 4px">'+day+'</div>'):''; lastDay=day;
+      const hdr=(day!==lastDay)?((lastDay?standHTML(lastDay):'')+'<div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:14px 0 4px">'+day+'</div>'):''; lastDay=day;
       const who=HISTPLAYER==='all'?('<b style="color:var(--ink)">'+esc(e.player)+'</b> \u00b7 '):'';
       let text,delta,dcol;
       if(e.kind==='match'){ text=who+flag(e.team)+esc(e.team)+' '+e.score+' '+esc(e.opp)+(e.parts.length?' <span style="opacity:.6">\u00b7 '+e.parts.join(', ')+'</span>':''); delta='+'+e.pts; dcol='#7ee787'; }
@@ -2091,7 +2106,7 @@ async function renderHistory(){
       else if(e.kind==='free'){ text=who+'🎁 claimed '+e.amount+' free betting points'; delta='+'+e.amount; dcol='#ffd86b'; }
       else { text=who+(e.won?'\ud83c\udfb2 won \u2014 ':'\ud83c\udfb2 lost \u2014 ')+esc(e.label); delta=(e.won?'+':'\u2212')+Math.abs(e.net); dcol=e.won?'#7ee787':'#ff7a7a'; }
       return hdr+'<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;line-height:1.45"><div>'+text+'</div><div style="font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;color:'+dcol+'">'+delta+'</div></div>';
-    }).join('');
+    }).join('')+(lastDay?standHTML(lastDay):'');
   }
   el.innerHTML=sel+summary+intro+body;
   el.querySelectorAll('#histSel button').forEach(function(b){ b.onclick=function(){ HISTPLAYER=b.dataset.h; renderHistory(); }; });
