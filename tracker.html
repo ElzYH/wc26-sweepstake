@@ -254,6 +254,8 @@
      tabs) so it can never appear on another page. No JS — pure CSS sticky, safe on iOS Safari / iPad. */
   .betcta{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:25;
     box-shadow:0 8px 30px rgba(0,0,0,.55),0 -2px 12px rgba(0,0,0,.30)}
+  /* sticky-bottom lags/floats during fast momentum scroll on phones (and jumps around the keyboard) — keep it in normal flow on touch devices */
+  @media (pointer:coarse){ .betcta{position:static;bottom:auto;box-shadow:0 4px 18px rgba(0,0,0,.4)} }
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
   .lmatch{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin-top:8px;
     color:var(--ink);font-weight:600;font-size:14px;letter-spacing:0}

@@ -716,9 +716,9 @@ def _match_minute(mid):
         return ""
 
 def _stamp(text, mid=None):
-    """Prepend [HH:MM . 73'] to a live channel line, baked at event time so a spoiler-delayed post still shows when
+    """Prepend the match minute (e.g. [73 mins]) to a live line, baked at event time so a spoiler-delayed post still shows when
     it actually happened."""
-    tag = " \u00b7 ".join([x for x in (_now_tag(), (_match_minute(mid) if mid else "")) if x])
+    tag = _match_minute(mid) if mid else ""        # match minute only (e.g. 73 mins) -- wall-clock time removed: it was confusing and easily wrong across timezones
     return ("[%s] %s" % (tag, text)) if tag else text
 
 def _enqueue_notif(text, due, kind="channel", player=None, mid=None):
@@ -756,6 +756,7 @@ def _flush_notif_queue(force=False):
                 if e.get("kind") == "personal" and e.get("player"):
                     _deliver_personal(e["player"], str(e.get("text", "")), e.get("mid"))
                 else:
+                    _feed_add("*", str(e.get("text", "")))      # in-app everyone feed releases together with the delayed channel post
                     discord_send(str(e.get("text", "")))
             except Exception as ex:
                 log("notif deliver failed:", ex)
@@ -768,10 +769,10 @@ def _channel_event(text, mid=None):
     if not _game_channel_on():
         return
     line = _stamp(text, mid)
-    _feed_add("*", line)
     if _notif_delay_sec() > 0:
-        _enqueue_notif(line, time.time() + _notif_delay_sec())
+        _enqueue_notif(line, time.time() + _notif_delay_sec())   # hold BOTH the Discord post and the in-app feed entry so they release together
     else:
+        _feed_add("*", line)
         discord_send(line)
 
 NOTIF_FEED_FILE = "notif_feed.json"        # in-app alert feed (per player; "*" = everyone)
@@ -1682,12 +1683,17 @@ def notify_changes(old):
         # has the channel feed switched on (game_channel_alerts) — turning it on means "post game events here".
         # When it's off, only personal DMs (owners + all-games opt-ins) go out. `important` is kept for callers
         # but no longer gates the channel — the single admin switch is the control.
+        sent = set()                                  # (owner, body) -> never DM the same owner twice for one match event
+        owners = []
         for ow, ti, bo in recipients:
-            if ow and ow not in ("—", "-"):
+            if ow and ow not in ("—", "-") and (ow, bo) not in sent:
+                sent.add((ow, bo))
+                if ow not in owners:
+                    owners.append(ow)
                 push_player(ow, etype, ti, bo)
                 _bot_dm_player(ow, "%s — %s" % (ti, bo), match_id=match_id)   # personal -> always DM (falls back to @mention for opt-ins)
         _channel_event(group_line, match_id)        # communal feed: stamped + spoiler-delay aware (channel switch enforced inside)
-        _dm_all_games(group_line, exclude_players=[r[0] for r in recipients])   # ...and DMs all-games opt-ins, minus owners who already got the personal DM
+        _dm_all_games(group_line, exclude_players=owners)   # ...and DMs all-games opt-ins, minus owners who already got the personal DM
 
     def own(o):
         return o if (o and o not in ("—", "-")) else "—"
@@ -1728,9 +1734,13 @@ def notify_changes(old):
             mid = mm0.get("matchId")
             _ko = str(mm0.get("stage") or "").upper() not in ("", "GROUP_STAGE", "GROUP")  # knockout = always important
             if st in LIVE_STATUSES and was not in LIVE_STATUSES:                      # kickoff
-                match_event("kickoff",
-                            [(ho, "%s vs %s" % (h, a), "Kicked off — your team %s is playing!" % h),
-                             (ao, "%s vs %s" % (h, a), "Kicked off — your team %s is playing!" % a)],
+                _ko_title = "%s vs %s" % (h, a)
+                if ho and ho == ao:
+                    _ko_recips = [(ho, _ko_title, "Kicked off — your teams %s and %s are playing!" % (h, a))]
+                else:
+                    _ko_recips = [(ho, _ko_title, "Kicked off — your team %s is playing!" % h),
+                                  (ao, _ko_title, "Kicked off — your team %s is playing!" % a)]
+                match_event("kickoff", _ko_recips,
                             "🔵 Kicked off — **%s** (%s) vs **%s** (%s)" % (h, own(ho), a, own(ao)), ping=True, important=_ko, match_id=mid)
                 for _pl in _bettors_on_match(mid):                                    # bet on this game -> DM (default-on)
                     if _pl not in (ho, ao):
