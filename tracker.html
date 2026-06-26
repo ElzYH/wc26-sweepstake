@@ -168,8 +168,29 @@
   .btime{padding:6px 14px;color:var(--muted);font-size:11px;text-align:center}
   .blive{padding:5px 14px;text-align:center;font-size:10.5px;font-weight:700;letter-spacing:.1em;color:var(--live)}
   .blive .pd{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--live);margin-right:5px;animation:pulse 1.4s infinite}
-  #koRounds button.live{position:relative}
-  #koRounds button.live::after{content:"";position:absolute;top:6px;right:8px;width:6px;height:6px;border-radius:50%;background:var(--live);animation:pulse 1.4s infinite}
+  .modesel button.live{position:relative}
+  .modesel button.live::after{content:"";position:absolute;top:6px;right:8px;width:6px;height:6px;border-radius:50%;background:var(--live);animation:pulse 1.4s infinite}
+  /* NBA-style full bracket */
+  .fbHint{font-size:11.5px;color:var(--muted);margin:0 0 12px;line-height:1.55}
+  .fbWrap{overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 0 12px}
+  .fbCols{display:flex;gap:12px;min-width:max-content;align-items:stretch}
+  .fbCol{display:flex;flex-direction:column;min-width:150px;max-width:184px}
+  .fbColH{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);text-align:center;padding:0 0 9px;font-weight:700}
+  .fbColBody{flex:1;display:flex;flex-direction:column;justify-content:space-around;gap:8px}
+  .fbM{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .fbM.islive{border-color:var(--live)}
+  .fbR{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:6px 9px;font-size:12.5px}
+  .fbR+.fbR{border-top:1px solid #11301f}
+  .fbR.win{background:#11301f}.fbR.win .fbNm{font-weight:700;color:var(--ink)}.fbR.win .fbSc{color:var(--gold)}
+  .fbR.lose{opacity:.45}
+  .fbT{display:flex;align-items:center;gap:5px;min-width:0}
+  .fbNW{display:flex;flex-direction:column;min-width:0}
+  .fbNm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .fbNW small{color:var(--gold);font-size:9px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .fbSc{font-family:'Anton';font-size:16px;min-width:18px;text-align:right;color:var(--muted)}
+  .fbFoot{font-size:9.5px;color:var(--muted);text-align:center;padding:3px 6px}
+  .fbFoot.live{color:var(--live);font-weight:700;letter-spacing:.06em}
+  .fbThird{margin-top:16px;max-width:200px}
 
   .topnav{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--line)}
   .topnav .brand{font-family:'Anton';font-size:20px;color:var(--gold);text-decoration:none;letter-spacing:.02em}
@@ -1240,7 +1261,7 @@ function upsideTag(t){
   return ' <span class="up" title="'+tip+'">↑ +'+dp+' at '+lbl+'</span>';
 }
 const KO_STAGES=["LAST_32","LAST_16","QUARTER_FINALS","SEMI_FINALS","THIRD_PLACE","FINAL"];
-let KOROUND=null, KO_USER_SET=false;
+let KOROUND=null, KO_USER_SET=false, BRACKETVIEW='round';
 
 let DATA=SAMPLE, FETCH_AT=Date.now();   // FETCH_AT = when DATA arrived, so the live clock ticks on accurately from the server's seconds
 async function load(){
@@ -1603,12 +1624,35 @@ function renderBracket(d){
   const present=KO_STAGES.filter(s=>ko.some(m=>m.stage===s));
   const rounds=document.getElementById('koRounds'), body=document.getElementById('bracketBody');
   if(!present.length){rounds.innerHTML='';body.innerHTML='<div class="empty">The bracket fills in once the knockouts begin (28 June).</div>';return;}
+  // view switch: per-round (default) vs full NBA-style bracket — both available, neither replaces the other
+  rounds.innerHTML='<button data-v="round" class="'+(BRACKETVIEW==='round'?'on':'')+'">By round</button><button data-v="full" class="'+(BRACKETVIEW==='full'?'on':'')+'">Full bracket</button>';
+  rounds.querySelectorAll('button').forEach(b=>b.onclick=()=>{BRACKETVIEW=b.dataset.v;renderBracket(d);});
+  if(BRACKETVIEW==='full'){ body.innerHTML=fullBracketHTML(ko,present); return; }
   if(!KO_USER_SET || !present.includes(KOROUND)) KOROUND=liveOrCurrentRound(ko,present);
   const liveRounds=new Set(ko.filter(m=>m.status==='IN_PLAY'||m.status==='PAUSED').map(m=>m.stage));
-  rounds.innerHTML=present.map(s=>`<button data-r="${s}" class="${s===KOROUND?'on':''} ${liveRounds.has(s)?'live':''}">${STAGE_LABEL[s]||s}</button>`).join('');
-  rounds.querySelectorAll('button').forEach(b=>b.onclick=()=>{KOROUND=b.dataset.r;KO_USER_SET=true;renderBracket(d);});
+  const sel='<div class="modesel" id="koRoundSel" style="margin-bottom:12px">'+present.map(s=>`<button data-r="${s}" class="${s===KOROUND?'on':''} ${liveRounds.has(s)?'live':''}">${STAGE_LABEL[s]||s}</button>`).join('')+'</div>';
   const ms=ko.filter(m=>m.stage===KOROUND);
-  body.innerHTML='<div class="bracket">'+ms.map(bracketCard).join('')+'</div>';
+  body.innerHTML=sel+'<div class="bracket">'+ms.map(bracketCard).join('')+'</div>';
+  body.querySelectorAll('#koRoundSel button').forEach(b=>b.onclick=()=>{KOROUND=b.dataset.r;KO_USER_SET=true;renderBracket(d);});
+}
+function fbMatch(m){
+  const isLive=m.status==='IN_PLAY'||m.status==='PAUSED', done=isDone(m.status);
+  const hw=m.winner==='HOME', aw=m.winner==='AWAY', show=done||isLive;
+  const sc=h=>show?((h?m.homeScore:m.awayScore)??0):'';
+  const row=(team,owner,score,wc,lc)=>'<div class="fbR '+wc+' '+lc+'"><span class="fbT">'+flag(team)+'<span class="fbNW"><span class="fbNm">'+esc(team||'TBD')+'</span>'+(owner?'<small>'+esc(owner)+'</small>':'')+'</span></span><span class="fbSc">'+score+'</span></div>';
+  const foot=isLive?'<div class="fbFoot live">\u25cf '+liveClock(m)+'</div>':(done?(koNote(m)?'<div class="fbFoot">'+koNote(m)+'</div>':''):'<div class="fbFoot">'+fmtTime(m.utcDate)+'</div>');
+  return '<div class="fbM '+(isLive?'islive':'')+'">'+row(m.home,m.homeOwner,sc(true),hw?'win':'',done&&aw?'lose':'')+row(m.away,m.awayOwner,sc(false),aw?'win':'',done&&hw?'lose':'')+foot+'</div>';
+}
+function fullBracketHTML(ko,present){
+  const TREE=["LAST_32","LAST_16","QUARTER_FINALS","SEMI_FINALS","FINAL"].filter(s=>present.includes(s));
+  const byDate=(a,b)=>new Date(a.utcDate||0)-new Date(b.utcDate||0);
+  const cols=TREE.map(s=>{
+    const ms=ko.filter(m=>m.stage===s).slice().sort(byDate);
+    return '<div class="fbCol"><div class="fbColH">'+(STAGE_LABEL[s]||s)+'</div><div class="fbColBody">'+ms.map(fbMatch).join('')+'</div></div>';
+  }).join('');
+  const tp=ko.filter(m=>m.stage==='THIRD_PLACE');
+  const extra=tp.length?'<div class="fbThird"><div class="fbColH">3rd-place play-off</div>'+tp.map(fbMatch).join('')+'</div>':'';
+  return '<div class="fbHint">Both sides of the draw, left \u2192 right \u2014 round winners advance toward the final. Scroll across to follow a team\u2019s path.</div><div class="fbWrap"><div class="fbCols">'+cols+'</div></div>'+extra;
 }
 function liveOrCurrentRound(ko,present){
   const live=ko.find(m=>m.status==='IN_PLAY'||m.status==='PAUSED');
