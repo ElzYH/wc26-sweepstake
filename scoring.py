@@ -444,6 +444,14 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
     ko_matches = [m for m in matches if m["stage"] != "GROUP_STAGE"]
     ko_teams = {m["home"] for m in ko_matches} | {m["away"] for m in ko_matches}
     ko_started = any(m["status"] in FINAL_STATUSES + ("IN_PLAY", "PAUSED") for m in ko_matches)
+    # The Round-of-32 draw is fully populated once every R32 tie has both sides (>=32 distinct teams). At that
+    # point the FEED itself has settled qualification, so any group team NOT in the draw is out — including the
+    # four third-placed teams that missed the best-8, which the can't-reach-3rd group check never catches (they
+    # DID finish 3rd). This is also what keeps the group-table OUT tags correct AFTER kick-off, when the
+    # mathematical group-stage checks below stop running (they're gated on `not ko_started`).
+    _r32 = [m for m in matches if m.get("stage") == "LAST_32"]
+    _r32_teams = {t for m in _r32 for t in (m.get("home"), m.get("away")) if t}
+    ko_draw_set = bool(_r32) and all(m.get("home") and m.get("away") for m in _r32) and len(_r32_teams) >= 32
     # teams mathematically out of the group stage (can't reach 3rd) — flips them to "out" before the knockouts
     eliminated_group = _eliminated_teams(results.get("standings", []),
                                          [m for m in matches if m.get("stage") == "GROUP_STAGE"]) if not ko_started else set()
@@ -531,7 +539,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
         # advanced if the feed has them in a KO fixture OR they've clinched top-2 (reached set carries LAST_32)
         if team in ko_teams or fs != "GROUP_STAGE":
             return "alive", fs
-        if ko_started:
+        if ko_started or ko_draw_set:
             return "out", "GROUP_STAGE"
         if team in eliminated_group:
             return "out", "GROUP_STAGE"          # can no longer reach 3rd in its group -> out
@@ -803,10 +811,16 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                  for r in s["table"] if isinstance(r, dict)]
         _ordered = _order_group_table(_rows, _gmatch.get(s.get("group"), []))
         for _r in _ordered:
-            _r["eliminated"] = _r.get("team") in eliminated_group
+            _t = _r.get("team")
+            _r["eliminated"] = (_t in eliminated_group) or (ko_draw_set and _t not in ko_teams)
         _groups_2026.append({"group": s.get("group"), "table": _ordered})
 
     third_place_race = _third_place_table(_groups_2026)
+    # Once the R32 draw is set, the race is decided by the feed — flag finality and mark which thirds are out
+    # (authoritative: not in the draw), so the table stops showing "can still climb" for teams that are now out.
+    third_place_race["final"] = ko_draw_set
+    for _tr in third_place_race.get("table", []):
+        _tr["eliminated"] = ko_draw_set and (_tr.get("team") not in ko_teams)
 
     data = {"updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "competition": results.get("competition", "WC"), "default_mode": default_mode,

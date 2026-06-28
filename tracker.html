@@ -191,6 +191,13 @@
   .fbFoot{font-size:9.5px;color:var(--muted);text-align:center;padding:3px 6px}
   .fbFoot.live{color:var(--live);font-weight:700;letter-spacing:.06em}
   .fbThird{margin-top:16px;max-width:200px}
+  /* full bracket — tree view with SVG connector lines */
+  .fbScroll{position:relative;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 0 14px}
+  .fbCols2{display:flex;gap:38px;min-width:max-content;align-items:stretch;position:relative}
+  .fbLines{position:absolute;top:0;left:0;pointer-events:none;z-index:0;overflow:visible}
+  .fbRound{position:relative;z-index:1;display:flex;flex-direction:column;min-width:154px;max-width:192px}
+  .fbRoundBody{flex:1;display:flex;flex-direction:column;justify-content:space-around;gap:10px}
+  .fbTBDlbl{color:var(--muted);font-style:italic;font-weight:400}
 
   .topnav{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--line)}
   .topnav .brand{font-family:'Anton';font-size:20px;color:var(--gold);text-decoration:none;letter-spacing:.02em}
@@ -1590,19 +1597,20 @@ function render(d){
   const tpr=d.third_place_race, tpEl=document.getElementById('thirdRace');
   if(tpEl){
     if(tpr && tpr.table && tpr.table.length){
+      const tpFinal = !!tpr.final;
       tpEl.innerHTML = `<table><caption>3rd-place race — best ${tpr.slots} of ${tpr.table.length} reach the Round of 32</caption>
         <tr><th>#</th><th>Team</th><th>Grp</th><th>Owner</th><th>Pld</th><th>GD</th><th>Pts</th><th>Q?</th></tr>
-        ${tpr.table.map((r,i)=>`<tr class="${r.qualifying?'qual':'tpout'}">
-          <td class="n">${r.rank}</td><td>${flag(r.team)}${esc(r.team)}</td>
+        ${tpr.table.map((r,i)=>{const out=tpFinal?r.eliminated:!r.qualifying;return `<tr class="${out?'tpout':'qual'}">
+          <td class="n">${r.rank}</td><td>${flag(r.team)}${tpFinal&&r.eliminated?'<s>'+esc(r.team)+'</s>':esc(r.team)}</td>
           <td class="n">${esc(String(r.group).replace(/^group[_ ]?/i,''))}</td>
           <td class="owner">${esc(r.owner)}</td>
           <td class="n">${r.playedGames}</td>
           <td class="n">${r.goalDifference>0?'+':''}${r.goalDifference}</td>
           <td class="n"><b>${r.points}</b></td>
-          <td class="n" style="font-size:11px;font-weight:700;${r.qualifying?'color:var(--gold)':'color:var(--muted)'}" title="${r.qualifying?'inside the top 8 right now':'below the cut-off right now — NOT eliminated, can still climb'}">${r.qualifying?'IN':'▼'}</td>
-        </tr>${i+1===tpr.slots && tpr.table.length>tpr.slots?'<tr class="tpcut"><td colspan="8"></td></tr>':''}`).join('')}
+          <td class="n" style="font-size:11px;font-weight:700;${out?'color:var(--muted)':'color:var(--gold)'}" title="${tpFinal?(r.eliminated?'missed the best-8 — out of the tournament':'through as a best third-placed team'):(r.qualifying?'inside the top 8 right now':'below the cut-off right now — NOT eliminated, can still climb')}">${tpFinal?(r.eliminated?'OUT':'IN'):(r.qualifying?'IN':'▼')}</td>
+        </tr>${i+1===tpr.slots && tpr.table.length>tpr.slots?'<tr class="tpcut"><td colspan="8"></td></tr>':''}`}).join('')}
       </table>
-      <p style="font-size:11.5px;color:var(--muted);margin:8px 2px 0">Live snapshot of the team currently 3rd in each group, ranked by points → goal difference → goals scored — no head-to-head, since these teams are in different groups and never met. The dashed line is the top-8 cut-off (▼ = below it). Positions move as games are played, and teams have games in hand (see Pld) — a team below the line is still in the tournament. Only a team that can no longer reach 3rd in its own group is actually eliminated. Final tie-breaks (fair-play cards, then FIFA ranking) fall back to team seeding, since card data is not in the feed.</p>`;
+      <p style="font-size:11.5px;color:var(--muted);margin:8px 2px 0">${tpFinal?'The group stage is done and the Round-of-32 draw is set — the eight teams marked IN are through as best third-placed teams; the four below the line are out. Ranked by points → goal difference → goals scored (no head-to-head — these teams are in different groups and never met).':'Live snapshot of the team currently 3rd in each group, ranked by points → goal difference → goals scored — no head-to-head, since these teams are in different groups and never met. The dashed line is the top-8 cut-off (▼ = below it). Positions move as games are played, and teams have games in hand (see Pld) — a team below the line is still in the tournament. Only a team that can no longer reach 3rd in its own group is actually eliminated. Final tie-breaks (fair-play cards, then FIFA ranking) fall back to team seeding, since card data is not in the feed.'}</p>`;
     } else tpEl.innerHTML='';
   }
   // fixtures grouped by day
@@ -1627,7 +1635,12 @@ function renderBracket(d){
   // view switch: per-round (default) vs full NBA-style bracket — both available, neither replaces the other
   rounds.innerHTML='<button data-v="round" class="'+(BRACKETVIEW==='round'?'on':'')+'">By round</button><button data-v="full" class="'+(BRACKETVIEW==='full'?'on':'')+'">Full bracket</button>';
   rounds.querySelectorAll('button').forEach(b=>b.onclick=()=>{BRACKETVIEW=b.dataset.v;renderBracket(d);});
-  if(BRACKETVIEW==='full'){ body.innerHTML=fullBracketHTML(ko,present); return; }
+  if(BRACKETVIEW==='full'){
+    const map=mapKO(ko);
+    if(map){ body.innerHTML=fullBracketTree(ko,present,map); requestAnimationFrame(()=>drawBracketLines(body)); bindBracketResize(); }
+    else { body.innerHTML=fullBracketHTML(ko,present); }   // safe fallback: plain columns, no guessed lines
+    return;
+  }
   if(!KO_USER_SET || !present.includes(KOROUND)) KOROUND=liveOrCurrentRound(ko,present);
   const liveRounds=new Set(ko.filter(m=>m.status==='IN_PLAY'||m.status==='PAUSED').map(m=>m.stage));
   const sel='<div class="modesel" id="koRoundSel" style="margin-bottom:12px">'+present.map(s=>`<button data-r="${s}" class="${s===KOROUND?'on':''} ${liveRounds.has(s)?'live':''}">${STAGE_LABEL[s]||s}</button>`).join('')+'</div>';
@@ -1653,6 +1666,108 @@ function fullBracketHTML(ko,present){
   const tp=ko.filter(m=>m.stage==='THIRD_PLACE');
   const extra=tp.length?'<div class="fbThird"><div class="fbColH">3rd-place play-off</div>'+tp.map(fbMatch).join('')+'</div>':'';
   return '<div class="fbHint">Both sides of the draw, left \u2192 right \u2014 round winners advance toward the final. Scroll across to follow a team\u2019s path.</div><div class="fbWrap"><div class="fbCols">'+cols+'</div></div>'+extra;
+}
+
+/* ===== 2026 knockout bracket: official FIFA match-number topology (cross-checked FIFA/Sky/ESPN/NBC) ===== */
+const KO_TREE={ // child match# : [feeder match#, feeder match#]  (feeders are the earlier round)
+  89:[74,77],90:[73,75],91:[76,78],92:[79,80],93:[83,84],94:[81,82],95:[86,88],96:[85,87],
+  97:[89,90],98:[93,94],99:[91,92],100:[95,96],101:[97,98],102:[99,100],103:[101,102],104:[101,102]};
+const KO_ORDER={ // top->bottom order per column so siblings sit adjacent (DFS of the tree)
+  LAST_32:[74,77,73,75,83,84,81,82,76,78,79,80,86,88,85,87],
+  LAST_16:[89,90,93,94,91,92,95,96],
+  QUARTER_FINALS:[97,98,99,100],SEMI_FINALS:[101,102],FINAL:[104]};
+const KO_STAGE_NUMS={LAST_32:[73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88],
+  LAST_16:[89,90,91,92,93,94,95,96],QUARTER_FINALS:[97,98,99,100],SEMI_FINALS:[101,102],THIRD_PLACE:[103],FINAL:[104]};
+const KO_SCHED={ // match# : scheduled kickoff (UTC ms) from the official schedule
+  73:Date.UTC(2026,5,28,19,0),74:Date.UTC(2026,5,29,20,30),75:Date.UTC(2026,5,30,1,0),76:Date.UTC(2026,5,29,17,0),
+  77:Date.UTC(2026,5,30,21,0),78:Date.UTC(2026,5,30,17,0),79:Date.UTC(2026,6,1,1,0),80:Date.UTC(2026,6,1,16,0),
+  81:Date.UTC(2026,6,2,0,0),82:Date.UTC(2026,6,1,20,0),83:Date.UTC(2026,6,2,23,0),84:Date.UTC(2026,6,2,19,0),
+  85:Date.UTC(2026,6,3,3,0),86:Date.UTC(2026,6,3,22,0),87:Date.UTC(2026,6,4,1,30),88:Date.UTC(2026,6,3,18,0),
+  89:Date.UTC(2026,6,4,21,0),90:Date.UTC(2026,6,4,17,0),91:Date.UTC(2026,6,5,20,0),92:Date.UTC(2026,6,6,0,0),
+  93:Date.UTC(2026,6,6,19,0),94:Date.UTC(2026,6,7,0,0),95:Date.UTC(2026,6,7,16,0),96:Date.UTC(2026,6,7,20,0),
+  97:Date.UTC(2026,6,9,20,0),98:Date.UTC(2026,6,10,19,0),99:Date.UTC(2026,6,11,21,0),100:Date.UTC(2026,6,12,1,0),
+  101:Date.UTC(2026,6,14,19,0),102:Date.UTC(2026,6,15,19,0),103:Date.UTC(2026,6,18,21,0),104:Date.UTC(2026,6,19,19,0)};
+const KO_SLOT={ // R32 structural labels [home,away] — shown only when the feed has no team in that slot yet
+  74:['Winner E','3rd A/B/C/D/F'],75:['Winner F','Runner-up C'],76:['Winner C','Runner-up F'],
+  77:['Winner I','3rd C/D/F/G/H'],78:['Runner-up E','Runner-up I'],79:['Winner A','3rd C/E/F/H/I'],
+  80:['Winner L','3rd E/H/I/J/K'],81:['Winner D','Best third'],82:['Winner G','3rd A/E/H/I/J'],
+  83:['Runner-up K','Runner-up L'],84:['Winner H','Runner-up J'],85:['Winner B','3rd E/F/G/I/J'],
+  86:['Winner J','Runner-up H'],87:['Winner K','3rd D/E/I/J/L'],88:['Runner-up D','Runner-up G']};
+function koStageOf(mn){return mn<=88?'LAST_32':mn<=96?'LAST_16':mn<=100?'QUARTER_FINALS':mn<=102?'SEMI_FINALS':mn===103?'THIRD_PLACE':'FINAL';}
+function koSlotLabel(mn,side){ // side 0=home 1=away
+  if(KO_SLOT[mn]) return KO_SLOT[mn][side]||'TBD';
+  const par=KO_TREE[mn];
+  if(par) return (mn===103?'Loser M':'Winner M')+par[side];
+  return 'TBD';
+}
+function synthMatch(mn){ // placeholder fixture for a slot the feed hasn't published yet
+  return {stage:koStageOf(mn),home:'',away:'',homeOwner:'',awayOwner:'',status:'TIMED',
+    utcDate:new Date(KO_SCHED[mn]).toISOString(),winner:null,_synth:true};
+}
+// Map the feed's knockout fixtures onto FIFA match numbers by kickoff time. Returns {match#:fixture} or null
+// (null => caller falls back to the plain-columns view; never guesses, so live points/odds are untouched).
+function mapKO(ko){
+  const res={},TOL=140*60*1000;
+  for(const stage in KO_STAGE_NUMS){
+    const fx=ko.filter(m=>m.stage===stage);
+    if(!fx.length) continue;                 // stage not in feed yet -> will be synthesised
+    const nums=KO_STAGE_NUMS[stage];
+    if(fx.length!==nums.length) return null;  // partial/unexpected count -> bail to safe view
+    const fxs=fx.slice().sort((a,b)=>new Date(a.utcDate||0)-new Date(b.utcDate||0));
+    const ns=nums.slice().sort((a,b)=>KO_SCHED[a]-KO_SCHED[b]);
+    for(let i=0;i<fxs.length;i++){
+      const dt=new Date(fxs[i].utcDate||0).getTime();
+      if(!fxs[i].utcDate||Math.abs(dt-KO_SCHED[ns[i]])>TOL) return null; // schedule drift -> bail
+      res[ns[i]]=fxs[i];
+    }
+  }
+  const anchors={74:'Germany',77:'France',79:'Mexico',75:'Netherlands',76:'Brazil'}; // known group winners (home slot)
+  for(const mn in anchors){const f=res[mn]; if(f&&f.home&&f.home!==anchors[mn]) return null;}
+  return Object.keys(res).length?res:null;
+}
+function fbMatch2(m,mn){ // bracket card that shows a structural label when a team slot is still empty
+  const isLive=m.status==='IN_PLAY'||m.status==='PAUSED', done=isDone(m.status);
+  const hw=m.winner==='HOME', aw=m.winner==='AWAY', show=done||isLive;
+  const sc=h=>show?((h?m.homeScore:m.awayScore)??0):'';
+  const teamCell=(team,owner)=>flag(team)+'<span class="fbNW"><span class="fbNm">'+esc(team)+'</span>'+(owner?'<small>'+esc(owner)+'</small>':'')+'</span>';
+  const labelCell=side=>'<span class="fbNW"><span class="fbNm fbTBDlbl">'+esc(koSlotLabel(mn,side))+'</span></span>';
+  const cell=(team,owner,side,score,wc,lc)=>'<div class="fbR '+wc+' '+lc+'"><span class="fbT">'+(team?teamCell(team,owner):labelCell(side))+'</span><span class="fbSc">'+score+'</span></div>';
+  const foot=isLive?'<div class="fbFoot live">\u25cf '+liveClock(m)+'</div>':(done?(koNote(m)?'<div class="fbFoot">'+koNote(m)+'</div>':''):'<div class="fbFoot">'+fmtTime(m.utcDate)+'</div>');
+  return '<div class="fbM '+(isLive?'islive':'')+'" data-mn="'+mn+'">'+cell(m.home,m.homeOwner,0,sc(true),hw?'win':'',done&&aw?'lose':'')+cell(m.away,m.awayOwner,1,sc(false),aw?'win':'',done&&hw?'lose':'')+foot+'</div>';
+}
+function fullBracketTree(ko,present,map){ // full skeleton R32->Final with placeholders + line overlay
+  const get=mn=>map[mn]||synthMatch(mn);
+  const cols=['LAST_32','LAST_16','QUARTER_FINALS','SEMI_FINALS','FINAL'].map(s=>
+    '<div class="fbRound" data-stage="'+s+'"><div class="fbColH">'+(STAGE_LABEL[s]||s)+'</div><div class="fbRoundBody">'+
+    (KO_ORDER[s]||[]).map(mn=>fbMatch2(get(mn),mn)).join('')+'</div></div>').join('');
+  const extra='<div class="fbThird"><div class="fbColH">3rd-place play-off</div>'+fbMatch2(get(103),103)+'</div>';
+  return '<div class="fbHint">Both sides of the draw, left \u2192 right \u2014 lines show who advances to play whom. Empty slots show the qualifier (e.g. \u201c3rd A/B/C/D/F\u201d, \u201cWinner M89\u201d) until the team is confirmed. Scroll across on mobile.</div><div class="fbScroll"><div class="fbCols2"><svg class="fbLines" preserveAspectRatio="none"></svg>'+cols+'</div></div>'+extra;
+}
+function elbowPath(fx,fy,cx,cy){const mx=(fx+cx)/2;return 'M'+fx+','+fy+' H'+mx+' V'+cy+' H'+cx;} // feeder right-centre -> child left-centre
+function drawBracketLines(root){
+  const cols=root.querySelector('.fbCols2'), svg=root.querySelector('.fbLines');
+  if(!cols||!svg) return;
+  const base=cols.getBoundingClientRect(), W=cols.scrollWidth||cols.offsetWidth, H=cols.offsetHeight;
+  if(!W||!H) return;
+  svg.setAttribute('width',W); svg.setAttribute('height',H); svg.setAttribute('viewBox','0 0 '+W+' '+H);
+  const pos={};
+  root.querySelectorAll('.fbM[data-mn]').forEach(el=>{const r=el.getBoundingClientRect();
+    pos[el.getAttribute('data-mn')]={l:r.left-base.left,rt:r.right-base.left,cy:(r.top+r.bottom)/2-base.top};});
+  let d='';
+  for(const child in KO_TREE){
+    if(child==='103') continue;            // 3rd-place play-off is shown separately, no feeder lines
+    const c=pos[child]; if(!c) continue;
+    for(const f of KO_TREE[child]){const p=pos[f]; if(p) d+=elbowPath(p.rt,p.cy,c.l,c.cy)+' ';}
+  }
+  svg.innerHTML=d?'<path d="'+d+'" fill="none" stroke="var(--line)" stroke-width="2"/>':'';
+}
+let _fbResizeBound=false;
+function bindBracketResize(){
+  if(_fbResizeBound) return; _fbResizeBound=true;
+  let t; window.addEventListener('resize',()=>{clearTimeout(t);t=setTimeout(()=>{
+    const b=document.getElementById('bracketBody');
+    if(b&&BRACKETVIEW==='full'&&b.querySelector('.fbCols2')) drawBracketLines(b);
+  },120);});
 }
 function liveOrCurrentRound(ko,present){
   const live=ko.find(m=>m.status==='IN_PLAY'||m.status==='PAUSED');
