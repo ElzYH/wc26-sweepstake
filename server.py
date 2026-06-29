@@ -2871,10 +2871,12 @@ def _odds_integrity_violations(td, teams):
                 continue
             ch = wager_mod.live_strength((teams.get(h) or {}).get("composite", 0), h, td.get("fixtures") or [])
             ca = wager_mod.live_strength((teams.get(a) or {}).get("composite", 0), a, td.get("fixtures") or [])
-            mo = wager_mod.match_odds(ch, ca)
-            b1 = _odds_book_overround([mo["HOME"]["decimal"], mo["DRAW"]["decimal"], mo["AWAY"]["decimal"]])
+            ko = wager_mod.is_knockout(f)
+            mo = wager_mod.match_odds(ch, ca, knockout=ko)
+            decs = [mo["HOME"]["decimal"], mo["AWAY"]["decimal"]] if ko else [mo["HOME"]["decimal"], mo["DRAW"]["decimal"], mo["AWAY"]["decimal"]]
+            b1 = _odds_book_overround(decs)
             if b1 is not None and b1 <= 1.0:
-                out.append("%s v %s — 1X2 book %.1f%%" % (h, a, b1 * 100))
+                out.append("%s v %s — %s book %.1f%%" % (h, a, "2-way" if ko else "1X2", b1 * 100))
             for ln, leg in (wager_mod.goals_odds(ch, ca) or {}).items():
                 bo = _odds_book_overround([leg["OVER"]["decimal"], leg["UNDER"]["decimal"]])
                 if bo is not None and bo <= 1.0:

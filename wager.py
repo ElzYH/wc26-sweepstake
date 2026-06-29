@@ -108,12 +108,38 @@ def _fair_probs(ch, ca):
     return ph / s, pd / s, pa / s
 
 
-def match_odds(comp_home, comp_away):
-    """{'HOME': {'frac':'9/2','num':9,'den':2,'decimal':5.5}, 'DRAW':..., 'AWAY':...} with a bookmaker margin."""
+def is_knockout(match_or_stage):
+    """True for any knockout stage (i.e. not the group stage / pre-tournament). Accepts a match dict or a stage string."""
+    s = match_or_stage.get("stage") if isinstance(match_or_stage, dict) else match_or_stage
+    return s not in (None, "GROUP_STAGE")
+
+
+def match_odds(comp_home, comp_away, knockout=False):
+    """1X2 prices with a bookmaker margin: {'HOME': {'frac','num','den','decimal'}, 'DRAW':..., 'AWAY':...}.
+
+    On a KNOCKOUT the draw isn't offered or settled (a shootout decides who goes through), so the DRAW is
+    dropped and we price a 2-way 'to advance' book instead: the draw probability is folded into Home/Away
+    (split by strength) and the SAME house edge is applied to just those two, so the offered prices sum to
+    ~OVERROUND and backing both sides still LOSES the margin — no risk-free hedge. If a heavy favourite hits
+    the shortest-price cap (MAX_PROB) the leftover margin is loaded onto the underdog, so a 2-way book can
+    never drop under 100%."""
     ph, pd, pa = _fair_probs(comp_home, comp_away)
+    if knockout:
+        tot = ph + pa
+        ph, pa = (0.5, 0.5) if tot <= 0 else (ph / tot, pa / tot)   # fold the draw in -> a true 2-way market summing to 1.0
+        ih = min(MAX_PROB, ph * OVERROUND)
+        ia = min(MAX_PROB, pa * OVERROUND)
+        short = OVERROUND - ih - ia                                  # a heavy favourite hits the 1/6 price cap and can't
+        if short > 0:                                                #   carry the full margin -> load the rest onto the
+            if ih >= ia:                                            #   underdog (whichever side that is) so the 2-way
+                ia = min(MAX_PROB, ia + short)                      #   book still sums to ~OVERROUND -> no risk-free hedge
+            else:
+                ih = min(MAX_PROB, ih + short)
+        pairs = (("HOME", ih), ("AWAY", ia))
+    else:
+        pairs = tuple((sel, min(MAX_PROB, p * OVERROUND)) for sel, p in (("HOME", ph), ("DRAW", pd), ("AWAY", pa)))
     out = {}
-    for sel, p in (("HOME", ph), ("DRAW", pd), ("AWAY", pa)):
-        implied = min(MAX_PROB, p * OVERROUND)
+    for sel, implied in pairs:
         num, den = _nearest_fraction(1.0 / implied)
         out[sel] = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
     return out
@@ -465,6 +491,32 @@ def applied_points(base_points, player, wagers):
     return max(0.0, round(base_points + leaderboard_net(player, wagers) - leaderboard_held(player, wagers), 2))
 
 
+def _open_result_picks(wagers, player):
+    """{matchId: set(result selections)} the player ALREADY has riding on OPEN bets — across singles AND acca legs.
+    Over/Under legs are ignored (that market carries its own margin and isn't a both-sides arb)."""
+    out = {}
+    for w in (wagers or []):
+        if w.get("player") != player or w.get("status") != "pending" or w.get("credit"):
+            continue
+        rows = w.get("legs") or [w]
+        for r in rows:
+            if (str(r.get("market") or "result")).lower() != "ou":
+                mid, sel = r.get("matchId"), r.get("selection")
+                if mid and sel in SELECTIONS:
+                    out.setdefault(mid, set()).add(sel)
+    return out
+
+
+def _hedges_open(wagers, player, mid, selection):
+    """True if backing result `selection` on match `mid` would oppose a result bet the player already has open
+    (i.e. they'd hold two different outcomes of the same match — both sides). Same-side re-backs are allowed."""
+    have = _open_result_picks(wagers, player).get(mid)
+    return bool(have) and any(p != selection for p in have)
+
+
+_HEDGE_MSG = "You've already got a bet on a different outcome in this game — you can't back both sides of the same match."
+
+
 def place(wagers, player, match, selection, stake, settled_points, comp_home, comp_away, now=None, group_mid_ts=None, market="result", line=None):
     """
     Validate and append a pending wager. Returns (ok, wager_or_error_string).
@@ -490,6 +542,8 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
             return False, "Pick home, draw or away."
         if selection == "DRAW" and match.get("stage") not in (None, "GROUP_STAGE"):
             return False, "No draw bets on knockout games — pick the side to go through."
+        if _hedges_open(wagers, player, match_id(match), selection):
+            return False, _HEDGE_MSG
     if not can_bet_on(match, now):
         return False, "Betting on that game is closed — it has kicked off or finished."
     try:
@@ -527,7 +581,7 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
     if market == "ou":
         odds = goals_odds(comp_home, comp_away).get(_line_key(line), {}).get(selection)
     else:
-        odds = match_odds(comp_home, comp_away).get(selection)
+        odds = match_odds(comp_home, comp_away, knockout=is_knockout(match)).get(selection)
     if not odds:
         return False, "Couldn't price that bet — try again."
     ret = potential_return(stake, odds["num"], odds["den"])
@@ -558,9 +612,11 @@ def place_free(wagers, player, match, selection, comp_home, comp_away, now=None)
         return False, "That game could not be found."
     if selection == "DRAW" and _norm_stage(match.get("stage")) != "GROUP_STAGE":
         return False, "No draw bets on knockout games — pick the side to go through."
+    if _hedges_open(wagers, player, match_id(match), selection):
+        return False, _HEDGE_MSG
     if not can_bet_on(match, now):
         return False, "Betting on that game is closed — it has kicked off or finished."
-    odds = match_odds(comp_home, comp_away).get(selection)
+    odds = match_odds(comp_home, comp_away, knockout=is_knockout(match)).get(selection)
     ret = potential_return(FREE_BET_STAKE, odds["num"], odds["den"])
     if MAX_RETURN is not None and ret > MAX_RETURN + 1e-9:
         ret = float(MAX_RETURN)
@@ -774,7 +830,9 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
                 return False, "Pick home, draw or away for every leg."
             if (s["match"].get("stage") not in (None, "GROUP_STAGE")) and s["selection"] == "DRAW":
                 return False, "Knockout legs can't be a draw — pick the side to go through."
-            o = match_odds(s["comp_home"], s["comp_away"])[s["selection"]]
+            if _hedges_open(wagers, player, match_id(s["match"]), s["selection"]):
+                return False, "One of these legs backs the opposite side of a game you already have a bet on — you can't back both sides of the same match."
+            o = match_odds(s["comp_home"], s["comp_away"], knockout=is_knockout(s["match"]))[s["selection"]]
             legs.append({"matchId": match_id(s["match"]), "selection": s["selection"],
                          "home": s["match"].get("home"), "away": s["match"].get("away"),
                          "stage": s["match"].get("stage"), "num": o["num"], "den": o["den"], "frac": o["frac"]})

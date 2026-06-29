@@ -145,6 +145,9 @@ if python3 qa_claims_pins.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAI
 say "Odds-audit QA (book overround, market lookup, house-edge integrity guard, auto matchday audit idempotency + resilience)"
 if python3 qa_odds_audit.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_odds_audit.py 2>&1 | tail -24; FAIL=1; fi
 
+say "Anti-hedge / anti-arb QA (knockout 2-way book always margined incl. extreme favourites; no backing both sides of one match across singles/accas/free)"
+if python3 qa_hedge_arb.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_hedge_arb.py 2>&1 | tail -24; FAIL=1; fi
+
 say "Calibration QA (overlay loader, goals knob, every guard, integrity ABORT, 1000-case market fuzz: no crash / no underround / in-band)"
 if python3 qa_calibration.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_calibration.py 2>&1 | tail -30; FAIL=1; fi
 
