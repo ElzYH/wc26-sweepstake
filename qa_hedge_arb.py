@@ -104,5 +104,27 @@ wl5[0]["status"] = "lost"   # simulate it settled
 ok, _ = W.place(wl5, "Nat", g1, "AWAY", 5, 1000, C[0], C[1], now=NOW)
 ck("a SETTLED bet on one side doesn't block the other later", ok)
 
+# ---------------------------------------------------------------- (B) admin on/off toggle
+print("\n=== (B) is switchable via BLOCK_OPPOSING_BETS (admin toggle) ===")
+_saved = W.BLOCK_OPPOSING_BETS
+try:
+    W.BLOCK_OPPOSING_BETS = False
+    wlt = []
+    W.place(wlt, "Ismail", g1, "HOME", 5, 1000, C[0], C[1], now=NOW)
+    ok, _ = W.place(wlt, "Ismail", g1, "AWAY", 5, 1000, C[0], C[1], now=NOW)
+    ck("toggle OFF -> opposite single is allowed again", ok)
+    ok, _ = W.place_free(wlt, "Ismail", g1, "AWAY", C[0], C[1], now=NOW)
+    ck("toggle OFF -> opposite free bet is allowed again", ok)
+    ok, _ = W.place_acca(wlt, "Ismail", [{"match": g1, "selection": "AWAY", "comp_home": C[0], "comp_away": C[1]},
+                                         {"match": g2, "selection": "HOME", "comp_home": C[0], "comp_away": C[1]}], 5, 1000, now=NOW)
+    ck("toggle OFF -> opposite acca leg is allowed again", ok)
+    W.BLOCK_OPPOSING_BETS = True
+    wlt2 = []
+    W.place(wlt2, "Ismail", g1, "HOME", 5, 1000, C[0], C[1], now=NOW)
+    ok, _ = W.place(wlt2, "Ismail", g1, "AWAY", 5, 1000, C[0], C[1], now=NOW)
+    ck("toggle ON again -> opposite single is blocked", not ok)
+finally:
+    W.BLOCK_OPPOSING_BETS = _saved
+
 print("\n" + ("FAILED (%d): %s" % (len(FAILS), ", ".join(FAILS)) if FAILS else "All anti-hedge / anti-arb checks passed."))
 sys.exit(1 if FAILS else 0)

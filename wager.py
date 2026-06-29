@@ -25,6 +25,7 @@ MAX_RETURN = None         # most a single bet can return; None = no limit (admin
 MAX_PENDING = 8           # most simultaneous open bets per player
 MAX_ACCA_LEGS = 5         # default legs in one accumulator; admin can raise (up to 10)
 MAX_ACTIVE_ACCAS = 2      # most simultaneous OPEN accumulators per player (single bets are unlimited)
+BLOCK_OPPOSING_BETS = True  # admin toggle: when on, a player can't hold result bets on two different outcomes of the same match
 FREE_BET_STAKE = 5        # a claimed free bet stakes this many points; the stake is NEVER credited — only winnings (profit) count
 STARTING_BONUS = 5        # everyone starts with this many free betting points so they can bet before earning any.
                           # It's bet-only: it never sits on the leaderboard, and it cushions the first 5 of net losses.
@@ -509,7 +510,10 @@ def _open_result_picks(wagers, player):
 
 def _hedges_open(wagers, player, mid, selection):
     """True if backing result `selection` on match `mid` would oppose a result bet the player already has open
-    (i.e. they'd hold two different outcomes of the same match — both sides). Same-side re-backs are allowed."""
+    (i.e. they'd hold two different outcomes of the same match — both sides). Same-side re-backs are allowed.
+    Returns False outright when the admin has switched the block off (BLOCK_OPPOSING_BETS)."""
+    if not BLOCK_OPPOSING_BETS:
+        return False
     have = _open_result_picks(wagers, player).get(mid)
     return bool(have) and any(p != selection for p in have)
 

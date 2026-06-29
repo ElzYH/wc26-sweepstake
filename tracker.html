@@ -437,6 +437,7 @@
         <p style="margin:0 0 8px"><b>💷 Betting.</b> Let players stake the points they've earned on games (fractional odds, capped, no cash-out). Off until you switch it on.</p>
         <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;margin-bottom:6px"><input type="checkbox" id="setWager"> Enable betting</label>
         <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin-bottom:8px"><input type="checkbox" id="setWagerLock"> Lock betting to the organiser only (admin key instead of passcodes)</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin-bottom:8px"><input type="checkbox" id="setNoHedge"> Stop a player betting both sides of the same game (no hedging result bets)</label>
         <div class="row2" style="align-items:flex-end;margin-bottom:6px">
           <label style="flex:1;font-size:12.5px;color:var(--muted)">Max winnings per bet <span style="opacity:.7">(blank = no limit)</span><input id="setMaxReturn" type="number" min="1" step="1" placeholder="no limit" style="margin-top:4px"></label>
           <label style="flex:1;font-size:12.5px;color:var(--muted)">Max accumulator legs <span style="opacity:.7">(default 5)</span><input id="setMaxAcca" type="number" min="2" max="10" step="1" placeholder="5" style="margin-top:4px"></label>
@@ -2606,6 +2607,7 @@ async function refreshStatus(){
   const ddx=document.getElementById('setDmDelay'); if(ddx) ddx.value=String(STATUS.notif_dm_delay_sec||0);
   const sw=document.getElementById('setWager'); if(sw) sw.checked=!!STATUS.wagering_enabled;
   const swl=document.getElementById('setWagerLock'); if(swl) swl.checked=!!STATUS.wager_locked;
+  const sob=document.getElementById('setNoHedge'); if(sob) sob.checked=((STATUS.wager_caps||{}).block_opposing_bets!==false);
   const caps=STATUS.wager_caps||{}; const mr=document.getElementById('setMaxReturn'), ma=document.getElementById('setMaxAcca');
   if(mr) mr.value=(typeof caps.max_return==='number'&&caps.max_return>0)?caps.max_return:'';
   if(ma) ma.value=caps.max_acca_legs||5;
@@ -2795,6 +2797,7 @@ async function _saveWager(extra,msg){
 }
 document.getElementById('setWager').onclick=()=>_saveWager({wagering_enabled:document.getElementById('setWager').checked}, document.getElementById('setWager').checked?'Betting on. Generate passcodes below, then tell players.':'Betting off.');
 document.getElementById('setWagerLock').onclick=()=>_saveWager({wager_locked:document.getElementById('setWagerLock').checked}, document.getElementById('setWagerLock').checked?'Locked — only the organiser (admin key) can place bets.':'Unlocked — players bet with their passcodes.');
+document.getElementById('setNoHedge').onclick=()=>_saveWager({block_opposing_bets:document.getElementById('setNoHedge').checked}, document.getElementById('setNoHedge').checked?'On — players can’t back both sides of the same game.':'Off — players can bet either side of a game.');
 document.getElementById('setSaveCaps').onclick=()=>{
   const mrv=(document.getElementById('setMaxReturn').value||'').trim();
   const mav=parseInt(document.getElementById('setMaxAcca').value,10);

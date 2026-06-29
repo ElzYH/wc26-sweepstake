@@ -1158,10 +1158,12 @@ def _apply_wager_caps(cfg=None):
         wager_mod.MAX_ACTIVE_ACCAS = max(0, min(20, int(ma))) if ma not in (None, "") else _WAGER_DEFAULTS["MAX_ACTIVE_ACCAS"]
     except (TypeError, ValueError):
         wager_mod.MAX_ACTIVE_ACCAS = _WAGER_DEFAULTS["MAX_ACTIVE_ACCAS"]
+    wager_mod.BLOCK_OPPOSING_BETS = cfg.get("block_opposing_bets", True) is not False   # on unless explicitly disabled
     return {"min_stake": wager_mod.MIN_STAKE, "max_stake": _current_round_max_stake(),
             "base_max_stake": wager_mod.MAX_STAKE, "max_return": wager_mod.MAX_RETURN,
             "max_pending": wager_mod.MAX_PENDING, "max_acca_legs": wager_mod.MAX_ACCA_LEGS,
-            "max_active_accas": wager_mod.MAX_ACTIVE_ACCAS}
+            "max_active_accas": wager_mod.MAX_ACTIVE_ACCAS,
+            "block_opposing_bets": wager_mod.BLOCK_OPPOSING_BETS}
 
 
 def _current_round_max_stake():
@@ -3863,6 +3865,8 @@ class Handler(BaseHTTPRequestHandler):
                 cfg["wagering_enabled"] = bool(body["wagering_enabled"])
             if "wager_locked" in body:
                 cfg["wager_locked"] = bool(body["wager_locked"])
+            if "block_opposing_bets" in body:        # admin: stop a player holding result bets on both sides of one match
+                cfg["block_opposing_bets"] = bool(body["block_opposing_bets"])
             if "max_return" in body:                 # admin: cap on winnings per bet; blank/0 = no limit
                 v = str(body["max_return"]).strip()
                 if v in ("", "0", "none", "None"):
