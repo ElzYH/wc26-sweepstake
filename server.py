@@ -1144,10 +1144,10 @@ def _apply_wager_caps(cfg=None):
         except (TypeError, ValueError):
             wager_mod.MAX_RETURN = None
     try:
-        legs = int(cfg.get("max_acca_legs", 3))
+        legs = int(cfg.get("max_acca_legs", 5))
         wager_mod.MAX_ACCA_LEGS = max(2, min(10, legs))
     except (TypeError, ValueError):
-        wager_mod.MAX_ACCA_LEGS = 3
+        wager_mod.MAX_ACCA_LEGS = 5
     try:
         mp = cfg.get("max_pending_bets", None)
         wager_mod.MAX_PENDING = max(1, min(50, int(mp))) if mp not in (None, "") else _WAGER_DEFAULTS["MAX_PENDING"]

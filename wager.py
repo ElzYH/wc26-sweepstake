@@ -23,7 +23,7 @@ MIN_STAKE = 1
 MAX_STAKE = 30           # base single-bet cap (group stage); rises each knockout round (see STAGE_MAX_STAKE)
 MAX_RETURN = None         # most a single bet can return; None = no limit (admin can set a number)
 MAX_PENDING = 8           # most simultaneous open bets per player
-MAX_ACCA_LEGS = 3         # default legs in one accumulator; admin can raise
+MAX_ACCA_LEGS = 5         # default legs in one accumulator; admin can raise (up to 10)
 MAX_ACTIVE_ACCAS = 2      # most simultaneous OPEN accumulators per player (single bets are unlimited)
 FREE_BET_STAKE = 5        # a claimed free bet stakes this many points; the stake is NEVER credited — only winnings (profit) count
 STARTING_BONUS = 5        # everyone starts with this many free betting points so they can bet before earning any.
@@ -321,12 +321,25 @@ def player_deltas(wagers):
     rather than crashing — this runs on EVERY request, so one bad row must never take down the
     leaderboard, the odds, or /api/status."""
     out = {}
+    seen = set()                                         # dedup guard against a duplicated record (the same bet written
+                                                         # to the log twice). Every bet gets a unique uuid `id` at
+                                                         # placement and settle() mutates it IN PLACE, so the same id —
+                                                         # or the same placement nonce — appearing twice is always an
+                                                         # accidental duplicate, never two distinct wagers. Counting it
+                                                         # once therefore can't undercount real bets (which have
+                                                         # distinct ids), it only neutralises a double-write.
     for w in wagers or []:
         if not isinstance(w, dict):
             continue
         player = w.get("player")
         if not player or not isinstance(player, str):
             continue
+        _keys = [k for k in (("id", w.get("id")),
+                             ("nonce", player, w.get("nonce"))) if k[-1]]
+        if _keys and any(k in seen for k in _keys):      # already counted this exact record -> skip the duplicate
+            continue
+        for k in _keys:
+            seen.add(k)
         if w.get("credit"):                              # a claimed free-points drop: not a bet (see free_bonus); skip
             continue
         stake = _num(w.get("stake"))

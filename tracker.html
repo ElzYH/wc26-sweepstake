@@ -282,8 +282,11 @@
      tabs) so it can never appear on another page. No JS — pure CSS sticky, safe on iOS Safari / iPad. */
   .betcta{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:25;
     box-shadow:0 8px 30px rgba(0,0,0,.55),0 -2px 12px rgba(0,0,0,.30)}
-  /* sticky-bottom lags/floats during fast momentum scroll on phones (and jumps around the keyboard) — keep it in normal flow on touch devices */
-  @media (pointer:coarse){ .betcta{position:static;bottom:auto;box-shadow:0 4px 18px rgba(0,0,0,.4)} }
+  /* floating bet-slip popup on phones: fixed to the viewport bottom so it's always visible while building a bet (sticky lagged during momentum scroll). Height-capped with its own scroll so a tall acca never covers the screen; #bets gets bottom padding so the slip never hides your bets. */
+  @media (pointer:coarse){
+    .betcta{position:fixed;left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom,0px));max-height:52vh;overflow-y:auto;box-shadow:0 6px 26px rgba(0,0,0,.6),0 -2px 12px rgba(0,0,0,.3)}
+    #bets.slipopen{padding-bottom:58vh}
+  }
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
   .lmatch{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin-top:8px;
     color:var(--ink);font-weight:600;font-size:14px;letter-spacing:0}
@@ -436,7 +439,7 @@
         <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin-bottom:8px"><input type="checkbox" id="setWagerLock"> Lock betting to the organiser only (admin key instead of passcodes)</label>
         <div class="row2" style="align-items:flex-end;margin-bottom:6px">
           <label style="flex:1;font-size:12.5px;color:var(--muted)">Max winnings per bet <span style="opacity:.7">(blank = no limit)</span><input id="setMaxReturn" type="number" min="1" step="1" placeholder="no limit" style="margin-top:4px"></label>
-          <label style="flex:1;font-size:12.5px;color:var(--muted)">Max accumulator legs <span style="opacity:.7">(default 3)</span><input id="setMaxAcca" type="number" min="2" max="10" step="1" placeholder="3" style="margin-top:4px"></label>
+          <label style="flex:1;font-size:12.5px;color:var(--muted)">Max accumulator legs <span style="opacity:.7">(default 5)</span><input id="setMaxAcca" type="number" min="2" max="10" step="1" placeholder="5" style="margin-top:4px"></label>
         </div>
         <div class="row2" style="align-items:flex-end;margin-bottom:6px">
           <label style="flex:1;font-size:12.5px;color:var(--muted)">Max open single bets / person <span style="opacity:.7">(blank = default 8)</span><input id="setMaxPending" type="number" min="1" max="50" step="1" placeholder="8" style="margin-top:4px"></label>
@@ -652,8 +655,8 @@ function ouRowHTML(m){
 function renderBets(){
   const el=document.getElementById('betsBody'); if(!el) return;
   if(!STATUS.wagering_enabled){ el.innerHTML='<div class="empty">Betting isn\'t switched on for this sweepstake.</div>'; return; }
-  const caps=STATUS.wager_caps||{min_stake:1,max_stake:30,max_return:null,max_acca_legs:3};
-  const maxLegs=caps.max_acca_legs||3;
+  const caps=STATUS.wager_caps||{min_stake:1,max_stake:30,max_return:null,max_acca_legs:5};
+  const maxLegs=caps.max_acca_legs||5;
   const accasOn=(maxLegs>=2)&&(caps.max_active_accas!==0);   // auto-acca only when accumulators are actually allowed
   const retCap=(typeof caps.max_return==='number'&&caps.max_return>0)?caps.max_return:null;   // null = no winnings limit
   const players=(DATA.players||[]).map(p=>p.name);
@@ -772,6 +775,8 @@ function renderBets(){
   h+='<div class="ovsec"><div class="ovh">Everyone\'s open bets</div><div id="allBets"><div class="empty">Loading…</div></div></div>';
   h+='<div class="ovsec" id="betHallWrap" style="display:none"><div class="ovh">Best &amp; worst bets so far</div><div id="betHall"></div></div>';
   el.innerHTML=h;
+  // bet-slip popup (mobile): float it only while a selection exists; pad the section so it never hides your bets
+  { const _bs=document.getElementById('bets'); if(_bs) _bs.classList.toggle('slipopen', !!(BETPICK || (ACCA&&ACCA.length))); }
   const ws=document.getElementById('betWho'); if(ws) ws.onchange=()=>{ BETPLAYER=ws.value; BETPICK=null; ACCA=[]; ACCAMODE=false; BETMSG=''; BETPIN_DRAFT=null; renderBets(); loadMyBets(); };
   const dlb=document.getElementById('discordLoginBtn'); if(dlb) dlb.onclick=()=>{ location.href='/api/discord_login'; };
   const lob=document.getElementById('logoutBtn'); if(lob) lob.onclick=async()=>{ try{ await fetch('/api/logout',{method:'POST'}); }catch(e){} SESSION={oauth:STATUS.discord_oauth}; BETMSG='Logged out.'; await refreshStatus(); renderBets(); };
@@ -2603,7 +2608,7 @@ async function refreshStatus(){
   const swl=document.getElementById('setWagerLock'); if(swl) swl.checked=!!STATUS.wager_locked;
   const caps=STATUS.wager_caps||{}; const mr=document.getElementById('setMaxReturn'), ma=document.getElementById('setMaxAcca');
   if(mr) mr.value=(typeof caps.max_return==='number'&&caps.max_return>0)?caps.max_return:'';
-  if(ma) ma.value=caps.max_acca_legs||3;
+  if(ma) ma.value=caps.max_acca_legs||5;
   const mpb=document.getElementById('setMaxPending'), mac=document.getElementById('setMaxAccas');
   if(mpb) mpb.value=(typeof caps.max_pending==='number')?caps.max_pending:'';
   if(mac) mac.value=(typeof caps.max_active_accas==='number')?caps.max_active_accas:'';
@@ -2797,7 +2802,7 @@ document.getElementById('setSaveCaps').onclick=()=>{
   const mcv=(document.getElementById('setMaxAccas').value||'').trim();
   const betsTxt=(mpv===''?'8':mpv)+' open bets';
   const accaTxt=(mcv===''?'2':mcv)+' open accas'+((mcv==='0')?' (accas off)':'');
-  _saveWager({max_return:(mrv===''?'':mrv), max_acca_legs:(isNaN(mav)?3:mav), max_pending_bets:mpv, max_active_accas:mcv},
+  _saveWager({max_return:(mrv===''?'':mrv), max_acca_legs:(isNaN(mav)?5:mav), max_pending_bets:mpv, max_active_accas:mcv},
              (mrv===''?'No cap on winnings':'Winnings capped at '+mrv)+'; accumulators up to '+(isNaN(mav)?3:Math.max(2,Math.min(10,mav)))+' legs; each person '+betsTxt+' · '+accaTxt+'.');
 };
 async function _pins(regen){

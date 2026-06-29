@@ -277,7 +277,7 @@ def run():
             prod *= (1 + lg["num"] / lg["den"])
         ck("acca odds multiply (return = stake x product)", res["return"] == round(5 * prod, 2),
            (res["return"], round(5 * prod, 1)))
-    ck("acca default leg limit is 3", wager.MAX_ACCA_LEGS == 3, wager.MAX_ACCA_LEGS)
+    ck("acca default leg limit is 5", wager.MAX_ACCA_LEGS == 5, wager.MAX_ACCA_LEGS)
     ck("acca rejects more than the leg limit",
        not wager.place_acca([], "Erol", [leg("b%d" % i, 80, 40) for i in range(wager.MAX_ACCA_LEGS + 1)], 5, 200)[0],
        wager.MAX_ACCA_LEGS)
