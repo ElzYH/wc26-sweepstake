@@ -33,6 +33,10 @@ S._dm_all_games = lambda text, exclude_players=None: (DMALL.append(text), DMALL_
 
 def reset():
     DISC.clear(); PUSH.clear(); MENT.clear(); DM.clear(); DMALL.clear(); DMALL_EXCL.clear()
+    try:
+        os.remove(os.path.join(t, "alerts_sent.json"))   # the once-per-match flow-alert guard is persistent prod state; clear it so each independent QA scenario fires fresh
+    except OSError:
+        pass
 
 def tracker(matches_played, status, hs, as_, leader="Erol", order=None):
     return {"stats": {"matches_played": matches_played},
@@ -194,6 +198,29 @@ transition(tracker(1, "IN_PLAY", 0, 0), tracker(1, "IN_PLAY", 1, 0))
 ck("a goal does NOT post to the channel when the feed is off", not any("scored" in x for x in DISC), DISC)
 ck("...but the scorer's owner is still DM'd", any("scored" in d[1] for d in DM), DM)
 _set_flag(True)
+
+print("\n== flow-alert dedup: a re-detected transition (feed flap / restart re-compare) must NOT re-fire ==")
+_set_flag(True)
+def _buffers_only():     # clear capture buffers but KEEP the persistent flow-alert guard
+    DISC.clear(); PUSH.clear(); MENT.clear(); DM.clear(); DMALL.clear(); DMALL_EXCL.clear()
+def _fire_ht():          # drive an IN_PLAY -> PAUSED (half-time) transition without touching the guard
+    json.dump(tracker(0, "IN_PLAY", 0, 0), open(os.path.join(t, "tracker_data.json"), "w"))
+    _o = S._load_tracker()
+    json.dump(tracker(0, "PAUSED", 0, 0), open(os.path.join(t, "tracker_data.json"), "w"))
+    _buffers_only()
+    S.notify_changes(_o)
+reset()                  # clean slate (clears buffers AND the guard) for this match-event
+_fire_ht()
+ck("half-time fires the first time", any("Half-time" in x for x in DISC), DISC)
+_fire_ht()               # the SAME transition seen again (feed flapped back, or a restart re-compared the snapshot)
+ck("the SAME half-time does NOT fire again (deduped) <-- the South Africa/Canada bug", not any("Half-time" in x for x in DISC), DISC)
+# a goal still fires after the flow event is deduped — goals are deliberately not guarded
+json.dump(tracker(0, "PAUSED", 0, 0), open(os.path.join(t, "tracker_data.json"), "w"))
+_og = S._load_tracker()
+json.dump(tracker(0, "IN_PLAY", 1, 0), open(os.path.join(t, "tracker_data.json"), "w"))
+_buffers_only()
+S.notify_changes(_og)
+ck("a goal still fires after flow events are deduped (goals aren't guarded)", any("scored" in m[1] for m in DM), DM)
 
 import shutil
 shutil.rmtree(t, ignore_errors=True)

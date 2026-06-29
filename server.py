@@ -913,6 +913,35 @@ def _save_push(d):
 
 
 WELCOMED_FILE = "welcomed.json"               # ["uid", ...] — Discord users we've already greeted (DM once)
+ALERTS_FILE = "alerts_sent.json"              # ["<matchId>:<event>", ...] — flow alerts (kickoff/half-time/full-time) already fired
+
+
+def _alert_first_time(mid, home, away, ev):
+    """At-most-once guard for a match-FLOW alert (kickoff / half-time / full-time). Returns True the first
+    time a given (match, event) is seen — and records it, persisted + atomic — then False every time after.
+    This makes those three alerts idempotent: a transient feed flap that re-shows the same IN_PLAY→PAUSED
+    transition, or a service restart that re-compares the persisted snapshot, can no longer re-send them.
+    Goals are deliberately NOT routed through here — they legitimately recur as the score rises."""
+    key = "%s:%s" % (mid if mid is not None else ("%s|%s" % (home, away)), ev)
+    try:
+        with _lock:
+            try:
+                with open(ALERTS_FILE) as f:
+                    sent = json.load(f)
+                if not isinstance(sent, list):
+                    sent = []
+            except Exception:
+                sent = []
+            if key in sent:
+                return False
+            sent.append(key)
+            _atomic_write_json(ALERTS_FILE, sent)
+            return True
+    except Exception as e:
+        log("alert dedup failed:", e)
+        return True            # fail OPEN: a storage hiccup must never silence the bot — a rare dup beats no alerts
+
+
 def _maybe_welcome(uid):
     """First time a person ever uses the bot, DM them a short welcome with the few key commands.
     The bot is interactions-only (no gateway), so 'joined the server' isn't observable — first
@@ -1733,7 +1762,7 @@ def notify_changes(old):
             mm0 = nmatch.get(key) or {}
             mid = mm0.get("matchId")
             _ko = str(mm0.get("stage") or "").upper() not in ("", "GROUP_STAGE", "GROUP")  # knockout = always important
-            if st in LIVE_STATUSES and was not in LIVE_STATUSES:                      # kickoff
+            if st in LIVE_STATUSES and was not in LIVE_STATUSES and _alert_first_time(mid, h, a, "kickoff"):  # kickoff (once)
                 _ko_title = "%s vs %s" % (h, a)
                 if ho and ho == ao:
                     _ko_recips = [(ho, _ko_title, "Kicked off — your teams %s and %s are playing!" % (h, a))]
@@ -1745,12 +1774,12 @@ def notify_changes(old):
                 for _pl in _bettors_on_match(mid):                                    # bet on this game -> DM (default-on)
                     if _pl not in (ho, ao):
                         _bot_dm_player(_pl, "🎲 Your bet is live — **%s** v **%s** has kicked off. Good luck!" % (h, a), match_id=mid)
-            elif st == "PAUSED" and was in PLAYING:                                   # half-time
+            elif st == "PAUSED" and was in PLAYING and _alert_first_time(mid, h, a, "half"):   # half-time (once)
                 sc = "%s %s–%s %s" % (h, nhs, nas, a) if None not in (nhs, nas) else "%s vs %s" % (h, a)
                 match_event("flow",
                             [(ho, "Half-time ⏸️", sc), (ao, "Half-time ⏸️", sc)],
                             "⏸️ Half-time — %s" % sc, important=_ko, match_id=mid)
-            elif st in FT_STATUSES and was in LIVE_STATUSES:                          # full-time (incl. a.e.t. / pens)
+            elif st in FT_STATUSES and was in LIVE_STATUSES and _alert_first_time(mid, h, a, "full"):  # full-time (once) (incl. a.e.t. / pens)
                 mm = nmatch.get(key) or {}
                 sc = "%s %s–%s %s" % (h, nhs, nas, a) if None not in (nhs, nas) else "%s vs %s" % (h, a)
                 extra = ""
