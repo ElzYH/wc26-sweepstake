@@ -774,6 +774,7 @@ function renderBets(){
   // your bets
   h+='<div class="ovsec"><div class="ovh">'+(BETPLAYER?esc(BETPLAYER)+"'s bets":'Your bets')+'</div><div id="myBets"><div class="empty">Loading…</div></div></div>';
   h+='<div class="ovsec"><div class="ovh">Everyone\'s open bets</div><div id="allBets"><div class="empty">Loading…</div></div></div>';
+  h+='<div class="ovsec"><div class="ovh">Everyone\'s settled bets</div><div style="color:var(--muted);font-size:12px;margin:0 0 6px">Tap a name to see every bet they\'ve had settled — newest first.</div><div id="allBetsOld"><div class="empty">Loading…</div></div></div>';
   h+='<div class="ovsec" id="betHallWrap" style="display:none"><div class="ovh">Best &amp; worst bets so far</div><div id="betHall"></div></div>';
   el.innerHTML=h;
   // bet-slip popup (mobile): float it only while a selection exists; pad the section so it never hides your bets
@@ -1032,6 +1033,26 @@ async function loadAllBets(){
     else{
       open.sort((a,b)=>(b.placed_at||0)-(a.placed_at||0));
       box.innerHTML=open.map(w=>betCardHTML(w,{showPlayer:true,live:live,fixById:fixById})).join('');
+    }
+    // everyone's SETTLED bets — one collapsible per player (state survives the 30s refresh via OLDBETS)
+    const oldBox=document.getElementById('allBetsOld');
+    if(oldBox){
+      const closed=(j.wagers||[]).filter(w=>!w.credit&&(w.status==='won'||w.status==='lost'||w.status==='void'));
+      if(!closed.length){ oldBox.innerHTML='<div class="empty">No settled bets yet.</div>'; }
+      else{
+        const byP={}; closed.forEach(w=>{ (byP[w.player]=byP[w.player]||[]).push(w); });
+        oldBox.innerHTML=Object.keys(byP).sort().map(nm=>{
+          const ws=byP[nm].slice().sort((a,b)=>(b.placed_at||0)-(a.placed_at||0));
+          const wn=ws.filter(w=>w.status==='won').length, ls=ws.filter(w=>w.status==='lost').length, vd=ws.filter(w=>w.status==='void').length;
+          const stk=Math.round(ws.reduce((s,w)=>s+(w.status==='void'?0:(w.stake||0)),0)*10)/10;
+          return '<details class="oldbets" data-ob="'+esc(nm)+'"'+(OLDBETS.has(nm)?' open':'')+'>'
+            +'<summary style="cursor:pointer;padding:9px 2px;font-size:13.5px;display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line)">'
+            +'<span><b>'+esc(nm)+'</b> <span style="color:var(--muted)">· '+wn+'W · '+ls+'L'+(vd?' · '+vd+' void':'')+'</span></span>'
+            +'<span style="color:var(--muted);font-size:12.5px;white-space:nowrap">staked '+stk+' · '+ws.length+' bet'+(ws.length===1?'':'s')+' ▾</span></summary>'
+            +'<div style="padding:8px 0 4px">'+ws.map(w=>betCardHTML(w,{fixById:fixById})).join('')+'</div></details>';
+        }).join('');
+        oldBox.querySelectorAll('details.oldbets').forEach(dt=>{ dt.ontoggle=()=>{ const k=dt.dataset.ob; if(dt.open) OLDBETS.add(k); else OLDBETS.delete(k); }; });
+      }
     }
     // best & worst settled bets (top 3 each) — biggest net wins, biggest losses
     const hw=document.getElementById('betHallWrap'), hb=document.getElementById('betHall');
@@ -1332,6 +1353,7 @@ function liveParts(scored, conceded, result){
 }
 // One small line under a live match: who's earning what right now, and why.
 const LIVEBD=new Set();   // which live breakdowns the user has expanded (key = match|player), kept across 30s refreshes
+const OLDBETS=new Set();  // which players' settled-bet dropdowns are expanded, kept across 30s refreshes
 function betPickName(w){ return pickName(w); }
 function betProfit(w){ return Math.round(((w.return||0)-(w.stake||0))*100)/100; }
 function betLabel(w){   // short human description of a bet/acca + its upside
@@ -2104,10 +2126,38 @@ function renderOdds(d){
   renderBettingStats(d);
   const champ=d.champion||[], st=d.stats||{}, str=d.strength||[];
   const max=Math.max(1,...champ.map(c=>c.odds));
+  // ---- knockout-aware cards: once the KO starts, the group-era stats go stale (groups are done), so we swap
+  //      GROUP OF DEATH -> MOST TEAMS STILL IN and MOST GROUP LEADERS -> KO WINS, and the rivalry counts ALL
+  //      head-to-heads (group + knockout) instead of freezing at "group meetings". All client-side from fixtures.
+  const fxAll=(d.fixtures||[]), FINST=new Set(['FINISHED','AWARDED']);
+  const koStarted=fxAll.some(m=>m.stage&&m.stage!=='GROUP_STAGE'&&m.home&&m.away);
+  let godCard=`<div class="statcard"><div class="l">GROUP OF DEATH</div><div class="v">Group ${st.group_of_death||'—'}</div><div class="l">strongest group on paper</div></div>`;
+  let glCard=`<div class="statcard"><div class="l">MOST GROUP LEADERS</div><div class="v">${st.group_leaders_player||'—'}</div><div class="l">teams topping their group</div></div>`;
+  if(koStarted){
+    const al=(d.players||[]).map(p=>({n:p.name,c:(p.teams||[]).filter(t=>t.status!=='out').length,t:(p.teams||[]).length})).sort((a,b)=>b.c-a.c);
+    if(al.length){ const top=al.filter(x=>x.c===al[0].c).map(x=>esc(x.n)).join(' & ');
+      godCard=`<div class="statcard"><div class="l">MOST TEAMS STILL IN</div><div class="v" style="font-size:18px">${top} <small>${al[0].c}/${al[0].t}</small></div><div class="l">teams still alive</div></div>`; }
+    const kw={};
+    fxAll.forEach(m=>{ if(!m.stage||m.stage==='GROUP_STAGE'||!FINST.has(m.status)||m.homeScore==null||m.awayScore==null) return;
+      const side=m.winner||(m.homeScore>m.awayScore?'HOME':(m.awayScore>m.homeScore?'AWAY':'DRAW'));
+      const ow=side==='HOME'?m.homeOwner:(side==='AWAY'?m.awayOwner:null);
+      if(ow&&ow!=='—'&&ow!=='-') kw[ow]=(kw[ow]||0)+1; });
+    const kt=Object.keys(kw).sort((a,b)=>kw[b]-kw[a]);
+    if(kt.length){ const best=kt.filter(k=>kw[k]===kw[kt[0]]).map(esc).join(' & ');
+      glCard=`<div class="statcard"><div class="l">KO WINS · PLAYER</div><div class="v" style="font-size:18px">${best} <small>${kw[kt[0]]}</small></div><div class="l">knockout wins across their teams</div></div>`; }
+  }
+  // rivalry: most head-to-head meetings between two owners across EVERY finished game (group + knockout)
+  const pc={};
+  fxAll.forEach(m=>{ if(!FINST.has(m.status)) return; const a=m.homeOwner,b=m.awayOwner;
+    if(!a||!b||a===b||a==='—'||b==='—'||a==='-'||b==='-') return;
+    const k=[a,b].sort().join(' vs '); pc[k]=(pc[k]||0)+1; });
+  const rvk=Object.keys(pc).sort((a,b)=>pc[b]-pc[a])[0];
+  const rvCard=rvk?`<div class="statcard"><div class="l">BIGGEST RIVALRY</div><div class="v" style="font-size:18px">${esc(rvk)}</div><div class="l">${pc[rvk]} head-to-head meeting${pc[rvk]===1?'':'s'}</div></div>`
+               :(st.rivalry?`<div class="statcard"><div class="l">BIGGEST RIVALRY</div><div class="v" style="font-size:18px">${st.rivalry}</div><div class="l">${st.rivalry_count} group meeting${st.rivalry_count===1?'':'s'}</div></div>`:'');
   let cards=`
     <div class="statcard"><div class="l">FAVOURITE TO WIN</div><div class="v">${flag(st.favourite_team)}${st.favourite_team||'—'} <small>${st.favourite_odds||0}%</small></div><div class="l">owned by ${st.favourite_owner||'—'}</div></div>
     <div class="statcard"><div class="l">DARK HORSE</div><div class="v">${flag(st.dark_horse)}${st.dark_horse||'—'} <small>${st.dark_horse_odds||0}%</small></div><div class="l">best outside shot · ${st.dark_horse_owner||'—'}</div></div>
-    <div class="statcard"><div class="l">GROUP OF DEATH</div><div class="v">Group ${st.group_of_death||'—'}</div><div class="l">strongest group on paper</div></div>
+    ${godCard}
     <div class="statcard"><div class="l">TEAMS REMAINING</div><div class="v">${st.teams_remaining??'—'}<small> /48</small></div></div>
     <div class="statcard"><div class="l">MATCHES PLAYED</div><div class="v">${st.matches_played??0}</div></div>
     <div class="statcard"><div class="l">GOALS SCORED</div><div class="v">${st.goals??0}<small> · ${st.goals_per_match||0}/match</small></div></div>`;
@@ -2121,7 +2171,7 @@ function renderOdds(d){
     if(pjP) cards+=`<div class="statcard"><div class="l">MOST LIKELY · MOST POINTS</div><div class="v">${esc(pjP)} <small>${pjV}</small></div><div class="l">projected final points · 1,500-run forecast</div></div>`;
   }
   cards+=`<div class="statcard"><div class="l">UNDERDOG · DARK-HORSE PLAYER</div><div class="v">${st.underdog_player||'—'} <small>${st.underdog_player_strength||0}</small></div><div class="l">weakest squad on paper</div></div>`;
-  if(st.rivalry) cards+=`<div class="statcard"><div class="l">BIGGEST RIVALRY</div><div class="v" style="font-size:18px">${st.rivalry}</div><div class="l">${st.rivalry_count} group meeting${st.rivalry_count===1?'':'s'}</div></div>`;
+  if(rvCard) cards+=rvCard;
   cards+=`<div class="statcard"><div class="l">MOST FAVOURITES</div><div class="v">${st.most_favourites_player||'—'} <small>${st.most_favourites||0}★</small></div><div class="l">tier-1 teams owned</div></div>`;
   const soon=st.matches_played>0?'':'once games start';
   cards+=`<div class="statcard"><div class="l">MOST GOALS · PLAYER</div><div class="v">${st.top_scorer_player||'—'} <small>${st.top_scorer_player_goals||0}</small></div><div class="l">${soon}</div></div>`;
@@ -2132,7 +2182,7 @@ function renderOdds(d){
   cards+=`<div class="statcard"><div class="l">UNDER-PERFORMER · TEAM</div><div class="v">${st.under_team?flag(st.under_team)+st.under_team:'—'}</div><div class="l">below its odds</div></div>`;
   cards+=`<div class="statcard"><div class="l">BEST DEFENCE</div><div class="v">${st.best_defence_team?flag(st.best_defence_team)+st.best_defence_team:'—'} <small>${st.best_defence_team?(st.best_defence_cs||0)+' clean sheets':''}</small></div><div class="l">${soon}</div></div>`;
   cards+=`<div class="statcard"><div class="l">MOST CLEAN SHEETS · PLAYER</div><div class="v">${st.clean_sheets_player||'—'} <small>${st.clean_sheets_player?st.clean_sheets_value:''}</small></div><div class="l">${st.clean_sheets_player?'shutouts across their teams':soon}</div></div>`;
-  cards+=`<div class="statcard"><div class="l">MOST GROUP LEADERS</div><div class="v">${st.group_leaders_player||'—'}</div><div class="l">teams topping their group</div></div>`;
+  cards+=glCard;
   document.getElementById('statsBody').innerHTML=cards;
   document.getElementById('oddsBody').innerHTML='<div style="color:var(--muted);font-size:13px;margin:4px 0 8px">Live chance each player owns the World Cup winner (from bookmaker odds, updates as teams go out):</div>'+
     champ.map(c=>`<div class="oddrow"><div class="nm">${c.name}</div><div class="oddbar"><i style="width:${Math.round(100*c.odds/max)}%"></i></div><div class="pct">${c.odds}%</div></div>`).join('');
