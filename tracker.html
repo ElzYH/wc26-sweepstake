@@ -1317,13 +1317,17 @@ let H2H_A=null, H2H_B=null;
 // Provisional live points for one side of an in-play game — mirrors scoring.py's live branch exactly:
 // goals × per_goal, + clean sheet if the other side hasn't scored, + win if ahead / draw points if level.
 // Returns {pts, parts:[['draw',1],['clean sheet',1],...]} so the UI can show WHY (e.g. 0–0 = draw 1 + clean sheet 1).
-function liveParts(scored, conceded){
+// `result` ('win'|'draw'|'lose') optionally overrides the goals-based outcome — REQUIRED for finished knockout
+// games decided on penalties, where the score is level but the shootout winner earns full win points (the
+// server has always scored it that way; without the override this helper calls a 1–1 pens game a draw).
+function liveParts(scored, conceded, result){
   const SC=(DATA.scoring&&DATA.scoring.points)||{per_goal:1,win:3,draw:1,clean_sheet:1};
   const parts=[]; let pts=0;
   if(scored>0&&(SC.per_goal||0)>0){ const g=scored*SC.per_goal; parts.push([scored+(scored===1?' goal':' goals'),g]); pts+=g; }
   if(conceded===0&&(SC.clean_sheet||0)>0){ parts.push(['clean sheet',SC.clean_sheet]); pts+=SC.clean_sheet; }
-  if(scored>conceded&&(SC.win||0)>0){ parts.push(['winning',SC.win]); pts+=SC.win; }
-  else if(scored===conceded&&(SC.draw||0)>0){ parts.push(['draw',SC.draw]); pts+=SC.draw; }
+  const res=result||(scored>conceded?'win':(scored===conceded?'draw':'lose'));
+  if(res==='win'&&(SC.win||0)>0){ parts.push(['winning',SC.win]); pts+=SC.win; }
+  else if(res==='draw'&&(SC.draw||0)>0){ parts.push(['draw',SC.draw]); pts+=SC.draw; }
   return {pts:Math.round(pts*100)/100, parts};
 }
 // One small line under a live match: who's earning what right now, and why.
@@ -2147,13 +2151,17 @@ function buildLedger(d, wagers){
   const FIN=new Set(['FINISHED','AWARDED']);
   const T=m=>(m&&m.utcDate)?Date.parse(m.utcDate):0;
   const ev=[];
-  // 1) match performance — each owned team in each finished game
+  // 1) match performance — each owned team in each finished game. The result comes from m.winner when the
+  //    feed provides it (a knockout tie won on penalties = a WIN for the advancing side, exactly as the server
+  //    scores it) and falls back to the scoreline otherwise — same rule as buildHistory's chart.
   fx.forEach(m=>{
     if(!FIN.has(m.status)||m.homeScore==null||m.awayScore==null) return;
-    [[m.homeOwner,m.home,m.away,m.homeScore,m.awayScore],[m.awayOwner,m.away,m.home,m.awayScore,m.homeScore]].forEach(function(r){
+    const side=m.winner||(m.homeScore>m.awayScore?'HOME':(m.awayScore>m.homeScore?'AWAY':'DRAW'));
+    [[m.homeOwner,m.home,m.away,m.homeScore,m.awayScore],[m.awayOwner,m.away,m.home,m.awayScore,m.homeScore]].forEach(function(r,i){
       const ow=r[0],tm=r[1],opp=r[2],sc=r[3],co=r[4];
       if(!ow||ow==='\u2014'||ow==='-') return;
-      const b=liveParts(sc,co); if(!(b.pts>0)) return;
+      const res=side==='DRAW'?'draw':(side===(i===0?'HOME':'AWAY')?'win':'lose');
+      const b=liveParts(sc,co,res); if(!(b.pts>0)) return;
       ev.push({when:T(m),kind:'match',player:ow,team:tm,opp:opp,score:sc+'\u2013'+co,pts:b.pts,parts:b.parts.map(function(x){return x[0];})});
     });
   });

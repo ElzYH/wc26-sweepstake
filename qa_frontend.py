@@ -140,7 +140,7 @@ ck("each bettor on a live game gets a Name +N collapsible (like the owner rows)"
 ck("all pending wagers are fetched for the breakdowns", "ALLWAGERS=(wj.wagers||[]).filter" in HTML, None)
 try:
     import subprocess as _sp4
-    _lp = re.search(r"(function liveParts\(scored, conceded\)\{.*?\n\})", HTML, re.S).group(1)
+    _lp = re.search(r"(function liveParts\(scored, conceded, result\)\{.*?\n\})", HTML, re.S).group(1)
     def _grab(nm):
         s = HTML.index("function " + nm); i = HTML.index("{", s); depth = 0
         for j in range(i, len(HTML)):
@@ -167,7 +167,7 @@ ck("expanded breakdowns survive the 30s refresh (state kept in LIVEBD)", "LIVEBD
 ck("an unowned side is still flagged as pool", "unowned (pool) — scores for no one" in HTML, None)
 try:
     import subprocess as _sp3
-    _lp = re.search(r"(function liveParts\(scored, conceded\)\{.*?\n\})", HTML, re.S).group(1)
+    _lp = re.search(r"(function liveParts\(scored, conceded, result\)\{.*?\n\})", HTML, re.S).group(1)
     _s = HTML.index("const LIVEBD=new Set();"); _e = HTML.index("return html?('<div class=\"livebd-wrap\">'+html+'</div>'):'';", _s); _e = HTML.index("\n}", _e) + 2
     _lb = HTML[_s:_e]
     _js = ("const esc=s=>String(s);\nlet ALLWAGERS=[];\nlet DATA={scoring:{points:{per_goal:1,win:3,draw:1,clean_sheet:1}},"
@@ -182,7 +182,7 @@ except Exception as _e:
     ck("live-breakdown dropdown cross-check ran", False, str(_e)[:140])
 try:
     import subprocess as _sp6
-    _lp = re.search(r"(function liveParts\(scored, conceded\)\{.*?\n\})", HTML, re.S).group(1)
+    _lp = re.search(r"(function liveParts\(scored, conceded, result\)\{.*?\n\})", HTML, re.S).group(1)
     def _g2(nm):
         s = HTML.index("function " + nm); i = HTML.index("{", s); depth = 0
         for j in range(i, len(HTML)):
@@ -280,7 +280,7 @@ ck("a .betdelta style exists (gold, distinct from the green live chip)", ".betde
 
 # ---- live points breakdown: the frontend explanation must match the server's scoring EXACTLY ----
 print("\n== live points breakdown (frontend mirrors scoring.py) ==")
-ck("a liveParts helper exists", "function liveParts(scored, conceded)" in HTML, None)
+ck("a liveParts helper exists", "function liveParts(scored, conceded, result)" in HTML, None)
 ck("the live match card renders the breakdown line", "liveBreakLine(m)" in HTML, None)
 ck("player cards show a per-team live chip", "from a game in play right now" in HTML, None)
 try:
@@ -298,7 +298,7 @@ try:
         _scoring.compute(os.path.join(_d, "teams.json"), os.path.join(_d, "draw.json"), os.path.join(_d, "results.json"), _o, "points")
         _jj = _json.load(open(_o))
         _server.append(tuple([p for p in _jj["players"] if p["name"] == n][0]["live"] for n in ("P1", "P2")))
-    _src = re.search(r"(function liveParts\(scored, conceded\)\{.*?\n\})", HTML, re.S).group(1)
+    _src = re.search(r"(function liveParts\(scored, conceded, result\)\{.*?\n\})", HTML, re.S).group(1)
     _njs = "const DATA={scoring:{points:{per_goal:1,win:3,draw:1,clean_sheet:1}}};\n" + _src + "\nconst cases=" + _json.dumps(_cases) + ";\nconsole.log(JSON.stringify(cases.map(([h,a])=>[liveParts(h,a).pts, liveParts(a,h).pts])));"
     open("/tmp/_lp.js", "w").write(_njs)
     _front = [tuple(x) for x in _json.loads(_sp.run(["node", "/tmp/_lp.js"], capture_output=True, text=True).stdout)]
@@ -306,6 +306,24 @@ try:
        _front == _server, (_front, _server))
 except Exception as _e:
     ck("live-points cross-check ran", False, str(_e)[:140])
+
+# ---- pens-aware ledger scoring: a FINISHED knockout tie won on penalties must credit the shootout winner
+#      with full win points (and the loser none) when the ledger passes the result override — while the
+#      no-override (live) behaviour stays a draw. Locks in the fix for the feed/⚽/🎲 breakdown mismatch. ----
+try:
+    import json as _json2, subprocess as _sp2
+    _src2 = re.search(r"(function liveParts\(scored, conceded, result\)\{.*?\n\})", HTML, re.S).group(1)
+    _njs2 = ("const DATA={scoring:{points:{per_goal:1,win:3,draw:1,clean_sheet:1}}};\n" + _src2 +
+             "\nconsole.log(JSON.stringify([liveParts(1,1,'win').pts, liveParts(1,1,'lose').pts, liveParts(1,1).pts, liveParts(0,0,'win').pts]));")
+    open("/tmp/_lp2.js", "w").write(_njs2)
+    _out2 = _json2.loads(_sp2.run(["node", "/tmp/_lp2.js"], capture_output=True, text=True).stdout)
+    ck("pens 1-1: winner gets 1 goal + win = 4, loser gets 1, no-override stays draw 2, 0-0 pens winner CS+win = 4",
+       _out2 == [4, 1, 2, 4], _out2)
+    ck("the ledger passes a winner-aware result into liveParts", "liveParts(sc,co,res)" in HTML, None)
+    ck("the ledger derives the side from m.winner (pens-aware) with a score fallback",
+       re.search(r"const side=m\.winner\|\|\(m\.homeScore>m\.awayScore\?'HOME'", HTML) is not None, None)
+except Exception as _e:
+    ck("pens-aware ledger check ran", False, str(_e)[:140])
 
 # ---- bet-slip selection model: tap=select, re-tap=remove, 2nd game=auto-acca, down-to-1=single ----
 print("\n== bet-slip selection model (.betodd click) ==")
