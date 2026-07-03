@@ -896,7 +896,8 @@ function renderBets(){
       if(s>amx){ art.textContent='⚠ Most you can stake here is '+amx+'.'; art.style.color='#ffb86b'; if(ap)ap.disabled=true; return; }
       const ret=Math.round(s*dec*100)/100;
       if(retCap&&ret>retCap+1e-9){ art.textContent='⚠ Would return '+ret+' — over the '+retCap+' cap. Lower the stake.'; art.style.color='#ffb86b'; if(ap)ap.disabled=true; return; }
-      art.textContent='returns '+ret+' if all win'; art.style.color='var(--muted)'; if(ap)ap.disabled=false; };
+      const winA=Math.round((ret-s)*100)/100, leftA=Math.round(Math.max(0,canStake-s)*100)/100;
+      art.textContent='Staking '+s+' of your '+canStake+' ('+leftA+' left after). ALL WIN: '+ret+' back — your '+s+' stake + '+winA+' winnings. ANY LOSE: −'+s+'.'; art.style.color='var(--muted)'; if(ap)ap.disabled=false; };
     ast.oninput=updA; }
   // live validation for the SINGLE stake: warn on 0 / negative / over-max, disable Place
   const st=document.getElementById('betStake'), rt=document.getElementById('betReturn'), pb=document.getElementById('betPlace');
@@ -908,7 +909,8 @@ function renderBets(){
       if(s>mx){ rt.textContent='⚠ Most you can stake here is '+mx+'.'; rt.style.color='#ffb86b'; if(pb)pb.disabled=true; return; }
       const sret=Math.round(s*(1+fr[0]/fr[1])*100)/100;
       if(retCap&&sret>retCap+1e-9){ rt.textContent='⚠ Would return '+sret+' — over the '+retCap+' cap. Lower the stake.'; rt.style.color='#ffb86b'; if(pb)pb.disabled=true; return; }
-      rt.textContent='returns '+sret+' if it wins'; rt.style.color='var(--muted)'; if(pb)pb.disabled=false; };
+      const win=Math.round((sret-s)*100)/100, left=Math.round(Math.max(0,canStake-s)*100)/100;
+      rt.textContent='Staking '+s+' of your '+canStake+' ('+left+' left after). WIN: '+sret+' back — your '+s+' stake + '+win+' winnings. LOSE: −'+s+'.'; rt.style.color='var(--muted)'; if(pb)pb.disabled=false; };
     st.oninput=upd; upd(); }
   if(pb) pb.onclick=placeBet;
   loadMyBets();
@@ -1016,7 +1018,7 @@ function betCardHTML(w, opts){
     } else if(isL){ liveBit=' · <span style="color:#ff6b6b">🔴 LIVE</span>'; }
     body='<div style="font-weight:600;font-size:13.5px">'+who+esc(pick)+' <span style="color:var(--gold)">'+w.frac+'</span></div><div style="color:var(--muted);font-size:12px">'+esc(w.home)+' v '+esc(w.away)+liveBit+'</div>';
   }
-  const outcome=w.status==='won'?('+'+Math.round((w.return-w.stake)*100)/100+' pts'):(w.status==='lost'?('−'+w.stake+' pts'):(w.status==='void'?'refunded':'→ '+w.return+' if it wins'));
+  const outcome=w.status==='won'?('+'+Math.round((w.return-w.stake)*100)/100+' pts'):(w.status==='lost'?('−'+w.stake+' pts'):(w.status==='void'?'refunded':'→ '+w.return+' back if it wins · '+w.stake+' stake + '+(Math.round((w.return-w.stake)*100)/100)+' winnings'));
   return '<div style="border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:6px"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'
     +'<div style="flex:1;min-width:0">'+body+'</div>'
     +'<div style="text-align:right;white-space:nowrap"><span style="color:'+tg[0]+';font-weight:700;font-size:11px">'+tg[1]+'</span><div style="font-size:12.5px">stake <b>'+w.stake+'</b></div><div style="color:'+tg[0]+';font-size:12.5px;font-weight:600">'+outcome+'</div></div>'
@@ -1123,7 +1125,7 @@ async function placeBet(){
   try{
     const j=await fetch('/api/place_wager',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({player:BETPLAYER,matchId:BETPICK.matchId,selection:BETPICK.sel,market:BETPICK.market||'result',line:BETPICK.line,stake:stake,pin:pin,nonce:BETNONCE})}).then(r=>r.json());
-    if(j.ok){ BETNONCE=null; setBetPin(BETPLAYER,pin); BETPIN_DRAFT=null; BETMSG='✓ Bet placed: '+stake+' @ '+j.wager.frac+' (returns '+j.wager.return+' if it wins).'; BETPICK=null; await load(); renderBets(); }
+    if(j.ok){ BETNONCE=null; setBetPin(BETPLAYER,pin); BETPIN_DRAFT=null; BETMSG='✓ Bet placed: '+stake+' @ '+j.wager.frac+'. Your '+stake+' is held while it\'s open — a WIN pays '+j.wager.return+' back ('+stake+' stake + '+(Math.round((j.wager.return-stake)*100)/100)+' winnings); a loss costs the '+stake+'.'; BETPICK=null; await load(); renderBets(); }
     else if(j.bad_pin){ setBetPin(BETPLAYER,''); BETMSG='Wrong passcode for '+BETPLAYER+'. Check with the organiser.'; renderBets(); }
     else { BETMSG=j.error||'Could not place that bet.'; renderBets(); }
   }catch(e){ BETMSG='Could not reach the server.'; renderBets(); }
@@ -1370,9 +1372,9 @@ function betProfit(w){ return Math.round(((w.return||0)-(w.stake||0))*100)/100; 
 function betLabel(w){   // short human description of a bet/acca + its upside
   if(w.legs&&w.legs.length){
     const legs=w.legs.map(lg=>esc(pickName(lg))).join(' + ');
-    return w.stake+' on a '+w.legs.length+'-fold ('+legs+') → +'+betProfit(w)+' if it lands';
+    return w.stake+' on a '+w.legs.length+'-fold ('+legs+') → +'+betProfit(w)+' winnings if it lands';
   }
-  return w.stake+' on '+esc(betPickName(w))+' @ '+esc(w.frac)+' → +'+betProfit(w)+' if it wins';
+  return w.stake+' on '+esc(betPickName(w))+' @ '+esc(w.frac)+' → +'+betProfit(w)+' winnings if it wins';
 }
 function betsOnMatch(m){   // every pending bet/acca (any player) that touches this match
   return ALLWAGERS.filter(w=> w.matchId===m.matchId || (w.legs&&w.legs.some(lg=>lg.matchId===m.matchId)));
@@ -1614,7 +1616,7 @@ function render(d){
   // player cards
   document.getElementById('playersBody').innerHTML=d.players.map(p=>`
     <div class="pcard"><h3>${esc(p.name)}<span class="pts">${p.points} pts${p.live>0?` <span style="color:#fff;background:#1f8f4e;border-radius:6px;padding:1px 6px;font-size:.82em">+${p.live} live</span>`:''} · ${p.alive_teams}/${p.total_teams} in</span></h3>
-    ${p.bet_potential>0?`<div style="font-size:12px;color:var(--muted);margin:-2px 0 6px">🎲 ${p.bets_open||''} open bet${p.bets_open===1?'':'s'}${p.wager_held>0?` · ${p.wager_held} riding`:''} — would add <b style="color:var(--gold)">+${p.bet_potential}</b> if they all win <span style="opacity:.75">(only counts when a bet settles)</span></div>`:''}
+    ${p.bet_potential>0?`<div style="font-size:12px;color:var(--muted);margin:-2px 0 6px">🎲 ${p.bets_open||''} open bet${p.bets_open===1?'':'s'}${p.wager_held>0?` · ${p.wager_held} riding`:''} — would add <b style="color:var(--gold)">+${p.bet_potential}</b> to their total if they all win <span style="opacity:.75">(only counts when a bet settles)</span></div>`:''}
       <div class="tl">${p.teams.map(t=>`
         <div class="trow ${t.status==='out'?'out':''}">
           <span class="dot" style="background:${TIER[t.tier]}"></span>

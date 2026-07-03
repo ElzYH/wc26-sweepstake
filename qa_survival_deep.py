@@ -84,14 +84,20 @@ multi = [M("a", "Brazil", "Serbia", 1, 0, stage="LAST_16"),
          M("b", "Brazil", "Spain", 2, 0, stage="QUARTER_FINALS"),
          M("c", "Brazil", "Japan", 1, 0, stage="SEMI_FINALS")]
 td = run(FULL, multi)
-ck("furthest-stage reflects the DEEPEST round reached (SEMI not LAST_16)", team_in(td, "Erol", "Brazil")["stage"] == "SEMI_FINALS", team_in(td, "Erol", "Brazil"))
+ck("furthest-stage reflects the DEEPEST round reached (won the semi = reached the FINAL)", team_in(td, "Erol", "Brazil")["stage"] == "FINAL", team_in(td, "Erol", "Brazil"))
 
 # ============================================================== SURVIVAL VALUES
 print("\n== SURVIVAL VALUES ==")
-vals = {"LAST_16": 26, "QUARTER_FINALS": 34, "SEMI_FINALS": 44}
-for stage, val in vals.items():
+# Winning a round means the team has REACHED the next one, so its survival value advances at full time
+# (the whole point of survival: how deep did they get). A team that's merely IN a round (game not played
+# yet) holds that round's value — both directions covered below.
+vals = {"LAST_16": ("QUARTER_FINALS", 34), "QUARTER_FINALS": ("SEMI_FINALS", 44), "SEMI_FINALS": ("FINAL", 85)}
+for stage, (nxt, val) in vals.items():
     td = run(FULL, [M("x", "Brazil", "Serbia", 1, 0, stage=stage)])
-    ck("survival value for %s == %d" % (stage, val), team_in(td, "Erol", "Brazil")["survival"] == val, team_in(td, "Erol", "Brazil"))
+    ck("winning at %s advances survival to %s (%d)" % (stage, nxt, val), team_in(td, "Erol", "Brazil")["survival"] == val, team_in(td, "Erol", "Brazil"))
+for stage, val in (("LAST_16", 26), ("QUARTER_FINALS", 34), ("SEMI_FINALS", 44)):
+    td = run(FULL, [M("x", "Brazil", "Serbia", None, None, status="TIMED", stage=stage)])
+    ck("merely REACHING %s (game unplayed) holds its own value %d" % (stage, val), team_in(td, "Erol", "Brazil")["survival"] == val, team_in(td, "Erol", "Brazil"))
 td = run(FULL, KO)
 ck("champion survival == WINNER (135)", team_in(td, "Erol", "Brazil")["survival"] == 135, team_in(td, "Erol", "Brazil"))
 ck("losing finalist survival == FINAL (85)", team_in(td, "Erol", "France")["survival"] == 85, team_in(td, "Erol", "France"))

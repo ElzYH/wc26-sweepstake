@@ -501,6 +501,8 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
             if is_live:
                 live_pts[team] += d
 
+    _NEXT_KO = {"LAST_32": "LAST_16", "LAST_16": "QUARTER_FINALS",
+                "QUARTER_FINALS": "SEMI_FINALS", "SEMI_FINALS": "FINAL"}
     for m in [x for x in finished if x["stage"] in BRACKET_KO]:   # KO resolution (pens-aware)
         side = _winner_side(m)
         if side == "HOME":
@@ -511,6 +513,13 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
             continue
         if loser in teams:
             lost_ko_at[loser] = m["stage"]
+        # Winning a knockout game means the team has REACHED the next round the moment the game ends — credit it
+        # now instead of waiting for the bracket's next-round fixture to be populated (which can lag as TBD and
+        # made advancement bonuses land late/inconsistently). Idempotent: reached is a set and the bonus is the
+        # max over it, so this never double-counts and is identical once the real fixture appears.
+        nxt = _NEXT_KO.get(m["stage"])
+        if champ in teams and nxt:
+            reached[champ].add(nxt)
         if m["stage"] == "FINAL" and champ in teams:
             reached[champ].add("WINNER")
 

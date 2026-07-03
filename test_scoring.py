@@ -140,11 +140,12 @@ def run():
     a = next(t for pl in d2["players"] for t in pl["teams"] if t["name"] == "A")
     sb = scoring.SCORING["stage_bonus"]
     # Stage progression is rewarded ONCE, via Survival — POINTS is goals/wins/clean sheets only (stage_bonus is {} now).
-    # A: group win 1 goal + win(3) + cs(1) = 5, semi 1 goal + win(3) + cs(1) = 5, plus any points stage bonus (0).
-    expected = 5 + 5 + sb.get("SEMI_FINALS", 0)
+    # A: group win 1 goal + win(3) + cs(1) = 5, semi 1 goal + win(3) + cs(1) = 5, plus any points stage bonus.
+    # Winning the SEMI means A has REACHED the FINAL, so any stage bonus / survival value is the FINAL's.
+    expected = 5 + 5 + sb.get("FINAL", 0)
     check("points = match points only (stage reward is via Survival, not stacked)", a["points"] == expected,
           f"got {a['points']} expected {expected}")
-    check("survival value reflects SEMI", a["survival"] == scoring.SURVIVAL_VALUE["SEMI_FINALS"],
+    check("survival value reflects the FINAL (won the semi = reached the final)", a["survival"] == scoring.SURVIVAL_VALUE["FINAL"],
           f"got {a['survival']}")
 
     # --- regression: when betting is ON, upcoming fixtures must get odds even before anyone has bet ---

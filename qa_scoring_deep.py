@@ -272,6 +272,25 @@ ck("the potential is surfaced on the leaderboard rows", _lb["PA"].get("bet_poten
 ck("potential is display-only: the actual score is unchanged by having open bets", _pl["PA"]["points"] < _pl2["PA"]["points"], (_pl["PA"]["points"], _pl2["PA"]["points"]))
 shutil.rmtree(_bd, ignore_errors=True)
 
+# ============================================================== KO ADVANCEMENT BONUS (no TBD lag)
+print("\n== KO advancement: winning a knockout game credits the NEXT round immediately (no waiting for the TBD bracket slot) ==")
+td = run(A2, [M("k1", "Brazil", "Serbia", 2, 0, stage="LAST_32")])
+ck("R32 winner gets next-round bonus at FT: 2g+CS+win=6 match + R16 bonus 10 = 16",
+   team_in(td, "Erol", "Brazil")["points"] == 16, team_in(td, "Erol", "Brazil"))
+ck("R32 loser keeps the R32 bonus: 0 match + 5", team_in(td, "James", "Serbia")["points"] == 5, team_in(td, "James", "Serbia"))
+td = run(A2, [M("k1", "Brazil", "Serbia", 1, 1, stage="LAST_32", winner="AWAY")])
+ck("pens winner (1-1, winner=AWAY) advances too: 1g+win=4 + R16 bonus 10 = 14",
+   team_in(td, "James", "Serbia")["points"] == 14, team_in(td, "James", "Serbia"))
+ck("pens loser: 1g + R32 bonus 5 = 6", team_in(td, "Erol", "Brazil")["points"] == 6, team_in(td, "Erol", "Brazil"))
+td = run(A2, [M("k1", "Brazil", "Serbia", 2, 0, stage="LAST_32"),
+              M("k2", "Brazil", "Spain", None, None, status="TIMED", stage="LAST_16")])
+ck("idempotent: once the real R16 fixture appears the bonus is unchanged (no double count)",
+   team_in(td, "Erol", "Brazil")["points"] == 16, team_in(td, "Erol", "Brazil"))
+td = run(A2, [M("k1", "Brazil", "Serbia", 1, 0, stage="SEMI_FINALS")])
+ck("SF winner is credited the FINAL bonus at FT: 1g+CS+win=5 + 50 = 55",
+   team_in(td, "Erol", "Brazil")["points"] == 55, team_in(td, "Erol", "Brazil"))
+ck("SF loser holds the SF bonus: 0 match + 35", team_in(td, "James", "Serbia")["points"] == 35, team_in(td, "James", "Serbia"))
+
 shutil.rmtree(TMP, ignore_errors=True)
 if FAILS:
     print("\nDEEP SCORING QA FAILED (%d): %s" % (len(FAILS), ", ".join(FAILS)))
