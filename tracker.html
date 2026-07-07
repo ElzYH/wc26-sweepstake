@@ -676,7 +676,7 @@ function renderBets(){
   const SEL={HOME:'home',DRAW:'draw',AWAY:'away'};
   let h='';
   h+='<div class="ovsec"><div class="ovh">💷 Place a bet</div>';
-  h+='<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--muted);line-height:1.6"><b style="color:#ffd97a">You start with 5 free points</b> — losing them costs nothing, and winnings are yours. After that you bet with points you\'ve already earned.<br>Win and the winnings join your total when the game ends; lose and the stake is gone. <b style="color:#ffd97a">All bets are final</b> — odds lock when you place, and bets close at kick-off.<br><b style="color:var(--ink)">Tap two or more games</b> to build a 🎰 accumulator: the odds multiply, but every leg must win.'+(retCap?(' Max return on any bet is <b>'+retCap+'</b> points.'):'')+' You can never go below zero.</div>';
+  h+='<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--muted);line-height:1.6"><b style="color:#ffd97a">Free points are a safety net, not spending money.</b> You start with 5 and every 🎁 drop you claim adds 5. They mean your first <i>that-many</i> points of net betting losses never touch your leaderboard total — betting can\'t hurt you until you\'re deeper in the red than your free points.<br><b style="color:#ffd97a">While a bet is open</b>, its stake is held off your total (the free cushion covers what it can) and comes back when the bet settles — so a losing bet doesn\'t drop you again, it was priced in when you placed it. <b style="color:#ffd97a">Win</b> and you get your stake back plus the winnings; winnings first repair any losses your cushion was absorbing, then add to your total. <b style="color:#ffd97a">All bets are final</b> — odds lock when you place, and bets close at kick-off.<br><b style="color:var(--ink)">Tap two or more games</b> to build a 🎰 accumulator: the odds multiply, but every leg must win.'+(retCap?(' Max return on any bet is <b>'+retCap+'</b> points.'):'')+' You can never go below zero.</div>';
   // prominent: the per-bet ceiling + the LIVE amount this player can stake right now (drops as bets open, recovers as they settle)
   h+='<div style="margin:12px 0;display:flex;gap:10px;flex-wrap:wrap">'
     +'<div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px"><div style="color:var(--muted);font-size:11.5px;letter-spacing:.04em">MAX PER BET</div><div style="font-family:\'Anton\';font-size:26px;line-height:1.1">'+caps.max_stake+'</div><div style="color:var(--muted);font-size:11px">ceiling for one bet · +5 each round (60 in the final)</div></div>'
@@ -1616,7 +1616,7 @@ function render(d){
   // player cards
   document.getElementById('playersBody').innerHTML=d.players.map(p=>`
     <div class="pcard"><h3>${esc(p.name)}<span class="pts">${p.points} pts${p.live>0?` <span style="color:#fff;background:#1f8f4e;border-radius:6px;padding:1px 6px;font-size:.82em">+${p.live} live</span>`:''} · ${p.alive_teams}/${p.total_teams} in</span></h3>
-    ${p.bet_potential>0?`<div style="font-size:12px;color:var(--muted);margin:-2px 0 6px">🎲 ${p.bets_open||''} open bet${p.bets_open===1?'':'s'}${p.wager_held>0?` · ${p.wager_held} riding`:''} — would add <b style="color:var(--gold)">+${p.bet_potential}</b> to their total if they all win <span style="opacity:.75">(winnings + their held stake back, applied when the bet settles)</span></div>`:''}
+    ${p.bet_potential>0?`<div style="font-size:12px;color:var(--muted);margin:-2px 0 6px">🎲 ${p.bets_open||''} open bet${p.bets_open===1?'':'s'}${p.wager_held>0?` · ${p.wager_held} riding`:''} — total <b>${p.points}</b> → <b style="color:var(--gold)">${Math.round((p.points+p.bet_potential)*10)/10}</b> if they all win <span style="opacity:.75">(losses already priced in — a losing bet doesn't drop it further)</span></div>`:''}
       <div class="tl">${p.teams.map(t=>`
         <div class="trow ${t.status==='out'?'out':''}">
           <span class="dot" style="background:${TIER[t.tier]}"></span>
@@ -2228,11 +2228,16 @@ function buildLedger(d, wagers){
       ev.push({when:T(m),kind:'match',player:ow,team:tm,opp:opp,score:sc+'\u2013'+co,pts:b.pts,parts:b.parts.map(function(x){return x[0];})});
     });
   });
-  // 2) knockout bonus — one per owned team, dated at its latest finished game
+  // 2) knockout bonus — one per owned team, dated at its latest finished game. FURTHEST ROUND ONLY:
+  //    the bonus UPGRADES as a team advances (5 -> 10 -> 20 ...) and never stacks, so when a team steps up a
+  //    round the single event re-labels to the new value (the old +N line disappears — it was replaced).
+  const SBladder=Object.keys(SB).map(function(k){return SB[k];}).sort(function(a,b){return a-b;});
   (d.players||[]).forEach(function(p){ (p.teams||[]).forEach(function(tm){
     const st=tm.stage; if(!st||!SB[st]) return;
     const fins=fx.filter(function(m){return FIN.has(m.status)&&(m.home===tm.name||m.away===tm.name);}).map(T);
-    ev.push({when:fins.length?Math.max.apply(null,fins):Date.now(),kind:'bonus',player:p.name,team:tm.name,stage:st,label:SL[st]||st,pts:SB[st]});
+    const lower=SBladder.filter(function(v){return v<SB[st];});
+    const note=lower.length?(' \u00b7 replaces the earlier +'+lower[lower.length-1]+' \u2014 furthest round only'):'';
+    ev.push({when:fins.length?Math.max.apply(null,fins):Date.now(),kind:'bonus',player:p.name,team:tm.name,stage:st,label:SL[st]||st,pts:SB[st],note:note});
   });});
   // 3) settled bets — won/lost, dated at the (last) game they rode on
   (wagers||[]).forEach(function(w){
@@ -2301,7 +2306,7 @@ function histSummaryHTML(d, wagers, ledger, who){
     +'<table style="width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums">'
     +'<tr><td style="padding:5px 6px;color:var(--muted);font-weight:600">Where points come from</td>'+th+'\u26bd</th>'+th+'\ud83c\udfc5</th>'+th+'\ud83c\udfb2</th>'+th+'\ud83c\udf81</th>'+th.replace('var(--muted)','var(--gold)')+'Total</th></tr>'
     +rows+'</table>'
-    +'<div style="color:var(--muted);font-size:11px;margin:6px 6px 2px">\u26bd match \u00b7 \ud83c\udfc5 knockout bonus \u00b7 \ud83c\udfb2 betting net (after free-point cushion) \u00b7 \ud83c\udf81 free claims. Tap a name to see just them.</div></div>';
+    +'<div style="color:var(--muted);font-size:11px;margin:6px 6px 2px">\u26bd match \u00b7 \ud83c\udfc5 knockout bonus (furthest round only \u2014 it upgrades, never stacks) \u00b7 \ud83c\udfb2 betting net (after free-point cushion) \u00b7 \ud83c\udf81 free claims. Tap a name to see just them.</div></div>';
 }
 async function renderHistory(){
   const el=document.getElementById('historyBody'); if(!el) return;
@@ -2340,7 +2345,7 @@ async function renderHistory(){
       const who=HISTPLAYER==='all'?('<b style="color:var(--ink)">'+esc(e.player)+'</b> \u00b7 '):'';
       let text,delta,dcol;
       if(e.kind==='match'){ text=who+flag(e.team)+esc(e.team)+' '+e.score+' '+esc(e.opp)+(e.parts.length?' <span style="opacity:.6">\u00b7 '+e.parts.join(', ')+'</span>':''); delta='+'+e.pts; dcol='#7ee787'; }
-      else if(e.kind==='bonus'){ const isW=e.stage==='WINNER'; text=who+(isW?'\ud83c\udfc6 ':'\ud83c\udfc5 ')+flag(e.team)+esc(e.team)+(isW?' won the tournament':' reached the '+esc(e.label)); delta='+'+e.pts; dcol='var(--gold)'; }
+      else if(e.kind==='bonus'){ const isW=e.stage==='WINNER'; text=who+(isW?'\ud83c\udfc6 ':'\ud83c\udfc5 ')+flag(e.team)+esc(e.team)+(isW?' won the tournament':' reached the '+esc(e.label))+(e.note?'<span style="color:var(--muted);font-size:.88em">'+e.note+'</span>':''); delta='+'+e.pts; dcol='var(--gold)'; }
       else if(e.kind==='free'){ text=who+'🎁 claimed '+e.amount+' free betting points'; delta='+'+e.amount; dcol='#ffd86b'; }
       else { text=who+(e.won?'\ud83c\udfb2 won \u2014 ':'\ud83c\udfb2 lost \u2014 ')+esc(e.label); delta=(e.won?'+':'\u2212')+Math.abs(e.net); dcol=e.won?'#7ee787':'#ff7a7a'; }
       return hdr+'<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;line-height:1.45"><div>'+text+'</div><div style="font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;color:'+dcol+'">'+delta+'</div></div>';

@@ -275,7 +275,7 @@ except Exception as _e:
 
 # ---- potential betting points: visible but never added to the score ----
 ck("leaderboard rows fold bet potential into the combined total", 'class="lbtot"' in HTML and "(p.live||0)+(p.bet_potential||0)" in HTML, None)
-ck("player cards carry the open-bets potential line", "if they all win" in HTML and "held stake back, applied when the bet settles" in HTML, None)
+ck("player cards carry the open-bets potential line", "if they all win" in HTML and "losses already priced in" in HTML and "(p.points+p.bet_potential)" in HTML, None)
 ck("a .betdelta style exists (gold, distinct from the green live chip)", ".betdelta{" in HTML.replace(" ", "") and "var(--gold)" in HTML.split(".betdelta{",1)[1][:200], None)
 
 # ---- live points breakdown: the frontend explanation must match the server's scoring EXACTLY ----
