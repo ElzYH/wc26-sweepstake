@@ -1623,6 +1623,16 @@ def _update_match_clocks(matches, now=None):
                         elif playing and rec.get("ps"):
                             rec["htp"] = (rec.get("htp") or 0.0) + max(0.0, now - rec["ps"])  # bank the paused time
                             rec["ps"] = None
+                            # A restart after a pause happens at a KNOWN minute — 45:00 (half-time), 90:00 (before
+                            # extra time) or 105:00 (ET half-time) — so re-anchor to the nearest one when we're
+                            # within its window (±12 min). This is a discrete status transition, not the sticky
+                            # feed minute, so it safely purges the drift a half accumulates (late kick-off
+                            # detection, hydration/cooling breaks, VAR, missed pause edges) without fighting feed
+                            # lag. A mid-half pause (~30') is outside every window and is left alone — banked only.
+                            _el = (now - rec["ko"] - (rec.get("htp") or 0.0)) / 60.0
+                            _anchor = min((45.0, 90.0, 105.0), key=lambda a: abs(_el - a))
+                            if 0.02 < abs(_el - _anchor) <= 12.0:
+                                rec["ko"] = now - (rec.get("htp") or 0.0) - _anchor * 60.0
                             changed = True
                         if playing and not rec.get("ps"):     # keep the clock roughly tied to the broadcast minute WITHOUT yanking it backward
                             mn = m.get("minute")

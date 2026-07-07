@@ -206,6 +206,33 @@ ck("big overrun (clock far ahead of feed) still snaps back to the minute",
 S._update_match_clocks(match("IN_PLAY", 60), now=5_000_000 + 152)        # feed jumps forward -> catch up
 ck("feed jumping forward -> clock catches up", abs(elapsed(_mid, 5_000_000 + 152) - 60 * 60) < 90, elapsed(_mid, 5_000_000 + 152))
 
+print("== restart re-anchor: half-time restart purges a half's drift (hydration breaks etc.) ==")
+def match2(mid, status, minute=None):
+    m = {"id": mid, "status": status, "home": "X", "away": "Y"}
+    if minute is not None:
+        m["minute"] = minute
+    return [m]
+K = 8_000_000
+S._update_match_clocks(match2("d1", "IN_PLAY"), now=K)                    # anchored at 0 with no feed minute
+S._update_match_clocks(match2("d1", "PAUSED"), now=K + 51 * 60)           # our clock reads 51' when HT arrives (~6 min ahead)
+S._update_match_clocks(match2("d1", "IN_PLAY"), now=K + 51 * 60 + 900)    # restart after a 15-min break
+ck("HT restart re-anchors to exactly 45:00 (6-min drift purged)",
+   abs(elapsed("d1", K + 51 * 60 + 900) - 45 * 60) < 1, elapsed("d1", K + 51 * 60 + 900))
+ck("after the re-anchor the clock keeps ticking normally",
+   abs(elapsed("d1", K + 51 * 60 + 900 + 600) - 55 * 60) < 1, elapsed("d1", K + 51 * 60 + 900 + 600))
+# a mid-half (hydration-style) pause is banked but NOT re-anchored — 30' is outside every window
+S._update_match_clocks(match2("d2", "IN_PLAY"), now=K)
+S._update_match_clocks(match2("d2", "PAUSED"), now=K + 30 * 60)
+S._update_match_clocks(match2("d2", "IN_PLAY"), now=K + 30 * 60 + 180)
+ck("a mid-half pause resumes at its own minute (30:00), no false re-anchor",
+   abs(elapsed("d2", K + 30 * 60 + 180) - 30 * 60) < 1, elapsed("d2", K + 30 * 60 + 180))
+# a drifted ET-break restart re-anchors to 105:00
+S._update_match_clocks(match2("d3", "IN_PLAY"), now=K)
+S._update_match_clocks(match2("d3", "PAUSED"), now=K + 110 * 60)          # clock says 110' at the ET break (drifted +5)
+S._update_match_clocks(match2("d3", "IN_PLAY"), now=K + 110 * 60 + 120)
+ck("ET-break restart re-anchors to 105:00", abs(elapsed("d3", K + 110 * 60 + 120) - 105 * 60) < 1,
+   elapsed("d3", K + 110 * 60 + 120))
+
 shutil.rmtree(t, ignore_errors=True)
 if FAILS:
     print("\nCLOCK QA FAILED (%d):" % len(FAILS))
