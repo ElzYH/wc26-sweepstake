@@ -400,7 +400,10 @@ def run():
     ck("fresh epoch budget == STAGE_BUDGET", wager.budget_remaining([], "Erol", "GROUP_1") == B)
     ck("group first/second halves are different epochs",
        wager.epoch_of(fx(utc=g1), mid) == "GROUP_1" and wager.epoch_of(fx(utc=g2), mid) == "GROUP_2")
-    ck("each knockout round is its own epoch", wager.epoch_of(fx(stage="LAST_16"), mid) == "LAST_16")
+    ck("knockout budgets run in TWO blocks: R32+R16 share one pot, QF through the final share another",
+       wager.epoch_of({"stage": "LAST_32"}) == wager.epoch_of({"stage": "LAST_16"}) == "KO_EARLY"
+       and wager.epoch_of({"stage": "QUARTER_FINALS"}) == wager.epoch_of({"stage": "FINAL"}) == "KO_LATE"
+       and wager.epoch_of({"stage": "LAST_16"}) != wager.epoch_of({"stage": "QUARTER_FINALS"}), None)
     # budget = budget - stakes + returns(won), clamped [0, B]
     net = [{"player": "Erol", "epoch": "GROUP_1", "stake": 50, "status": "lost", "return": 0},
            {"player": "Erol", "epoch": "GROUP_1", "stake": 10, "status": "won", "return": 25}]

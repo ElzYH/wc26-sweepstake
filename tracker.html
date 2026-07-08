@@ -665,11 +665,11 @@ function csRowHTML(m){
   const num='style="width:44px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 4px;font-size:13px;text-align:center;font-family:Sora,sans-serif"';
   return '<div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;align-items:center">'
     +'<span title="Exact score — type the final score (after extra time)" style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);white-space:nowrap">\ud83c\udfaf'
-    +'<input class="csh" type="number" min="0" max="6" inputmode="numeric" value="'+esc(hh)+'" data-mid="'+esc(m.matchId)+'" '+num+'>'
+    +'<input class="csh" type="number" min="0" max="9" inputmode="numeric" value="'+esc(hh)+'" data-mid="'+esc(m.matchId)+'" '+num+'>'
     +'<span style="color:var(--muted)">\u2013</span>'
-    +'<input class="csa" type="number" min="0" max="6" inputmode="numeric" value="'+esc(aa)+'" data-mid="'+esc(m.matchId)+'" '+num+'></span>'
+    +'<input class="csa" type="number" min="0" max="9" inputmode="numeric" value="'+esc(aa)+'" data-mid="'+esc(m.matchId)+'" '+num+'></span>'
     +(o?('<button class="betodd'+(on?' on':'')+'" style="min-width:88px;padding:6px 8px;font-size:12px" data-mid="'+m.matchId+'" data-sel="'+pick+'" data-market="cs" data-frac="'+o.frac+'">'+pick+' <b>'+o.frac+'</b></button>')
-       :('<span style="font-size:11.5px;color:var(--muted)">scores 0\u20136 each</span>'))
+       :('<span style="font-size:11.5px;color:var(--muted)">scores 0\u20139 each</span>'))
     +'</div>';
 }
 function renderBets(){
@@ -751,7 +751,7 @@ function renderBets(){
   } else if(fbet.open && fbMine){
     h+='<div style="margin:0 0 12px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;color:var(--muted)">🎁 You\'ve claimed today\'s free points — they\'re in your balance above. Bet them on any game. The next drop is another day.</div>';
   }
-  h+='<div style="color:var(--muted);font-size:12px;margin:0 0 10px">Tap a game to bet · tap it again to remove'+(accasOn?' · tap a second game to build a 🎰 accumulator':'')+'. Each game also has an <b>\u26bd Over/Under goals</b> market (pick a goals line \u2014 near-certain lines pay on a deeper ladder, down to 1/14) and a <b>\ud83c\udfaf Exact score</b> market \u2014 type the final score (after extra time, 0\u20136 each way) and back it. Result = who goes through (a shootout win counts); all three settle automatically.</div>';
+  h+='<div style="color:var(--muted);font-size:12px;margin:0 0 10px">Tap a game to bet · tap it again to remove'+(accasOn?' · tap a second game to build a 🎰 accumulator':'')+'. Each game also has an <b>\u26bd Over/Under goals</b> market (pick a goals line \u2014 near-certain lines pay on a deeper ladder, down to 1/14) and a <b>\ud83c\udfaf Exact score</b> market \u2014 type the final score (after extra time, 0\u20139 each way) and back it. Result = who goes through (a shootout win counts); all three settle automatically.</div>';
   if(ACCAMODE) h+='<div style="color:var(--muted);font-size:12.5px;margin:0 0 10px">🎰 Building an accumulator — odds multiply, but <b>every</b> leg must win. Up to '+maxLegs+' legs, and up to '+((caps.max_active_accas)||2)+' accas running at once.'+(retCap?(' Max return: <b>'+retCap+'</b>.'):'')+'</div>';
   if(!fx.length) h+='<div class="empty">No upcoming games to bet on right now — check back before kick-off.</div>';
   else h+='<div class="mdgrid">'+fx.map(m=>{
@@ -875,7 +875,7 @@ function renderBets(){
   };
   el.querySelectorAll('.ouline').forEach(s=>s.onchange=()=>{ OULINE[s.dataset.mid]=s.value; BETMSG=''; renderBets(); });
   const csIn=s=>{ const mid=s.dataset.mid, h=el.querySelector('.csh[data-mid="'+mid+'"]'), a=el.querySelector('.csa[data-mid="'+mid+'"]');
-    const c=v=>Math.max(0,Math.min(6,parseInt(v,10)||0)); CSPICK[mid]=c(h?h.value:1)+'-'+c(a?a.value:0); BETMSG=''; renderBets(); };
+    const c=v=>Math.max(0,Math.min(9,parseInt(v,10)||0)); CSPICK[mid]=c(h?h.value:1)+'-'+c(a?a.value:0); BETMSG=''; renderBets(); };
   el.querySelectorAll('.csh,.csa').forEach(s=>s.onchange=()=>csIn(s));
   el.querySelectorAll('.betodd').forEach(b=>b.onclick=()=>{
     const mid=b.dataset.mid, sel=b.dataset.sel, frac=b.dataset.frac;

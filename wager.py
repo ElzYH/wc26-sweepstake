@@ -41,6 +41,7 @@ STAGE_BUDGET_MAP = {      # per-epoch budget — always 20 above that round's pe
     "THIRD_PLACE":     75,
     "FINAL":           80,
     "WINNER":          80,
+    "KO_EARLY": 75, "KO_LATE": 95,   # merged blocks: R32+R16 share one pot, QF->final share another
 }
                           # Resets automatically because budget_remaining only sums bets within the same epoch.
 OVERROUND = 1.08          # ~8% bookmaker margin
@@ -82,7 +83,7 @@ _FRACTIONS = [(1, 20), (1, 16), (1, 14), (1, 12), (1, 10), (1, 9), (1, 8), (1, 7
               (6, 5), (5, 4), (11, 8), (6, 4), (13, 8), (7, 4), (15, 8), (2, 1), (9, 4), (5, 2),
               (11, 4), (3, 1), (7, 2), (4, 1), (9, 2), (5, 1), (11, 2), (6, 1), (13, 2), (7, 1),
               (15, 2), (8, 1), (9, 1), (10, 1), (12, 1), (14, 1), (16, 1), (20, 1), (25, 1), (33, 1),
-              (40, 1), (50, 1), (66, 1), (80, 1), (100, 1)]
+              (40, 1), (50, 1), (66, 1), (80, 1), (100, 1), (150, 1), (200, 1), (250, 1), (300, 1), (400, 1), (500, 1)]
 
 
 def _dec(fr):
@@ -91,6 +92,14 @@ def _dec(fr):
 
 def _nearest_fraction(decimal):
     return min(_FRACTIONS, key=lambda fr: abs(_dec(fr) - decimal))
+
+
+def _floor_fraction(decimal):
+    """Largest ladder rung that does NOT pay more than `decimal` — snapping a price DOWN in payout terms is
+    always house-side, so a market using this can never round itself punter-positive (the exact-score tail
+    rungs are sparse enough that nearest-snap could otherwise land above fair value)."""
+    under = [fr for fr in _FRACTIONS if _dec(fr) <= decimal + 1e-9]
+    return max(under, key=_dec) if under else min(_FRACTIONS, key=_dec)
 
 
 def _fair_probs(ch, ca):
@@ -415,7 +424,19 @@ def epoch_of(match, group_mid_ts=None):
         if group_mid_ts is not None and ts is not None and ts >= group_mid_ts:
             return "GROUP_2"
         return "GROUP_1"
-    return stage
+    return _epoch_group(stage)
+
+
+_EPOCH_COLLAPSE = {"LAST_32": "KO_EARLY", "LAST_16": "KO_EARLY",
+                   "QUARTER_FINALS": "KO_LATE", "SEMI_FINALS": "KO_LATE",
+                   "THIRD_PLACE": "KO_LATE", "FINAL": "KO_LATE"}
+
+
+def _epoch_group(e):
+    """Knockout budget epochs are TWO blocks (R32+R16, then QF through the final) instead of per-round.
+    Normalises both freshly-derived epochs AND the tags stored on old bet records, so bets placed under
+    the per-round scheme keep counting against the right block — the merge can never refill a budget."""
+    return _EPOCH_COLLAPSE.get(e, e)
 
 
 def stage_budget(epoch):
@@ -435,7 +456,7 @@ def budget_remaining(wagers, player, epoch, budget=None):
     spent = 0.0
     back = 0.0
     for w in wagers or []:
-        if w.get("player") != player or w.get("epoch") != epoch or w.get("free") or w.get("credit"):
+        if w.get("player") != player or _epoch_group(w.get("epoch")) != epoch or w.get("free") or w.get("credit"):
             continue                                    # free bets & free-point credits sit outside the staking budget entirely
         st = w.get("status")
         if st in ("pending", "won", "lost"):       # void = refunded, ignore
@@ -656,7 +677,7 @@ def place_free(wagers, player, match, selection, comp_home, comp_away, now=None)
 
 
 CS_OVERROUND = 1.22          # correct-score books run heavy margin at real bookies (120-135%); every cell is
-CS_GRID_MAX = 6              #   fair*1.22 so no selection is EVER punter-positive, and cells cap out ~20% implied,
+CS_GRID_MAX = 9              #   fair*1.22 so no selection is EVER punter-positive, and cells cap out ~20% implied,
                              #   nowhere near the 1/6 price floor -- the capped-value farm that hit O/U can't occur.
 
 
@@ -687,7 +708,7 @@ def cs_odds(comp_home, comp_away):
         for a in range(CS_GRID_MAX + 1):
             p = _poisson_pmf(h, lh) * _poisson_pmf(a, la)
             implied = min(MAX_PROB, max(1e-4, p * CS_OVERROUND))
-            num, den = _nearest_fraction(1.0 / implied)
+            num, den = _floor_fraction(1.0 / implied)
             out["%d-%d" % (h, a)] = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
     # No 'Any other' bucket any more: the grid IS the market (0-0..6-6). Dropping the bucket only removes a
     # bettable selection, so the remaining book keeps every cell at fair*1.22 — dutching any subset still loses.
