@@ -1054,7 +1054,7 @@ function betCardHTML(w, opts){
   }
   let voidBtn='';
   if(w.status==='pending'&&opts&&opts.fixById&&!opts.showPlayer&&w.player===BETPLAYER){
-    const kos=(w.legs||[w]).map(l=>{const f=opts.fixById[l.matchId]; return f&&f.utcDate?Date.parse(f.utcDate):NaN;});
+    const kos=(w.legs||[w]).map(l=>{const f=opts.fixById.get?opts.fixById.get(l.matchId):opts.fixById[l.matchId]; return f&&f.utcDate?Date.parse(f.utcDate):NaN;});
     if(kos.every(t=>!isNaN(t))&&Date.now()<Math.min.apply(null,kos)-2*3600*1000)
       voidBtn=' <button class="voidbet" data-bid="'+esc(w.id||'')+'" style="margin-left:8px;background:none;border:1px solid var(--line);border-radius:8px;color:#ff9a9a;font-size:11px;padding:3px 8px;cursor:pointer">Void bet</button>';
   }
