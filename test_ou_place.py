@@ -40,8 +40,18 @@ for good in offered:
     ck("offered line %s is accepted" % good, ok_g, None)
 # every line on the ladder is now offered (each is guaranteed to overround) — nothing is filtered out
 not_offered = [L for L in W.OU_LINES if W._line_key(L) not in W.goals_odds(CH, CA)]
-ck("every ladder line is offered for any game (none filtered)", not_offered == [], not_offered)
-ck("0.5 is offered even for a lopsided game", "0.5" in W.goals_odds(95.0, 1.0), sorted(W.goals_odds(95.0, 1.0).keys(), key=float))
+# Ladder rule: a line is offered only when NEITHER fair side beats MAX_PROB (a capped near-certainty was a
+# farmable bettor edge — e.g. Under 5.5 at the 1/6 floor while ~97% true). So the outer lines are ALLOWED to
+# vanish; what must hold is that every filtered line is exactly one the rule filters, and vice versa.
+import wager as _W2
+def _rule_ok(ch_, ca_):
+    lam_ = _W2.expected_goals(ch_, ca_)
+    want = [_W2._line_key(L) for L in _W2.OU_LINES
+            if _W2._poisson_cdf(int(L), lam_) <= _W2.MAX_PROB and (1.0 - _W2._poisson_cdf(int(L), lam_)) <= _W2.MAX_PROB]
+    return sorted(_W2.goals_odds(ch_, ca_).keys(), key=float) == want
+ck("the offered set matches the ladder rule exactly (filtered = would-be farm lines only)", _rule_ok(CH, CA) and _rule_ok(95.0, 1.0) and _rule_ok(50, 50), None)
+ck("a farm line (5.5 heavy favourite) is NOT offered and placing on it is rejected",
+   "5.5" not in W.goals_odds(95.0, 1.0) and not W.place([], "Erol", FUTURE, "UNDER", 5, 100, 95.0, 1.0, now=NOW, market="ou", line=5.5)[0], None)
 # a line that ISN'T on the ladder (e.g. 6.5) has no market and is rejected, not mispriced
 ok_n, msg_n = W.place([], "Erol", FUTURE, "OVER", 5, 100, CH, CA, now=NOW, market="ou", line=6.5)
 ck("an off-ladder line (6.5) is rejected (no such market)", not ok_n, msg_n if ok_n else None)

@@ -104,6 +104,32 @@ wl5[0]["status"] = "lost"   # simulate it settled
 ok, _ = W.place(wl5, "Nat", g1, "AWAY", 5, 1000, C[0], C[1], now=NOW)
 ck("a SETTLED bet on one side doesn't block the other later", ok)
 
+# ---------------------------------------------------------------- (C) O/U lines can't be farmed
+print("\n=== (C) Over/Under lines are only offered when NEITHER side beats the price ladder ===")
+grid = [(50, 50), (60, 50), (90, 50), (95, 55), (120, 40), (200, 30), (300, 30), (1000, 1), (30, 300)]
+farm_free = True
+for ch, ca in grid:
+    lam = W.expected_goals(ch, ca)
+    offered = W.goals_odds(ch, ca)
+    ck("some O/U lines still offered (%s,%s)" % (ch, ca), len(offered) >= 2, sorted(offered))
+    for key in offered:
+        n = int(float(key))
+        p_under = W._poisson_cdf(n, lam)
+        p_over = 1.0 - p_under
+        if p_under > W.MAX_PROB + 1e-9 or p_over > W.MAX_PROB + 1e-9:
+            farm_free = False
+            ck("offered line %s on (%s,%s) has no capped-value side" % (key, ch, ca), False, (p_under, p_over))
+        b = 1.0 / offered[key]["OVER"]["decimal"] + 1.0 / offered[key]["UNDER"]["decimal"]
+        if not b > 1.0:
+            farm_free = False
+            ck("offered line %s on (%s,%s) overrounds" % (key, ch, ca), False, b)
+ck("NO offered O/U selection anywhere has fair probability above the 1/6 floor (nothing to farm)", farm_free)
+o = W.goals_odds(300, 30)
+ck("the Under-5.5 farm line is gone on a real heavy-favourite comp", "5.5" not in o, sorted(o))
+ck("the Over-0.5 mirror-farm line is gone too", "0.5" not in o, sorted(o))
+ck("placing on a filtered line is rejected", not W.place([], "Erol", M("Argentina", "Switzerland", "q1", stage="QUARTER_FINALS"),
+   "UNDER", 5, 1000, 300, 30, now=NOW, market="ou", line=5.5)[0], None)
+
 # ---------------------------------------------------------------- (B) admin on/off toggle
 print("\n=== (B) is switchable via BLOCK_OPPOSING_BETS (admin toggle) ===")
 _saved = W.BLOCK_OPPOSING_BETS

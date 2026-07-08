@@ -70,7 +70,7 @@ ck("the explainer states the knockout bonus is furthest-round only (not cumulati
 print("\n== Over/Under betting UI (Stage 5) ==")
 ck("the match card renders an O/U row via ouRowHTML", "function ouRowHTML(m)" in HTML and "ouRow=ouRowHTML(m)" in HTML, None)
 ck("O/U buttons carry market + line data attributes", 'data-market="ou"' in HTML and "data-line=\"'+ln+'\"" in HTML, None)
-ck("the line dropdown defaults to 2.5", "OULINE[mid] || '2.5'" in HTML, None)
+ck("the line dropdown defaults to 2.5 (nearest offered as fallback)", "OULINE[mid]||'2.5'" in HTML, None)
 ck("picks compare on matchId+market+sel+line (samePick)", "function samePick(p, mid, sel, market, line)" in HTML, None)
 ck("placeBet sends market + line", "market:BETPICK.market||'result',line:BETPICK.line" in HTML, None)
 # one leg per game: a result + a goals bet on the SAME match are correlated, so the builder must never combine them

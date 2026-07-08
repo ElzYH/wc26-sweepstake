@@ -637,10 +637,12 @@ function setBetPin(p,v){ try{ if(v) localStorage.setItem('wc26_betpin_'+p,v); el
 function samePick(p, mid, sel, market, line){   // are two picks the exact same selection? (market + line matter for O/U)
   return !!(p && p.matchId===mid && (p.market||'result')===(market||'result') && p.sel===sel && String(p.line==null?'':p.line)===String(line==null?'':line));
 }
-function ouLineFor(mid){ return OULINE[mid] || '2.5'; }   // default to the most common line
+function ouLineFor(mid,odds){ let ln=OULINE[mid]||'2.5';   // default to the most common line
+  if(odds&&!odds[ln]){ const ks=Object.keys(odds).sort((a,b)=>Math.abs(parseFloat(a)-2.5)-Math.abs(parseFloat(b)-2.5)); ln=ks[0]||ln; }  // picked line no longer offered -> nearest available
+  return ln; }
 function ouRowHTML(m){
   if(!m.ouOdds) return '';
-  const ln=ouLineFor(m.matchId), leg=m.ouOdds[ln];
+  const ln=ouLineFor(m.matchId,m.ouOdds), leg=m.ouOdds[ln];
   if(!leg) return '';
   const opts=Object.keys(m.ouOdds).sort((a,b)=>parseFloat(a)-parseFloat(b))
     .map(k=>'<option value="'+k+'"'+(k===ln?' selected':'')+'>'+k+'</option>').join('');

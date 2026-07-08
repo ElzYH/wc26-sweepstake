@@ -154,7 +154,7 @@ GOALS_LAMBDA_MAX = 4.2
 OU_OVERROUND = 1.13          # a touch more margin than the 1X2 book (1.08) -> O/U returns trimmed ~3-4%,
                              #   which also keeps multi-leg O/U accas from paying out silly amounts
 OU_MIN_MARGIN = 0.02         # minimum book overround on any offered O/U line (so a near-certain line still has an edge)
-OU_LINES = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5]   # half-lines only -> a bet can never push; every one is always offered now
+OU_LINES = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5]   # half-lines only -> a bet can never push; a line is offered only when both sides fit under MAX_PROB
 
 
 def _finite_comp(x):
@@ -201,6 +201,14 @@ def goals_odds(comp_home, comp_away, lines=None):
         n = int(L)                              # floor of the half-line, e.g. 2.5 -> 2
         p_under = min(0.999, max(1e-6, _poisson_cdf(n, lam)))   # total <= n
         p_over = min(0.999, max(1e-6, 1.0 - p_under))           # total >= n+1
+        # A line is only OFFERED when BOTH sides fit inside the price ladder (fair prob <= MAX_PROB).
+        # Beyond that, the near-certain side would sit at the 1/6 price floor while being 93-99% true —
+        # a permanent bettor edge anyone could farm every match (e.g. Under 5.5 in a knockout, priced the
+        # same 1/6 as backing the favourite but far likelier). Real books don't quote a line they can't
+        # price inside their ladder; neither do we. Settlement of already-placed bets is unaffected —
+        # it uses the bet's stored line and locked odds, never today's offering.
+        if p_over > MAX_PROB or p_under > MAX_PROB:
+            continue
         iO = min(MAX_PROB, p_over * OU_OVERROUND)
         iU = min(MAX_PROB, p_under * OU_OVERROUND)
         # Guarantee a house edge on EVERY line so even 0.5 on a lopsided game stays on the board (not dropped).
@@ -225,7 +233,7 @@ def goals_odds(comp_home, comp_away, lines=None):
                 iO = min(MAX_PROB, iO + 0.01)
             else:
                 iU = min(MAX_PROB, iU + 0.01)
-        out[_line_key(L)] = leg                 # every line offered now — the loop guarantees it overrounds
+        out[_line_key(L)] = leg                 # every OFFERED line overrounds and neither side beats the ladder
     return out
 
 
