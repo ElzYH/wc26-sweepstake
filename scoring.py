@@ -600,6 +600,11 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                 p["wager_held"] = held_disp
                 p["bets_open"] = d.get("pending_count", 0)
                 p["bettable"] = wager.available_points(p["name"], p["points_settled"], wagers)  # earned + free bonus + winnings - held
+                _fb = wager.free_bonus(p["name"], wagers)                                       # free-point cushion state, for the UI:
+                _net = wager.player_deltas(wagers).get(p["name"], {}).get("settled_net", 0.0)   #   total = 5 + 5/claim; used = losses it
+                p["free_total"] = round(_fb, 1)                                                 #   has absorbed so far; left = the threshold
+                p["free_used"] = round(min(_fb, max(0.0, -_net)), 1)                            #   before losses start costing real points
+                p["free_left"] = round(max(0.0, _fb - p["free_used"]), 1)
                 p["wager_budget_left"] = (round(wager.budget_remaining(wagers, p["name"], cur_epoch), 1)
                                           if cur_epoch else float(wager.STAGE_BUDGET))   # live round budget (drawdown ceiling)
                 p["wager_budget_max"] = float(wager.stage_budget(cur_epoch)) if cur_epoch else float(wager.STAGE_BUDGET)
@@ -859,7 +864,8 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                     ch = wager.live_strength(teams.get(f["home"], {}).get("composite", 0), f["home"], matches)
                     ca = wager.live_strength(teams.get(f["away"], {}).get("composite", 0), f["away"], matches)
                     f["odds"] = wager.match_odds(ch, ca, knockout=wager.is_knockout(f))
-                    f["ouOdds"] = wager.goals_odds(ch, ca)        # Over/Under prices per line (0.5..8.5)
+                    f["ouOdds"] = wager.goals_odds(ch, ca)        # Over/Under prices per line (ladder-rule filtered)
+                    f["csOdds"] = wager.cs_odds(ch, ca)           # exact-scoreline prices (0-0..4-4 + OTHER)
                     f["matchId"] = wager.match_id(m)
                     f["maxStake"] = wager.stage_max_stake(f.get("stage"))
             data["wager_stats"] = wager.stats(wagers)

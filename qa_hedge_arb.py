@@ -130,6 +130,49 @@ ck("the Over-0.5 mirror-farm line is gone too", "0.5" not in o, sorted(o))
 ck("placing on a filtered line is rejected", not W.place([], "Erol", M("Argentina", "Switzerland", "q1", stage="QUARTER_FINALS"),
    "UNDER", 5, 1000, 300, 30, now=NOW, market="ou", line=5.5)[0], None)
 
+# ---------------------------------------------------------------- (D) exact-score market: balanced, no exploits
+print("\n=== (D) exact-score book is margin-heavy, partitioned, and has no punter-positive cell ===")
+cs_ok = True
+for ch, ca in [(50, 50), (95, 55), (200, 30), (30, 200), (1000, 1)]:
+    o = W.cs_odds(ch, ca)
+    lam = W.expected_goals(ch, ca); ph, pd, pa = W._fair_probs(ch, ca)
+    share = min(0.85, max(0.15, ph + pd / 2.0)); lh, la = lam * share, lam * (1 - share)
+    book = sum(1.0 / v["decimal"] for v in o.values())
+    if not (1.12 <= book <= 1.45):
+        cs_ok = False; ck("cs book (%s,%s) in the margin band" % (ch, ca), False, book)
+    fair_sum = 0.0
+    for k, v in o.items():
+        if k == "OTHER":
+            fair = max(0.0, 1.0 - fair_sum)
+        else:
+            h, a = k.split("-"); fair = W._poisson_pmf(int(h), lh) * W._poisson_pmf(int(a), la); fair_sum += fair
+        if (1.0 / v["decimal"]) < fair * 0.995:                       # punter edge on a cell = exploit
+            cs_ok = False; ck("cs cell %s (%s,%s) is never punter-positive" % (k, ch, ca), False, (fair, v["decimal"]))
+    if "OTHER" not in o or len(o) != (W.CS_GRID_MAX + 1) ** 2 + 1:
+        cs_ok = False; ck("cs grid partitions all outcomes (%s,%s)" % (ch, ca), False, len(o))
+ck("every cs cell across the grid carries house margin (dutching all cells guarantees a loss)", cs_ok)
+g1cs = M("France", "Morocco", "cs1", stage="QUARTER_FINALS")
+wl = []
+ok, w = W.place(wl, "Erol", g1cs, "2-1", 5, 1000, 95, 55, now=NOW, market="cs")
+ck("a scoreline places as a single with locked odds", ok and w.get("market") == "cs" and w.get("frac"), w if not ok else None)
+ck("garbage scorelines are rejected", not W.place([], "Erol", g1cs, "12-0", 5, 1000, 95, 55, now=NOW, market="cs")[0]
+   and not W.place([], "Erol", g1cs, "2:1", 5, 1000, 95, 55, now=NOW, market="cs")[0], None)
+ck("cs can't ride in an accumulator", not W.place_acca([], "Erol",
+   [{"match": g1cs, "selection": "2-1", "market": "cs", "comp_home": 95, "comp_away": 55},
+    {"match": g2, "selection": "HOME", "comp_home": 95, "comp_away": 55}], 5, 1000, now=NOW)[0], None)
+ck("cs alongside a result bet is allowed (mutually-exclusive cells, margin-protected — not a hedge)",
+   W.place(wl, "Erol", g1cs, "HOME", 5, 1000, 95, 55, now=NOW)[0], None)
+import copy as _cp
+mfin = dict(g1cs, status="FINISHED", homeScore=2, awayScore=1, winner="HOME")
+wl2 = [_cp.deepcopy(wl[0])]; W.settle(wl2, mfin, now=NOW + 9000)
+ck("cs settles won on the exact score", wl2[0]["status"] == "won" and wl2[0]["return"] > 5, wl2[0].get("status"))
+wl3 = [_cp.deepcopy(wl[0])]; W.settle(wl3, dict(mfin, homeScore=1, awayScore=2, winner="AWAY"), now=NOW + 9000)
+ck("cs loses on any other score", wl3[0]["status"] == "lost", wl3[0].get("status"))
+wl4 = []
+W.place(wl4, "Erol", g1cs, "OTHER", 5, 1000, 95, 55, now=NOW, market="cs")
+W.settle(wl4, dict(mfin, homeScore=6, awayScore=0), now=NOW + 9000)
+ck("OTHER wins outside the grid", wl4[0]["status"] == "won", wl4[0].get("status"))
+
 # ---------------------------------------------------------------- (B) admin on/off toggle
 print("\n=== (B) is switchable via BLOCK_OPPOSING_BETS (admin toggle) ===")
 _saved = W.BLOCK_OPPOSING_BETS

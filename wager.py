@@ -15,6 +15,7 @@ AND wagers exist, so it is a complete no-op by default.
 """
 import calendar
 import math
+import re
 import time
 import uuid
 
@@ -540,7 +541,11 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
     if not isinstance(match, dict):
         return False, "That game could not be found."
     market = (str(market or "result")).lower()
-    if market == "ou":
+    if market == "cs":
+        if not isinstance(selection, str) or not (selection == "OTHER" or re.fullmatch(r"[0-%d]-[0-%d]" % (CS_GRID_MAX, CS_GRID_MAX), selection)):
+            return False, "Pick a scoreline (or Any other score)."
+        # exact-score cells are mutually exclusive + margin-protected, so the no-hedging block doesn't apply
+    elif market == "ou":
         if selection not in ("OVER", "UNDER"):
             return False, "Pick Over or Under."
         try:
@@ -590,7 +595,9 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
     if stake > brem + 1e-9:
         return False, ("Your staking budget left this round is %g of %d points — stake that or less. "
                        "It tops back up when your bets win (never above %d) and resets next round." % (brem, eb, eb))
-    if market == "ou":
+    if market == "cs":
+        odds = cs_odds(comp_home, comp_away).get(selection)
+    elif market == "ou":
         odds = goals_odds(comp_home, comp_away).get(_line_key(line), {}).get(selection)
     else:
         odds = match_odds(comp_home, comp_away, knockout=is_knockout(match)).get(selection)
@@ -607,6 +614,8 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
     if market == "ou":
         w["market"] = "ou"
         w["line"] = line
+    elif market == "cs":
+        w["market"] = "cs"
     wagers.append(w)
     return True, w
 
@@ -640,6 +649,58 @@ def place_free(wagers, player, match, selection, comp_home, comp_away, now=None)
          "status": "pending", "placed_at": int(now if now is not None else time.time())}
     wagers.append(w)
     return True, w
+
+
+CS_OVERROUND = 1.22          # correct-score books run heavy margin at real bookies (120-135%); every cell is
+CS_GRID_MAX = 4              #   fair*1.22 so no selection is EVER punter-positive, and cells cap out ~20% implied,
+                             #   nowhere near the 1/6 price floor -- the capped-value farm that hit O/U can't occur.
+
+
+def _poisson_pmf(k, lam):
+    """P(X = k) for Poisson(lam); tiny, exact, never raises for k>=0."""
+    try:
+        p = math.exp(-lam)
+        for i in range(1, int(k) + 1):
+            p *= lam / i
+        return p
+    except Exception:
+        return 0.0
+
+
+def cs_odds(comp_home, comp_away):
+    """Exact-scoreline prices: {'2-1': {frac,num,den,decimal}, ..., 'OTHER': {...}}.
+    Model: total goals lam from expected_goals(), split into independent home/away Poissons by the
+    1X2 fair strengths (home share = p_home + p_draw/2). Grid covers 0-0..%d-%d; every score outside
+    the grid is the single 'OTHER' bucket, so the selections PARTITION all outcomes -- pricing each at
+    fair * CS_OVERROUND makes the whole book overround by construction and dutching every cell a
+    guaranteed loss. Settles on the final score (after extra time, penalties excluded).""" % (CS_GRID_MAX, CS_GRID_MAX)
+    lam = expected_goals(comp_home, comp_away)
+    ph, pd, pa = _fair_probs(comp_home, comp_away)
+    share = min(0.85, max(0.15, ph + pd / 2.0))     # home goal share, kept off the rails
+    lh, la = lam * share, lam * (1.0 - share)
+    out = {}
+    other = 1.0
+    for h in range(CS_GRID_MAX + 1):
+        for a in range(CS_GRID_MAX + 1):
+            p = _poisson_pmf(h, lh) * _poisson_pmf(a, la)
+            other -= p
+            implied = min(MAX_PROB, max(1e-4, p * CS_OVERROUND))
+            num, den = _nearest_fraction(1.0 / implied)
+            out["%d-%d" % (h, a)] = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
+    implied = min(MAX_PROB, max(1e-4, max(0.0, other) * CS_OVERROUND))
+    num, den = _nearest_fraction(1.0 / implied)
+    out["OTHER"] = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
+    return out
+
+
+def _cs_result(selection, match):
+    """won/lost for an exact-score pick against the FINAL score (extra time included, pens excluded)."""
+    hs, as_ = match.get("homeScore"), match.get("awayScore")
+    if hs is None or as_ is None:
+        return None
+    in_grid = (0 <= int(hs) <= CS_GRID_MAX) and (0 <= int(as_) <= CS_GRID_MAX)
+    actual = ("%d-%d" % (int(hs), int(as_))) if in_grid else "OTHER"
+    return "won" if selection == actual else "lost"
 
 
 def _match_total(match):
@@ -677,6 +738,10 @@ def _leg_result(leg, match):
         if status not in ("FINISHED", "AWARDED"):
             return None
         return _ou_result(leg.get("line"), leg.get("selection"), _match_total(match))
+    if leg.get("market") == "cs":                    # exact score settles on the final score (ET incl., pens excl.)
+        if status not in ("FINISHED", "AWARDED"):
+            return None
+        return _cs_result(leg.get("selection"), match)
     side = _winner_side(match)
     if status not in ("FINISHED", "AWARDED") or side is None:
         return None
@@ -732,6 +797,19 @@ def settle(wagers, match, now=None):
             continue
         if status in VOID_STATUSES:
             w["status"] = "void"; w["return"] = _num(w.get("stake")); w["settled_at"] = ts; n += 1; continue
+        if w.get("market") == "cs":                  # exact-score single: settle on the final score (ET incl., pens excl.)
+            if status not in ("FINISHED", "AWARDED"):
+                continue
+            r = _cs_result(w.get("selection"), match)
+            if r == "won":
+                rv = _num(w.get("return"))
+                w["return"] = min(MAX_RETURN, rv) if MAX_RETURN is not None else rv
+                w["status"] = "won"
+            elif r == "lost":
+                w["status"] = "lost"; w["return"] = 0
+            else:
+                continue
+            w["settled_at"] = ts; n += 1; continue
         if w.get("market") == "ou":                  # Over/Under single: settle on final total goals (pens excluded)
             if status not in ("FINISHED", "AWARDED"):
                 continue
@@ -822,6 +900,8 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
         if not can_bet_on(s.get("match"), now):
             return False, "One of those games has kicked off or finished — accas must be all upcoming."
         mk = (str(s.get("market") or "result")).lower()
+        if mk == "cs":
+            return False, "Exact-score bets are singles only — they can't go in an accumulator."
         if mk == "ou":
             if s.get("selection") not in ("OVER", "UNDER"):
                 return False, "Pick Over or Under for every goals leg."
