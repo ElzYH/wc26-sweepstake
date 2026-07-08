@@ -44,7 +44,11 @@ STAGE_BUDGET_MAP = {      # per-epoch budget — always 20 above that round's pe
 }
                           # Resets automatically because budget_remaining only sums bets within the same epoch.
 OVERROUND = 1.08          # ~8% bookmaker margin
-MAX_PROB = 0.857          # shortest price any selection can be is 1/6 (6/7 implied); floors near-certain O/U lines
+MAX_PROB = 0.857          # shortest RESULT price is 1/6 (6/7 implied) — favourites never pay worse than 1/6
+OU_MAX_PROB = 0.93        # O/U gets a DEEPER ladder (down to ~1/14): near-certainties (Under 4.5) must pay
+                          #   visibly worse than a 1/6 favourite — a likelier outcome can't share its price.
+                          #   With the ladder rule (fair <= this cap) implied is ALWAYS >= fair, so the old
+                          #   capped-value residual on O/U is gone entirely, not just filtered.
 
 # Max stake rises as the tournament gets deeper: +5 per knockout round, and an extra +15 for the final.
 # WC2026 round dates (UTC, for reference — actual dates come from the live fixture feed):
@@ -202,26 +206,26 @@ def goals_odds(comp_home, comp_away, lines=None):
         n = int(L)                              # floor of the half-line, e.g. 2.5 -> 2
         p_under = min(0.999, max(1e-6, _poisson_cdf(n, lam)))   # total <= n
         p_over = min(0.999, max(1e-6, 1.0 - p_under))           # total >= n+1
-        # A line is only OFFERED when BOTH sides fit inside the price ladder (fair prob <= MAX_PROB).
+        # A line is only OFFERED when BOTH sides fit inside the price ladder (fair prob <= OU_MAX_PROB).
         # Beyond that, the near-certain side would sit at the 1/6 price floor while being 93-99% true —
         # a permanent bettor edge anyone could farm every match (e.g. Under 5.5 in a knockout, priced the
         # same 1/6 as backing the favourite but far likelier). Real books don't quote a line they can't
         # price inside their ladder; neither do we. Settlement of already-placed bets is unaffected —
         # it uses the bet's stored line and locked odds, never today's offering.
-        if p_over > MAX_PROB or p_under > MAX_PROB:
+        if p_over > OU_MAX_PROB or p_under > OU_MAX_PROB:
             continue
-        iO = min(MAX_PROB, p_over * OU_OVERROUND)
-        iU = min(MAX_PROB, p_under * OU_OVERROUND)
+        iO = min(OU_MAX_PROB, p_over * OU_OVERROUND)
+        iU = min(OU_MAX_PROB, p_under * OU_OVERROUND)
         # Guarantee a house edge on EVERY line so even 0.5 on a lopsided game stays on the board (not dropped).
-        # On a line far from the expected total one side is near-certain and caps at MAX_PROB, which alone leaves
+        # On a line far from the expected total one side is near-certain and caps at OU_MAX_PROB, which alone leaves
         # the book < 100%. Lift the underdog (smaller) side to a minimum-margin book; it's still a long price, just
         # not a bettor-edge one — exactly how a real book quotes a near-certain Over/Under.
         target = 1.0 + OU_MIN_MARGIN
         if iO + iU < target:
             if iO <= iU:
-                iO = min(MAX_PROB, target - iU)
+                iO = min(OU_MAX_PROB, target - iU)
             else:
-                iU = min(MAX_PROB, target - iO)
+                iU = min(OU_MAX_PROB, target - iO)
         leg = {}
         for _ in range(8):                      # rebuild + re-check after fraction rounding; nudge the underdog if a round trip dipped the book under 100%
             leg = {}
@@ -231,9 +235,9 @@ def goals_odds(comp_home, comp_away, lines=None):
             if (1.0 / leg["OVER"]["decimal"]) + (1.0 / leg["UNDER"]["decimal"]) > 1.0 + 1e-6:
                 break
             if iO <= iU:
-                iO = min(MAX_PROB, iO + 0.01)
+                iO = min(OU_MAX_PROB, iO + 0.01)
             else:
-                iU = min(MAX_PROB, iU + 0.01)
+                iU = min(OU_MAX_PROB, iU + 0.01)
         out[_line_key(L)] = leg                 # every OFFERED line overrounds and neither side beats the ladder
     return out
 

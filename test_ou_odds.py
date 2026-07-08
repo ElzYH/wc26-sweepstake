@@ -37,7 +37,7 @@ def rule_set(ch, ca):
     out = []
     for L in W.OU_LINES:
         pu = W._poisson_cdf(int(L), lam_)
-        if pu <= W.MAX_PROB and (1.0 - pu) <= W.MAX_PROB:
+        if pu <= W.OU_MAX_PROB and (1.0 - pu) <= W.OU_MAX_PROB:
             out.append(W._line_key(L))
     return out
 ck("even-game offered set matches the ladder rule (both fair sides <= 1/6-floor prob)",
@@ -54,11 +54,13 @@ ck("O/U 2.5 OVER in a realistic band (1.7-2.15)", 1.70 <= dec(ou25["OVER"]) <= 2
 ck("O/U 2.5 UNDER in a realistic band (1.7-2.15)", 1.70 <= dec(ou25["UNDER"]) <= 2.15, dec(ou25["UNDER"]))
 # O/U 0.5: Over (not 0-0) is ~93% fair for an even game -> it would beat the 1/6 price floor, so the
 # line simply is NOT offered any more (a capped near-certainty was a farmable bettor edge).
-ck("O/U 0.5 is not offered for an even game (Over side would beat the ladder)", "0.5" not in o, sorted(o))
+ck("0.5 for an even game: offered on the DEEP ladder (Over ~1/12-1/20, worse than any 1/6 favourite)",
+   ("0.5" not in o) or dec(o["0.5"]["OVER"]) <= 1.16, sorted(o) if "0.5" not in o else dec(o["0.5"]["OVER"]))
 # O/U 1.5 Over is the most common 'goals' bet — should sit roughly 1.25-1.6 for an even game.
 ck("O/U 1.5 OVER ~ 1.2-1.65", 1.20 <= dec(o["1.5"]["OVER"]) <= 1.65, dec(o["1.5"]["OVER"]))
 # 5.5 mirrors it on the Under side: ~95%+ fair for an even game -> not offered (was the classic farm line).
-ck("O/U 5.5 is not offered for an even game (Under side would beat the ladder)", "5.5" not in o, sorted(o))
+ck("5.5 for an even game: either filtered or its Under pays worse than the 1/6 favourite floor",
+   ("5.5" not in o) or dec(o["5.5"]["UNDER"]) <= 1.16, sorted(o) if "5.5" not in o else dec(o["5.5"]["UNDER"]))
 
 print("\n== bookmaker margin: EVERY offered line carries an overround (underround lines are filtered out) ==")
 # The goals book now only offers a line when its two-way book overrounds — so there is never a bettor edge,
@@ -130,11 +132,15 @@ ck("no offered line ever underrounds (house edge guaranteed)", under == 0, under
 ck("Over odds stay monotone in the line for every matchup", nonmono == 0, nonmono)
 # the most extreme possible mismatch: near-certain sides mean the outer lines vanish rather than gift value
 oe = W.goals_odds(100.0, 0.1)
-ck("extreme mismatch: 0.5 is not offered (Over is near-certain — nothing to farm)", "0.5" not in oe, sorted(oe))
+ck("extreme mismatch: 0.5 either filtered or house-positive on the deep ladder",
+   ("0.5" not in oe) or (1.0/dec(oe["0.5"]["OVER"]) + 1.0/dec(oe["0.5"]["UNDER"]) > 1.0), sorted(oe))
 ck("extreme mismatch: still at least 2 sensible lines offered", len(oe) >= 2, sorted(oe))
 # the 1/6 minimum-price floor (MAX_PROB) holds across the entire mismatch range — the new shortest-price rule
 shortest = min(min(dec(g[k]["OVER"]), dec(g[k]["UNDER"])) for ch in (0.1,1,12,34,50,73,100) for ca in (0.1,1,12,34,50,73,100) for g in [W.goals_odds(ch,ca)] for k in g)
-ck("no offered O/U price is ever shorter than the 1/6 floor", shortest >= 1.0 + 1.0/6 - 1e-6, round(shortest, 3))
+_floor_rung = min(1.0 + n / d for n, d in W._FRACTIONS if abs((1.0 + n / d) - 1.0 / W.OU_MAX_PROB) ==
+                  min(abs((1.0 + nn / dd) - 1.0 / W.OU_MAX_PROB) for nn, dd in W._FRACTIONS))
+ck("no offered O/U price is ever shorter than the ladder rung nearest the OU cap (1/14)",
+   shortest >= round(_floor_rung, 3) - 1e-9, (round(shortest, 4), round(_floor_rung, 4)))
 
 print("\n" + ("All O/U odds-model QA passed." if not fails else "O/U ODDS-MODEL QA FAILED (%d): %s" % (len(fails), ", ".join(fails))))
 import sys

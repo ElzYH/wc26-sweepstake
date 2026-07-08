@@ -47,11 +47,12 @@ import wager as _W2
 def _rule_ok(ch_, ca_):
     lam_ = _W2.expected_goals(ch_, ca_)
     want = [_W2._line_key(L) for L in _W2.OU_LINES
-            if _W2._poisson_cdf(int(L), lam_) <= _W2.MAX_PROB and (1.0 - _W2._poisson_cdf(int(L), lam_)) <= _W2.MAX_PROB]
+            if _W2._poisson_cdf(int(L), lam_) <= _W2.OU_MAX_PROB and (1.0 - _W2._poisson_cdf(int(L), lam_)) <= _W2.OU_MAX_PROB]
     return sorted(_W2.goals_odds(ch_, ca_).keys(), key=float) == want
 ck("the offered set matches the ladder rule exactly (filtered = would-be farm lines only)", _rule_ok(CH, CA) and _rule_ok(95.0, 1.0) and _rule_ok(50, 50), None)
-ck("a farm line (5.5 heavy favourite) is NOT offered and placing on it is rejected",
-   "5.5" not in W.goals_odds(95.0, 1.0) and not W.place([], "Erol", FUTURE, "UNDER", 5, 100, 95.0, 1.0, now=NOW, market="ou", line=5.5)[0], None)
+_off = [L for L in W.OU_LINES if W._line_key(L) not in W.goals_odds(95.0, 1.0)]
+ck("any rule-filtered line is rejected at placement (dynamic)",
+   (not _off) or (not W.place([], "Erol", FUTURE, "UNDER", 5, 100, 95.0, 1.0, now=NOW, market="ou", line=_off[0])[0]), _off)
 # a line that ISN'T on the ladder (e.g. 6.5) has no market and is rejected, not mispriced
 ok_n, msg_n = W.place([], "Erol", FUTURE, "OVER", 5, 100, CH, CA, now=NOW, market="ou", line=6.5)
 ck("an off-ladder line (6.5) is rejected (no such market)", not ok_n, msg_n if ok_n else None)

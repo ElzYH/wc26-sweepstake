@@ -116,19 +116,21 @@ for ch, ca in grid:
         n = int(float(key))
         p_under = W._poisson_cdf(n, lam)
         p_over = 1.0 - p_under
-        if p_under > W.MAX_PROB + 1e-9 or p_over > W.MAX_PROB + 1e-9:
+        if p_under > W.OU_MAX_PROB + 1e-9 or p_over > W.OU_MAX_PROB + 1e-9:
             farm_free = False
             ck("offered line %s on (%s,%s) has no capped-value side" % (key, ch, ca), False, (p_under, p_over))
         b = 1.0 / offered[key]["OVER"]["decimal"] + 1.0 / offered[key]["UNDER"]["decimal"]
         if not b > 1.0:
             farm_free = False
             ck("offered line %s on (%s,%s) overrounds" % (key, ch, ca), False, b)
-ck("NO offered O/U selection anywhere has fair probability above the 1/6 floor (nothing to farm)", farm_free)
-o = W.goals_odds(300, 30)
-ck("the Under-5.5 farm line is gone on a real heavy-favourite comp", "5.5" not in o, sorted(o))
-ck("the Over-0.5 mirror-farm line is gone too", "0.5" not in o, sorted(o))
-ck("placing on a filtered line is rejected", not W.place([], "Erol", M("Argentina", "Switzerland", "q1", stage="QUARTER_FINALS"),
-   "UNDER", 5, 1000, 300, 30, now=NOW, market="ou", line=5.5)[0], None)
+ck("NO offered O/U selection anywhere has fair probability above its deep-ladder cap (nothing to farm)", farm_free)
+o = W.goals_odds(95, 55)
+ck("a near-certain Under (4.5) pays WORSE than the favourites' 1/6 floor — likelier can't share the price",
+   "4.5" in o and o["4.5"]["UNDER"]["decimal"] < 1.0 + 1.0/6 - 1e-6, o.get("4.5", {}).get("UNDER"))
+_off = [L for L in W.OU_LINES if W._line_key(L) not in W.goals_odds(300, 30)]
+ck("any rule-filtered line is rejected at placement (dynamic)",
+   (not _off) or (not W.place([], "Erol", M("Argentina", "Switzerland", "q1", stage="QUARTER_FINALS"),
+   "UNDER", 5, 1000, 300, 30, now=NOW, market="ou", line=_off[0])[0]), _off)
 
 # ---------------------------------------------------------------- (D) exact-score market: balanced, no exploits
 print("\n=== (D) exact-score book is margin-heavy, partitioned, and has no punter-positive cell ===")
