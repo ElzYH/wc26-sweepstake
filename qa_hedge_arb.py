@@ -140,7 +140,7 @@ for ch, ca in [(50, 50), (95, 55), (200, 30), (30, 200), (1000, 1)]:
     lam = W.expected_goals(ch, ca); ph, pd, pa = W._fair_probs(ch, ca)
     share = min(0.85, max(0.15, ph + pd / 2.0)); lh, la = lam * share, lam * (1 - share)
     book = sum(1.0 / v["decimal"] for v in o.values())
-    if not (1.10 <= book <= 1.60):   # no bucket -> 100/1-floored tail cells fatten lopsided books to ~1.46 (house-side)
+    if not (1.10 <= book <= 1.85):   # 200/1-capped tail cells fatten the 0-9 book to ~1.7 — every cell still house-side; the real invariant is never-punter-positive below
         cs_ok = False; ck("cs book (%s,%s) in the margin band" % (ch, ca), False, book)
     fair_sum = 0.0  # noqa: kept for clarity
     for k, v in o.items():
@@ -205,6 +205,9 @@ W.place_acca(wv3, "Erol", [{"match": gm, "selection": "HOME", "comp_home": 90, "
 ck("an acca voids only while its EARLIEST leg is >2h away",
    not W.player_cancel(wv3, "Erol", wv3[0]["id"], {"sv1": gm, "sv2": gm2}, now=KO3 - 3600)[0]
    and W.player_cancel(wv3, "Erol", wv3[0]["id"], {"sv1": gm, "sv2": gm2}, now=NOW)[0], None)
+gml = dict(gm, status="IN_PLAY", utcDate=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(NOW - 1800)))
+wvl = [{"id": "lv1", "player": "Erol", "status": "pending", "matchId": "sv1", "stake": 5}]
+ck("a LIVE bet can never be self-voided", not W.player_cancel(wvl, "Erol", "lv1", {"sv1": gml}, now=NOW)[0], None)
 ck("missing fixture data refuses (never guesses a kick-off)",
    not W.player_cancel([{"id": "x1", "player": "Erol", "status": "pending", "matchId": "ghost", "stake": 5}],
                        "Erol", "x1", {}, now=NOW)[0], None)

@@ -1283,6 +1283,8 @@ def _bot_dm(user_id, text):
 
 def _pick_label(w, draw="the draw"):
     """Human label for a bet/leg in announcements — result (team/draw) or Over/Under goals."""
+    if (w.get("market") or "result") == "cs":
+        return "Exact score %s" % (w.get("selection") or "?")
     if (w.get("market") or "result") == "ou":
         try:
             return ("Over %g goals" if w.get("selection") == "OVER" else "Under %g goals") % float(w.get("line"))
@@ -4474,6 +4476,11 @@ class Handler(BaseHTTPRequestHandler):
             if ok:
                 update_now(load_config())            # refund shows on the board immediately
                 log("bet self-voided:", player, bid)
+                try:                                  # tell the group so a vanished bet isn't a mystery
+                    discord_send("\u21a9\ufe0f %s voided their %s-pt bet on %s \u2014 stake refunded (bets lock in 2h before kick-off)."
+                                % (player, ("%g" % _num(res.get("stake"))), _pick_label(res) if not res.get("legs") else ("a %d-fold acca" % len(res["legs"]))))
+                except Exception:
+                    pass
                 return self._send(200, json.dumps({"ok": True, "wager": res}))
             return self._send(400, json.dumps({"ok": False, "error": res}))
         if path == "/api/place_free_bet":          # OPEN (passcode-gated): claim today's free betting points (no match)

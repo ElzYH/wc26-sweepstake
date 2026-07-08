@@ -714,6 +714,10 @@ def place_free(wagers, player, match, selection, comp_home, comp_away, now=None)
 
 
 CS_OVERROUND = 1.22          # correct-score books run heavy margin at real bookies (120-135%); every cell is
+CS_DRAW_BOOST = 1.25         # independent Poissons starve the draw diagonal vs reality — boost h==a cells like a
+                             #   real book (shorter price = MORE house margin there, so it can only reduce exploitability)
+CS_MAX_DEC = 201.0           # longest exact-score price is 200/1 (real books cap ~150-250/1; 4-4 lands realistic,
+                             #   junk scores stop at 200/1 which is far above fair -> pure house-side)
 CS_GRID_MAX = 9              #   fair*1.22 so no selection is EVER punter-positive, and cells cap out ~20% implied,
                              #   nowhere near the 1/6 price floor -- the capped-value farm that hit O/U can't occur.
 
@@ -744,7 +748,9 @@ def cs_odds(comp_home, comp_away):
     for h in range(CS_GRID_MAX + 1):
         for a in range(CS_GRID_MAX + 1):
             p = _poisson_pmf(h, lh) * _poisson_pmf(a, la)
-            implied = min(MAX_PROB, max(1e-4, p * CS_OVERROUND))
+            if h == a:
+                p *= CS_DRAW_BOOST
+            implied = min(MAX_PROB, max(1.0 / CS_MAX_DEC, p * CS_OVERROUND))
             num, den = _floor_fraction(1.0 / implied)
             out["%d-%d" % (h, a)] = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
     # No 'Any other' bucket any more: the grid IS the market (0-0..6-6). Dropping the bucket only removes a
