@@ -180,6 +180,35 @@ wl5 = [dict(legacy)]
 W.settle(wl5, dict(mfin, homeScore=3, awayScore=2), now=NOW + 9000)
 ck("a LEGACY 'Any other' bet loses inside the old grid", wl5[0]["status"] == "lost", wl5[0].get("status"))
 
+# ---------------------------------------------------------------- (E) player self-void (>2h before kick-off)
+print("\n=== (E) players can void their own pending bets until 2h before kick-off — server-side clock ===")
+KO3 = NOW + 3 * 3600
+gm = {"id": "sv1", "home": "A", "away": "B", "stage": "QUARTER_FINALS", "status": "TIMED",
+      "utcDate": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(KO3)), "homeScore": None, "awayScore": None, "winner": None}
+mm = {"sv1": gm}
+wv = []
+W.place(wv, "Erol", gm, "HOME", 5, 1000, 90, 50, now=NOW)
+bid = wv[0]["id"]
+ck("wrong player can't void it", not W.player_cancel(wv, "Louis", bid, mm, now=NOW)[0], None)
+ck("own pending bet voids >2h out (stake refunded)",
+   W.player_cancel(wv, "Erol", bid, mm, now=NOW)[0] and wv[0]["status"] == "void" and wv[0]["return"] == 5.0
+   and wv[0].get("cancelled_by") == "player", wv[0].get("status"))
+ck("a voided bet can't be voided again", not W.player_cancel(wv, "Erol", bid, mm, now=NOW)[0], None)
+wv2 = []
+W.place(wv2, "Erol", gm, "HOME", 5, 1000, 90, 50, now=NOW)
+ck("too late inside the 2h window (even with a stale client)",
+   not W.player_cancel(wv2, "Erol", wv2[0]["id"], mm, now=KO3 - 3600)[0] and wv2[0]["status"] == "pending", None)
+gm2 = dict(gm, id="sv2", utcDate=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(NOW + 40 * 3600)))
+wv3 = []
+W.place_acca(wv3, "Erol", [{"match": gm, "selection": "HOME", "comp_home": 90, "comp_away": 50},
+                           {"match": gm2, "selection": "HOME", "comp_home": 90, "comp_away": 50}], 5, 1000, now=NOW)
+ck("an acca voids only while its EARLIEST leg is >2h away",
+   not W.player_cancel(wv3, "Erol", wv3[0]["id"], {"sv1": gm, "sv2": gm2}, now=KO3 - 3600)[0]
+   and W.player_cancel(wv3, "Erol", wv3[0]["id"], {"sv1": gm, "sv2": gm2}, now=NOW)[0], None)
+ck("missing fixture data refuses (never guesses a kick-off)",
+   not W.player_cancel([{"id": "x1", "player": "Erol", "status": "pending", "matchId": "ghost", "stake": 5}],
+                       "Erol", "x1", {}, now=NOW)[0], None)
+
 # ---------------------------------------------------------------- (B) admin on/off toggle
 print("\n=== (B) is switchable via BLOCK_OPPOSING_BETS (admin toggle) ===")
 _saved = W.BLOCK_OPPOSING_BETS

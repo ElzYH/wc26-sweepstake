@@ -877,6 +877,14 @@ function renderBets(){
   const csIn=s=>{ const mid=s.dataset.mid, h=el.querySelector('.csh[data-mid="'+mid+'"]'), a=el.querySelector('.csa[data-mid="'+mid+'"]');
     const c=v=>Math.max(0,Math.min(9,parseInt(v,10)||0)); CSPICK[mid]=c(h?h.value:1)+'-'+c(a?a.value:0); BETMSG=''; renderBets(); };
   el.querySelectorAll('.csh,.csa').forEach(s=>s.onchange=()=>csIn(s));
+  el.querySelectorAll('.voidbet').forEach(b=>b.onclick=async()=>{
+    if(!confirm('Void this bet and get your stake back? Bets lock in 2 hours before kick-off.')) return;
+    const pin=getBetPin(BETPLAYER)||BETPIN_DRAFT||'';
+    try{ const j=await fetch('/api/cancel_bet',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({player:BETPLAYER,id:b.dataset.bid,pin:pin})}).then(r=>r.json());
+      BETMSG=j.ok?'✓ Bet voided — stake refunded.':(j.error||'Could not void that bet.');
+    }catch(e){ BETMSG='Could not void that bet.'; }
+    await load(); renderBets(); });
   el.querySelectorAll('.betodd').forEach(b=>b.onclick=()=>{
     const mid=b.dataset.mid, sel=b.dataset.sel, frac=b.dataset.frac;
     const market=b.dataset.market||'result', line=(b.dataset.line!=null && b.dataset.line!=='')?parseFloat(b.dataset.line):null;
@@ -1044,7 +1052,13 @@ function betCardHTML(w, opts){
     } else if(isL){ liveBit=' · <span style="color:#ff6b6b">🔴 LIVE</span>'; }
     body='<div style="font-weight:600;font-size:13.5px">'+who+esc(pick)+' <span style="color:var(--gold)">'+w.frac+'</span></div><div style="color:var(--muted);font-size:12px">'+esc(w.home)+' v '+esc(w.away)+liveBit+'</div>';
   }
-  const outcome=w.status==='won'?('+'+Math.round((w.return-w.stake)*100)/100+' pts'):(w.status==='lost'?('−'+w.stake+' pts'):(w.status==='void'?'refunded':'→ '+w.return+' back if it wins · '+w.stake+' stake + '+(Math.round((w.return-w.stake)*100)/100)+' winnings'));
+  let voidBtn='';
+  if(w.status==='pending'&&opts&&opts.fixById&&!opts.showPlayer&&w.player===BETPLAYER){
+    const kos=(w.legs||[w]).map(l=>{const f=opts.fixById[l.matchId]; return f&&f.utcDate?Date.parse(f.utcDate):NaN;});
+    if(kos.every(t=>!isNaN(t))&&Date.now()<Math.min.apply(null,kos)-2*3600*1000)
+      voidBtn=' <button class="voidbet" data-bid="'+esc(w.id||'')+'" style="margin-left:8px;background:none;border:1px solid var(--line);border-radius:8px;color:#ff9a9a;font-size:11px;padding:3px 8px;cursor:pointer">Void bet</button>';
+  }
+  const outcome=(w.status==='won'?('+'+Math.round((w.return-w.stake)*100)/100+' pts'):(w.status==='lost'?('−'+w.stake+' pts'):(w.status==='void'?'refunded':'→ '+w.return+' back if it wins · '+w.stake+' stake + '+(Math.round((w.return-w.stake)*100)/100)+' winnings')))+voidBtn;
   return '<div style="border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:6px"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'
     +'<div style="flex:1;min-width:0">'+body+'</div>'
     +'<div style="text-align:right;white-space:nowrap"><span style="color:'+tg[0]+';font-weight:700;font-size:11px">'+tg[1]+'</span><div style="font-size:12.5px">stake <b>'+w.stake+'</b></div><div style="color:'+tg[0]+';font-size:12.5px;font-weight:600">'+outcome+'</div></div>'

@@ -4450,6 +4450,32 @@ class Handler(BaseHTTPRequestHandler):
                 _announce_bet(player, res)
                 return self._send(200, json.dumps({"ok": True, "wager": res}))
             return self._send(400, json.dumps({"ok": False, "error": res}))
+        if path == "/api/cancel_bet":               # PLAYER self-void: own pending bet, >2h before kick-off (server-enforced)
+            player = str(body.get("player", "")).strip()
+            bid = str(body.get("id", "")).strip()[:64]
+            if player not in players or not bid:
+                return self._send(400, json.dumps({"ok": False, "error": "Pick a valid player and bet."}))
+            if not cfg.get("wager_locked"):
+                if not _wager_pins():
+                    return self._send(400, json.dumps({"ok": False, "error": "Betting passcodes aren't set up yet — ask the organiser."}))
+                if not self._authed_as(player, body):
+                    return self._send(403, json.dumps({"ok": False, "bad_pin": True, "error": "Wrong bet passcode for %s." % player}))
+            elif not self._is_admin(body):
+                return self._send(403, json.dumps({"ok": False, "error": "Betting is organiser-locked."}))
+            with _lock:
+                try:
+                    mmap = {wager_mod.match_id(m): m for m in json.load(open("results.json")).get("matches", [])}
+                except Exception:
+                    mmap = {}
+                wlist = load_wagers()
+                ok, res = wager_mod.player_cancel(wlist, player, bid, mmap)
+                if ok:
+                    save_wagers(wlist)
+            if ok:
+                update_now(load_config())            # refund shows on the board immediately
+                log("bet self-voided:", player, bid)
+                return self._send(200, json.dumps({"ok": True, "wager": res}))
+            return self._send(400, json.dumps({"ok": False, "error": res}))
         if path == "/api/place_free_bet":          # OPEN (passcode-gated): claim today's free betting points (no match)
             cfg = load_config()
             if not cfg.get("wagering_enabled") or wager_mod is None:

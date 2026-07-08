@@ -364,6 +364,43 @@ def _num(x, default=0.0):
     return v
 
 
+CANCEL_CUTOFF_S = 2 * 3600   # players can void their own pending bets until this long before kick-off
+
+
+def player_cancel(wagers, player, bet_id, matches_by_id, now=None):
+    """A player voids their OWN pending bet, up to CANCEL_CUTOFF_S before kick-off (the EARLIEST leg for an
+    acca). The cutoff is enforced HERE against the fixture's utcDate — server-side truth, so no stale page,
+    cached clock or replayed request can slip a late void through. Refund uses standard void semantics
+    (stake back; voids never count against the budget; board/cushion recompute). Admin cancel stays a
+    separate, unrestricted path. Mutates the record in place; returns (ok, wager_or_error)."""
+    now = time.time() if now is None else now
+    w = next((x for x in (wagers or []) if isinstance(x, dict) and x.get("id") == bet_id), None)
+    if not w:
+        return False, "That bet could not be found."
+    if w.get("player") != player:
+        return False, "That bet isn't yours."
+    if w.get("credit"):
+        return False, "That's not a bet."
+    if w.get("status") != "pending":
+        return False, "That bet has already settled — too late to void."
+    kos = []
+    for lg in (w.get("legs") or [w]):
+        m = (matches_by_id or {}).get(lg.get("matchId"))
+        ts = _utc_ts((m or {}).get("utcDate") or "")
+        if ts is None:
+            return False, "Can't verify kick-off for this bet — ask the organiser to void it."
+        kos.append(ts)
+    if now > min(kos) - CANCEL_CUTOFF_S:
+        return False, "Too late to void — bets lock in 2 hours before kick-off."
+    w["status"] = "void"
+    w["return"] = _num(w.get("stake"))
+    w["settled_at"] = int(now)
+    w["cancelled_by"] = "player"
+    for lg in (w.get("legs") or []):
+        lg["result"] = "void"
+    return True, w
+
+
 def player_deltas(wagers):
     """Per-player effect of the wager log: settled profit/loss, points held in open bets, open count.
     Defensive: a malformed record (not a dict, missing/blank player, non-numeric stake/return) is skipped
