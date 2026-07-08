@@ -877,14 +877,6 @@ function renderBets(){
   const csIn=s=>{ const mid=s.dataset.mid, h=el.querySelector('.csh[data-mid="'+mid+'"]'), a=el.querySelector('.csa[data-mid="'+mid+'"]');
     const c=v=>Math.max(0,Math.min(9,parseInt(v,10)||0)); CSPICK[mid]=c(h?h.value:1)+'-'+c(a?a.value:0); BETMSG=''; renderBets(); };
   el.querySelectorAll('.csh,.csa').forEach(s=>s.onchange=()=>csIn(s));
-  el.querySelectorAll('.voidbet').forEach(b=>b.onclick=async()=>{
-    if(!confirm('Void this bet and get your stake back? Bets lock in 2 hours before kick-off.')) return;
-    const pin=getBetPin(BETPLAYER)||BETPIN_DRAFT||'';
-    try{ const j=await fetch('/api/cancel_bet',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({player:BETPLAYER,id:b.dataset.bid,pin:pin})}).then(r=>r.json());
-      BETMSG=j.ok?'✓ Bet voided — stake refunded.':(j.error||'Could not void that bet.');
-    }catch(e){ BETMSG='Could not void that bet.'; }
-    await load(); renderBets(); });
   el.querySelectorAll('.betodd').forEach(b=>b.onclick=()=>{
     const mid=b.dataset.mid, sel=b.dataset.sel, frac=b.dataset.frac;
     const market=b.dataset.market||'result', line=(b.dataset.line!=null && b.dataset.line!=='')?parseFloat(b.dataset.line):null;

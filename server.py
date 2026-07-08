@@ -4453,36 +4453,51 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, json.dumps({"ok": True, "wager": res}))
             return self._send(400, json.dumps({"ok": False, "error": res}))
         if path == "/api/cancel_bet":               # PLAYER self-void: own pending bet, >2h before kick-off (server-enforced)
+            cfg = load_config()
+            if not cfg.get("wagering_enabled") or wager_mod is None:
+                return self._send(400, json.dumps({"ok": False, "error": "Betting isn't switched on."}))
             player = str(body.get("player", "")).strip()
             bid = str(body.get("id", "")).strip()[:64]
-            if player not in players or not bid:
+            if not player or not bid:
                 return self._send(400, json.dumps({"ok": False, "error": "Pick a valid player and bet."}))
-            if not cfg.get("wager_locked"):
-                if not _wager_pins():
-                    return self._send(400, json.dumps({"ok": False, "error": "Betting passcodes aren't set up yet — ask the organiser."}))
-                if not self._authed_as(player, body):
-                    return self._send(403, json.dumps({"ok": False, "bad_pin": True, "error": "Wrong bet passcode for %s." % player}))
-            elif not self._is_admin(body):
-                return self._send(403, json.dumps({"ok": False, "error": "Betting is organiser-locked."}))
+            if cfg.get("wager_locked"):
+                if not key_ok(body):
+                    return self._send(403, json.dumps({"ok": False, "need_key": True, "error": "Betting is locked to the organiser."}))
+            elif not self._authed_as(player, body):
+                return self._send(403, json.dumps({"ok": False, "bad_pin": True, "error": "Wrong bet passcode for %s." % (player or "?")}))
+            try:
+                _matches = json.load(open("results.json")).get("matches", [])
+            except Exception:
+                _matches = []
             with _lock:
-                try:
-                    mmap = {wager_mod.match_id(m): m for m in json.load(open("results.json")).get("matches", [])}
-                except Exception:
-                    mmap = {}
-                wlist = load_wagers()
-                ok, res = wager_mod.player_cancel(wlist, player, bid, mmap)
-                if ok:
-                    save_wagers(wlist)
-            if ok:
-                update_now(load_config())            # refund shows on the board immediately
-                log("bet self-voided:", player, bid)
-                try:                                  # tell the group so a vanished bet isn't a mystery
-                    discord_send("\u21a9\ufe0f %s voided their %s-pt bet on %s \u2014 stake refunded (bets lock in 2h before kick-off)."
-                                % (player, ("%g" % _num(res.get("stake"))), _pick_label(res) if not res.get("legs") else ("a %d-fold acca" % len(res["legs"]))))
-                except Exception:
-                    pass
-                return self._send(200, json.dumps({"ok": True, "wager": res}))
-            return self._send(400, json.dumps({"ok": False, "error": res}))
+                wl = load_wagers()
+                w = next((x for x in wl if x.get("id") == bid and x.get("status") == "pending"
+                          and not x.get("credit") and x.get("player") == player), None)
+                if not w:
+                    return self._send(404, json.dumps({"ok": False, "error": "No open bet of yours with that id (it may have settled)."}))
+                # 2-hour cut-off, checked server-side against the EARLIEST leg's kick-off — the only difference from admin void
+                kos = []
+                for lg in (w.get("legs") or [w]):
+                    m = next((mm for mm in _matches if wager_mod.match_id(mm) == lg.get("matchId")), None)
+                    ts = wager_mod._utc_ts((m or {}).get("utcDate") or "")
+                    if ts is not None:
+                        kos.append(ts)
+                if not kos:
+                    return self._send(400, json.dumps({"ok": False, "error": "Can't verify kick-off for this bet — ask the organiser to void it."}))
+                if time.time() > min(kos) - 2 * 3600:
+                    return self._send(400, json.dumps({"ok": False, "error": "Too late to void — bets lock 2 hours before kick-off."}))
+                w["status"] = "void"; w["settled_at"] = time.time(); w["cancelled_by"] = "player"
+                for lg in (w.get("legs") or []):
+                    lg["result"] = "void"
+                save_wagers(wl)
+            update_now(load_config())                # refund shows on the board immediately
+            log("bet self-voided:", player, bid)
+            try:
+                discord_send("\u21a9\ufe0f %s voided their %s-pt bet on %s \u2014 stake refunded (bets lock 2h before kick-off)."
+                             % (player, ("%g" % (w.get("stake") or 0)), _pick_label(w) if not w.get("legs") else ("a %d-fold acca" % len(w["legs"]))))
+            except Exception:
+                pass
+            return self._send(200, json.dumps({"ok": True, "wager": w}))
         if path == "/api/place_free_bet":          # OPEN (passcode-gated): claim today's free betting points (no match)
             cfg = load_config()
             if not cfg.get("wagering_enabled") or wager_mod is None:
