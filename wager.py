@@ -546,8 +546,8 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
         return False, "That game could not be found."
     market = (str(market or "result")).lower()
     if market == "cs":
-        if not isinstance(selection, str) or not (selection == "OTHER" or re.fullmatch(r"[0-%d]-[0-%d]" % (CS_GRID_MAX, CS_GRID_MAX), selection)):
-            return False, "Pick a scoreline (or Any other score)."
+        if not isinstance(selection, str) or not re.fullmatch(r"[0-%d]-[0-%d]" % (CS_GRID_MAX, CS_GRID_MAX), selection):
+            return False, "Pick a scoreline — home goals then away, each 0-%d." % CS_GRID_MAX
         # exact-score cells are mutually exclusive + margin-protected, so the no-hedging block doesn't apply
     elif market == "ou":
         if selection not in ("OVER", "UNDER"):
@@ -656,7 +656,7 @@ def place_free(wagers, player, match, selection, comp_home, comp_away, now=None)
 
 
 CS_OVERROUND = 1.22          # correct-score books run heavy margin at real bookies (120-135%); every cell is
-CS_GRID_MAX = 4              #   fair*1.22 so no selection is EVER punter-positive, and cells cap out ~20% implied,
+CS_GRID_MAX = 6              #   fair*1.22 so no selection is EVER punter-positive, and cells cap out ~20% implied,
                              #   nowhere near the 1/6 price floor -- the capped-value farm that hit O/U can't occur.
 
 
@@ -683,28 +683,27 @@ def cs_odds(comp_home, comp_away):
     share = min(0.85, max(0.15, ph + pd / 2.0))     # home goal share, kept off the rails
     lh, la = lam * share, lam * (1.0 - share)
     out = {}
-    other = 1.0
     for h in range(CS_GRID_MAX + 1):
         for a in range(CS_GRID_MAX + 1):
             p = _poisson_pmf(h, lh) * _poisson_pmf(a, la)
-            other -= p
             implied = min(MAX_PROB, max(1e-4, p * CS_OVERROUND))
             num, den = _nearest_fraction(1.0 / implied)
             out["%d-%d" % (h, a)] = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
-    implied = min(MAX_PROB, max(1e-4, max(0.0, other) * CS_OVERROUND))
-    num, den = _nearest_fraction(1.0 / implied)
-    out["OTHER"] = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
+    # No 'Any other' bucket any more: the grid IS the market (0-0..6-6). Dropping the bucket only removes a
+    # bettable selection, so the remaining book keeps every cell at fair*1.22 — dutching any subset still loses.
     return out
 
 
 def _cs_result(selection, match):
-    """won/lost for an exact-score pick against the FINAL score (extra time included, pens excluded)."""
+    """won/lost for an exact-score pick against the FINAL score (extra time included, pens excluded).
+    Legacy 'OTHER' bets (bought when the grid was 0-4 + a bucket) keep their ORIGINAL terms: they win on
+    any score outside that 0-4 grid — new bets are exact scorelines only."""
     hs, as_ = match.get("homeScore"), match.get("awayScore")
     if hs is None or as_ is None:
         return None
-    in_grid = (0 <= int(hs) <= CS_GRID_MAX) and (0 <= int(as_) <= CS_GRID_MAX)
-    actual = ("%d-%d" % (int(hs), int(as_))) if in_grid else "OTHER"
-    return "won" if selection == actual else "lost"
+    if selection == "OTHER":
+        return "won" if (int(hs) > 4 or int(as_) > 4) else "lost"
+    return "won" if selection == ("%d-%d" % (int(hs), int(as_))) else "lost"
 
 
 def _match_total(match):

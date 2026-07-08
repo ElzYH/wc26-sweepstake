@@ -140,18 +140,15 @@ for ch, ca in [(50, 50), (95, 55), (200, 30), (30, 200), (1000, 1)]:
     lam = W.expected_goals(ch, ca); ph, pd, pa = W._fair_probs(ch, ca)
     share = min(0.85, max(0.15, ph + pd / 2.0)); lh, la = lam * share, lam * (1 - share)
     book = sum(1.0 / v["decimal"] for v in o.values())
-    if not (1.12 <= book <= 1.45):
+    if not (1.10 <= book <= 1.60):   # no bucket -> 100/1-floored tail cells fatten lopsided books to ~1.46 (house-side)
         cs_ok = False; ck("cs book (%s,%s) in the margin band" % (ch, ca), False, book)
-    fair_sum = 0.0
+    fair_sum = 0.0  # noqa: kept for clarity
     for k, v in o.items():
-        if k == "OTHER":
-            fair = max(0.0, 1.0 - fair_sum)
-        else:
-            h, a = k.split("-"); fair = W._poisson_pmf(int(h), lh) * W._poisson_pmf(int(a), la); fair_sum += fair
+        h, a = k.split("-"); fair = W._poisson_pmf(int(h), lh) * W._poisson_pmf(int(a), la); fair_sum += fair
         if (1.0 / v["decimal"]) < fair * 0.995:                       # punter edge on a cell = exploit
             cs_ok = False; ck("cs cell %s (%s,%s) is never punter-positive" % (k, ch, ca), False, (fair, v["decimal"]))
-    if "OTHER" not in o or len(o) != (W.CS_GRID_MAX + 1) ** 2 + 1:
-        cs_ok = False; ck("cs grid partitions all outcomes (%s,%s)" % (ch, ca), False, len(o))
+    if "OTHER" in o or len(o) != (W.CS_GRID_MAX + 1) ** 2:
+        cs_ok = False; ck("cs board is the full 0-%d grid with no bucket (%s,%s)" % (W.CS_GRID_MAX, ch, ca), False, len(o))
 ck("every cs cell across the grid carries house margin (dutching all cells guarantees a loss)", cs_ok)
 g1cs = M("France", "Morocco", "cs1", stage="QUARTER_FINALS")
 wl = []
@@ -170,10 +167,18 @@ wl2 = [_cp.deepcopy(wl[0])]; W.settle(wl2, mfin, now=NOW + 9000)
 ck("cs settles won on the exact score", wl2[0]["status"] == "won" and wl2[0]["return"] > 5, wl2[0].get("status"))
 wl3 = [_cp.deepcopy(wl[0])]; W.settle(wl3, dict(mfin, homeScore=1, awayScore=2, winner="AWAY"), now=NOW + 9000)
 ck("cs loses on any other score", wl3[0]["status"] == "lost", wl3[0].get("status"))
-wl4 = []
-W.place(wl4, "Erol", g1cs, "OTHER", 5, 1000, 95, 55, now=NOW, market="cs")
+ck("new OTHER placements are rejected (bucket retired)",
+   not W.place([], "Erol", g1cs, "OTHER", 5, 1000, 95, 55, now=NOW, market="cs")[0], None)
+ok51, w51 = W.place([], "Erol", g1cs, "5-1", 5, 1000, 95, 55, now=NOW, market="cs")
+ck("wide scores (5-1) are now bettable on the 0-6 grid", ok51 and w51.get("frac"), w51 if not ok51 else None)
+legacy = {"id": "lg1", "player": "Erol", "matchId": "cs1", "selection": "OTHER", "market": "cs",
+          "stake": 5.0, "num": 16, "den": 1, "frac": "16/1", "return": 85.0, "status": "pending", "placed_at": NOW}
+wl4 = [dict(legacy)]
 W.settle(wl4, dict(mfin, homeScore=6, awayScore=0), now=NOW + 9000)
-ck("OTHER wins outside the grid", wl4[0]["status"] == "won", wl4[0].get("status"))
+ck("a LEGACY 'Any other' bet still wins on its original terms (outside the old 0-4 grid)", wl4[0]["status"] == "won", wl4[0].get("status"))
+wl5 = [dict(legacy)]
+W.settle(wl5, dict(mfin, homeScore=3, awayScore=2), now=NOW + 9000)
+ck("a LEGACY 'Any other' bet loses inside the old grid", wl5[0]["status"] == "lost", wl5[0].get("status"))
 
 # ---------------------------------------------------------------- (B) admin on/off toggle
 print("\n=== (B) is switchable via BLOCK_OPPOSING_BETS (admin toggle) ===")
