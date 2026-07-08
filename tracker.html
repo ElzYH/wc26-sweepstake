@@ -1198,6 +1198,15 @@ async function loadMyBets(){
         +'<div style="padding:8px 0 4px">'+done.map(w=>betCardHTML(w,{live:live,fixById:fixById})).join('')+'</div></details>';
     }
     box.innerHTML=html;
+    box.querySelectorAll('.voidbet').forEach(b=>b.onclick=async()=>{
+      if(!confirm('Void this bet and get your stake back? Bets lock in 2 hours before kick-off.')) return;
+      b.disabled=true; b.textContent='Voiding…';
+      const pin=getBetPin(BETPLAYER)||BETPIN_DRAFT||'';
+      try{ const j=await fetch('/api/cancel_bet',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({player:BETPLAYER,id:b.dataset.bid,pin:pin})}).then(r=>r.json());
+        BETMSG=j.ok?'✓ Bet voided — stake refunded.':(j.error||'Could not void that bet.');
+      }catch(e){ BETMSG='Could not void that bet.'; }
+      await load(); renderBets(); loadMyBets(); });
     const myd=document.getElementById('mySettled');
     if(myd){ myd.ontoggle=()=>{ MYSETTLED=myd.open; }; }
   }catch(e){ box.innerHTML='<div class="empty">Could not load your bets.</div>'; }
