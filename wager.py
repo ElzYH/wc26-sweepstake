@@ -823,7 +823,7 @@ def _cs_result(selection, match):
 
 
 # ---- Handicap (goal-margin) market — the SAME Poisson grid as the exact-score book -------------
-HC_OVERROUND = 1.13          # same margin class as the O/U goals book (a touch above the 1X2's 1.08)
+HC_OVERROUND = 1.15          # same margin class as the O/U goals book (a touch above the 1X2's 1.08)
 HC_MIN_MARGIN = 0.02         # minimum book overround on any offered line (a capped near-certainty still has an edge)
 HC_MAX_PROB = 0.93           # deep price ladder like O/U (shortest ~1/13); beyond it the line is NOT offered
 HC_LINES = [-3.5, -2.5, -1.5, 1.5, 2.5, 3.5]   # HOME-team half-lines only -> a bet can never push. ±0.5 is
@@ -946,7 +946,7 @@ def _hc_result(line, selection, match):
 
 # ---------------------------------------------------------------- method of victory (knockouts only)
 MOV_SELECTIONS = ("HOME_REG", "HOME_ET", "HOME_PENS", "AWAY_REG", "AWAY_ET", "AWAY_PENS")
-MOV_OVERROUND = 1.22        # 6-way book, margined like the exact-score grid
+MOV_OVERROUND = 1.25        # 6-way book, margined like the exact-score grid
 MOV_MAX_PROB = 0.857        # a 6-way outcome is never near-certain, but cap it like the result book anyway
 MOV_MIN_MARGIN = 0.04
 MOV_P_LEVEL_ET = 0.45       # P(a level-after-90 knockout is STILL level after extra time) — ET is short + cagey
@@ -1080,7 +1080,7 @@ def _mov_result(selection, match):
 CARDS_LINES = [2.5, 3.5, 4.5, 5.5, 6.5]
 CARDS_BASE = 4.6            # expected total 90' bookings in a World Cup game — flat prior, margin does the work
 CARDS_KO_BUMP = 0.6         # knockouts are spikier (tactical fouls, stakes)
-CARDS_OVERROUND = 1.13
+CARDS_OVERROUND = 1.17
 CARDS_MAX_PROB = 0.93
 CARDS_MIN_MARGIN = 0.02
 CARDS_GRID_MAX = 25
@@ -1174,7 +1174,7 @@ def _cards_result(line, selection, match):
 
 
 # ---------------------------------------------------------------- both teams to score (works on EVERY feed tier)
-BTTS_OVERROUND = 1.17
+BTTS_OVERROUND = 1.25
 BTTS_MAX_PROB = 0.93
 BTTS_MIN_MARGIN = 0.04
 
