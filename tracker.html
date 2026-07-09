@@ -360,7 +360,13 @@
   .mshRow{display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:3px 0}
   .mshClose{position:sticky;top:0;float:right;background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:6px 12px;cursor:pointer;font-family:'Sora',sans-serif}
 
-  </style>
+  
+@media (max-width:640px){
+.betrow{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}
+.voidbet{margin-top:6px;width:100%}
+}
+
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -1214,7 +1220,7 @@ function betCardHTML(w, opts){
   if(w.status==='pending'&&opts&&opts.fixById&&!opts.showPlayer&&w.player===BETPLAYER&&w.id){
     const fb=opts.fixById, kos=(w.legs||[w]).map(l=>{const f=fb.get?fb.get(l.matchId):fb[l.matchId]; return f&&f.utcDate?Date.parse(f.utcDate):NaN;});
     if(kos.every(t=>!isNaN(t))&&Date.now()<Math.min.apply(null,kos)-2*3600*1000)
-      voidBtn=' <button class="voidbet" data-id="'+esc(w.id)+'" style="margin-left:8px;background:none;border:1px solid var(--line);border-radius:8px;color:#ff9a9a;font-size:11px;padding:3px 9px;cursor:pointer">Void</button>';
+      voidBtn=' <button class="voidbet" data-id="'+esc(w.id)+'" style="background:none;border:1px solid var(--line);border-radius:8px;color:#ff9a9a;font-size:11px;padding:3px 9px;cursor:pointer">Void</button>';
   }
   const outcome=(w.status==='won'?('+'+Math.round((w.return-w.stake)*100)/100+' pts'):(w.status==='lost'?('−'+w.stake+' pts'):(w.status==='void'?'refunded':'→ '+w.return+' back if it wins · '+w.stake+' stake + '+(Math.round((w.return-w.stake)*100)/100)+' winnings')))+voidBtn;
   return '<div style="border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:6px"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'
