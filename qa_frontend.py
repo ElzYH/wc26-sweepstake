@@ -92,7 +92,7 @@ try:
             elif HTML[j] == "}":
                 depth -= 1
                 if depth == 0: return HTML[s:j + 1]
-    _fns = "\n".join(_g(n) for n in ["samePick", "ouLineFor", "ouRowHTML"])
+    _fns = "\n".join(_g(n) for n in ["samePick", "ouLineFor", "ouBtnsHTML", "ouRowHTML"])
     _js = ("const esc=s=>String(s);const OULINE={};let ACCAMODE=false,ACCA=[],BETPICK=null;\n" + _fns + """
     const m={matchId:'M1',home:'Brazil',away:'Serbia',ouOdds:{'2.5':{OVER:{frac:'5/6'},UNDER:{frac:'8/11'}},'3.5':{OVER:{frac:'9/4'},UNDER:{frac:'1/5'}}}};
     const r=ouRowHTML(m);
@@ -105,6 +105,55 @@ try:
     ck("samePick treats different lines as different picks", _r["sameTrue"] and _r["lineMatters"], _r)
 except Exception as _e:
     ck("O/U UI cross-check ran", False, str(_e)[:140])
+
+print("\n== line/score changes patch prices IN PLACE (the iOS Safari picker-crash regression) ==")
+# THE BUG: calling renderBets() from a <select>'s onchange (or a focused score input's handler) replaces
+# el.innerHTML while iOS Safari's wheel picker / keyboard is still attached to that control — WebKit kills
+# the page ("a problem repeatedly occurred"). The fix: onchange only rewrites the sibling price buttons.
+import re as _re
+def _handler(cls):
+    i = HTML.index("querySelectorAll('." + cls + "')")
+    return HTML[i:HTML.index("});", i) + 3]
+for _cls in ("ouline", "hcline"):
+    _h = _handler(_cls)
+    ck("." + _cls + " onchange NEVER calls renderBets (would destroy the open picker)", "renderBets(" not in _h, _h[:120])
+    ck("." + _cls + " onchange patches the price buttons in place", "patchBtns(" in _h, _h[:120])
+_ci = HTML.index("const csIn=")
+_cs = HTML[_ci:HTML.index("function bindOdd", _ci)]   # csIn + the input bindings, before the shared click handler
+ck("the exact-score inputs NEVER trigger renderBets (would rebuild the input being typed in)", "renderBets(" not in _cs, _cs[:160])
+ck("the exact-score inputs patch just the price button (.csout)", "patchBtns(mid,'csout'" in _cs.replace(" ", ""), None)
+ck("price-button containers exist to patch into", all(('class="' + c + '"') in HTML for c in ("oubtns", "hcbtns", "csout")), None)
+ck("rebuilt buttons are re-bound via a shared bindOdd", "function bindOdd(b)" in HTML and "forEach(bindOdd)" in HTML and "box.querySelectorAll('.betodd').forEach(bindOdd)" in HTML, None)
+try:
+    import subprocess as _sp7
+    def _g7(nm):
+        s = HTML.index("function " + nm); i = HTML.index("{", s); depth = 0
+        for j in range(i, len(HTML)):
+            if HTML[j] == "{": depth += 1
+            elif HTML[j] == "}":
+                depth -= 1
+                if depth == 0: return HTML[s:j + 1]
+    _fns = "\n".join(_g7(n) for n in ["samePick", "fmtHc", "hcLineFor", "hcBtnsHTML", "hcRowHTML", "csBtnHTML", "csRowHTML"])
+    _js = ("const esc=s=>String(s);const HCLINE={};const CSPICK={};let ACCAMODE=false,ACCA=[],BETPICK=null;\n" + _fns + """
+    const m={matchId:'M1',home:'Brazil',away:'Serbia',
+      hcOdds:{'-2.5':{HOME:{frac:'5/2'},AWAY:{frac:'1/5'}},'-1.5':{HOME:{frac:'5/6'},AWAY:{frac:'4/6'}}},
+      csOdds:{'1-0':{frac:'6/1'},'2-0':{frac:'9/1'}}};
+    const row=hcRowHTML(m);
+    HCLINE['M1']='-2.5'; const b2=hcBtnsHTML(m);           // the in-place rebuild after a line change
+    CSPICK['M1']='2-0';  const cs2=csBtnHTML(m);
+    CSPICK['M1']='7-7';  const cs3=csBtnHTML(m);           // no such cell -> hint, not a broken button
+    console.log(JSON.stringify({
+      def:row.includes('value="-1.5" selected')&&row.includes('Brazil -1.5 <b>5/6</b>')&&row.includes('Serbia +1.5 <b>4/6</b>'),
+      wrap:row.includes('class="hcbtns" data-mid="M1"'),
+      swap:b2.includes('Brazil -2.5 <b>5/2</b>')&&b2.includes('Serbia +2.5 <b>1/5</b>'),
+      cs:cs2.includes('2-0 <b>9/1</b>'), csHint:cs3.includes('scores 0')}));""")
+    open("/tmp/_hc.js", "w").write(_js)
+    _r = json.loads(_sp7.run(["node", "/tmp/_hc.js"], capture_output=True, text=True).stdout.strip())
+    ck("handicap row defaults to -1.5 with mirrored button labels", _r["def"] and _r["wrap"], _r)
+    ck("a line change rebuilds both buttons at the new prices (in place)", _r["swap"], _r)
+    ck("a score change rebuilds the exact-score button (and falls back to the hint off-grid)", _r["cs"] and _r["csHint"], _r)
+except Exception as _e:
+    ck("handicap/exact-score UI cross-check ran", False, str(_e)[:140])
 
 print("\n== bet cards show the score (live + frozen at FT) ==")
 ck("acca legs show the score (live + frozen FT), not just a dot", "FT '+sc+'</span>" in HTML and "🔴 '+sc+'</span>" in HTML, None)
@@ -327,8 +376,8 @@ except Exception as _e:
 
 # ---- bet-slip selection model: tap=select, re-tap=remove, 2nd game=auto-acca, down-to-1=single ----
 print("\n== bet-slip selection model (.betodd click) ==")
-_s = HTML.index("querySelectorAll('.betodd').forEach(b=>b.onclick=()=>{")
-_i = HTML.index("{", _s); _d = 0; _j = _i
+_s = HTML.index("function bindOdd(b){ b.onclick=()=>{")
+_i = HTML.index("{", HTML.index("=()=>", _s)); _d = 0; _j = _i
 while _j < len(HTML):
     if HTML[_j] == "{": _d += 1
     elif HTML[_j] == "}":

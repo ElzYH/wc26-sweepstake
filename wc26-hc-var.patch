@@ -45,6 +45,86 @@ index 7298126..5640368 100644
  say "Betting QA (void lifecycle, mid-game/last-min void, accas, sequencing, free-points)"
  if python3 qa_betting.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_betting.py | tail -20; FAIL=1; fi
  
+diff --git a/qa_frontend.py b/qa_frontend.py
+index d64369a..cbfc0bf 100644
+--- a/qa_frontend.py
++++ b/qa_frontend.py
+@@ -92,7 +92,7 @@ try:
+             elif HTML[j] == "}":
+                 depth -= 1
+                 if depth == 0: return HTML[s:j + 1]
+-    _fns = "\n".join(_g(n) for n in ["samePick", "ouLineFor", "ouRowHTML"])
++    _fns = "\n".join(_g(n) for n in ["samePick", "ouLineFor", "ouBtnsHTML", "ouRowHTML"])
+     _js = ("const esc=s=>String(s);const OULINE={};let ACCAMODE=false,ACCA=[],BETPICK=null;\n" + _fns + """
+     const m={matchId:'M1',home:'Brazil',away:'Serbia',ouOdds:{'2.5':{OVER:{frac:'5/6'},UNDER:{frac:'8/11'}},'3.5':{OVER:{frac:'9/4'},UNDER:{frac:'1/5'}}}};
+     const r=ouRowHTML(m);
+@@ -106,6 +106,55 @@ try:
+ except Exception as _e:
+     ck("O/U UI cross-check ran", False, str(_e)[:140])
+ 
++print("\n== line/score changes patch prices IN PLACE (the iOS Safari picker-crash regression) ==")
++# THE BUG: calling renderBets() from a <select>'s onchange (or a focused score input's handler) replaces
++# el.innerHTML while iOS Safari's wheel picker / keyboard is still attached to that control — WebKit kills
++# the page ("a problem repeatedly occurred"). The fix: onchange only rewrites the sibling price buttons.
++import re as _re
++def _handler(cls):
++    i = HTML.index("querySelectorAll('." + cls + "')")
++    return HTML[i:HTML.index("});", i) + 3]
++for _cls in ("ouline", "hcline"):
++    _h = _handler(_cls)
++    ck("." + _cls + " onchange NEVER calls renderBets (would destroy the open picker)", "renderBets(" not in _h, _h[:120])
++    ck("." + _cls + " onchange patches the price buttons in place", "patchBtns(" in _h, _h[:120])
++_ci = HTML.index("const csIn=")
++_cs = HTML[_ci:HTML.index("function bindOdd", _ci)]   # csIn + the input bindings, before the shared click handler
++ck("the exact-score inputs NEVER trigger renderBets (would rebuild the input being typed in)", "renderBets(" not in _cs, _cs[:160])
++ck("the exact-score inputs patch just the price button (.csout)", "patchBtns(mid,'csout'" in _cs.replace(" ", ""), None)
++ck("price-button containers exist to patch into", all(('class="' + c + '"') in HTML for c in ("oubtns", "hcbtns", "csout")), None)
++ck("rebuilt buttons are re-bound via a shared bindOdd", "function bindOdd(b)" in HTML and "forEach(bindOdd)" in HTML and "box.querySelectorAll('.betodd').forEach(bindOdd)" in HTML, None)
++try:
++    import subprocess as _sp7
++    def _g7(nm):
++        s = HTML.index("function " + nm); i = HTML.index("{", s); depth = 0
++        for j in range(i, len(HTML)):
++            if HTML[j] == "{": depth += 1
++            elif HTML[j] == "}":
++                depth -= 1
++                if depth == 0: return HTML[s:j + 1]
++    _fns = "\n".join(_g7(n) for n in ["samePick", "fmtHc", "hcLineFor", "hcBtnsHTML", "hcRowHTML", "csBtnHTML", "csRowHTML"])
++    _js = ("const esc=s=>String(s);const HCLINE={};const CSPICK={};let ACCAMODE=false,ACCA=[],BETPICK=null;\n" + _fns + """
++    const m={matchId:'M1',home:'Brazil',away:'Serbia',
++      hcOdds:{'-2.5':{HOME:{frac:'5/2'},AWAY:{frac:'1/5'}},'-1.5':{HOME:{frac:'5/6'},AWAY:{frac:'4/6'}}},
++      csOdds:{'1-0':{frac:'6/1'},'2-0':{frac:'9/1'}}};
++    const row=hcRowHTML(m);
++    HCLINE['M1']='-2.5'; const b2=hcBtnsHTML(m);           // the in-place rebuild after a line change
++    CSPICK['M1']='2-0';  const cs2=csBtnHTML(m);
++    CSPICK['M1']='7-7';  const cs3=csBtnHTML(m);           // no such cell -> hint, not a broken button
++    console.log(JSON.stringify({
++      def:row.includes('value="-1.5" selected')&&row.includes('Brazil -1.5 <b>5/6</b>')&&row.includes('Serbia +1.5 <b>4/6</b>'),
++      wrap:row.includes('class="hcbtns" data-mid="M1"'),
++      swap:b2.includes('Brazil -2.5 <b>5/2</b>')&&b2.includes('Serbia +2.5 <b>1/5</b>'),
++      cs:cs2.includes('2-0 <b>9/1</b>'), csHint:cs3.includes('scores 0')}));""")
++    open("/tmp/_hc.js", "w").write(_js)
++    _r = json.loads(_sp7.run(["node", "/tmp/_hc.js"], capture_output=True, text=True).stdout.strip())
++    ck("handicap row defaults to -1.5 with mirrored button labels", _r["def"] and _r["wrap"], _r)
++    ck("a line change rebuilds both buttons at the new prices (in place)", _r["swap"], _r)
++    ck("a score change rebuilds the exact-score button (and falls back to the hint off-grid)", _r["cs"] and _r["csHint"], _r)
++except Exception as _e:
++    ck("handicap/exact-score UI cross-check ran", False, str(_e)[:140])
++
+ print("\n== bet cards show the score (live + frozen at FT) ==")
+ ck("acca legs show the score (live + frozen FT), not just a dot", "FT '+sc+'</span>" in HTML and "🔴 '+sc+'</span>" in HTML, None)
+ ck("single bets freeze the final score at FT", "🔴 LIVE '+sc+'</span>" in HTML, None)
+@@ -327,8 +376,8 @@ except Exception as _e:
+ 
+ # ---- bet-slip selection model: tap=select, re-tap=remove, 2nd game=auto-acca, down-to-1=single ----
+ print("\n== bet-slip selection model (.betodd click) ==")
+-_s = HTML.index("querySelectorAll('.betodd').forEach(b=>b.onclick=()=>{")
+-_i = HTML.index("{", _s); _d = 0; _j = _i
++_s = HTML.index("function bindOdd(b){ b.onclick=()=>{")
++_i = HTML.index("{", HTML.index("=()=>", _s)); _d = 0; _j = _i
+ while _j < len(HTML):
+     if HTML[_j] == "{": _d += 1
+     elif HTML[_j] == "}":
 diff --git a/qa_hc_exploit.py b/qa_hc_exploit.py
 new file mode 100644
 index 0000000..8841c4c
@@ -851,38 +931,99 @@ index 0000000..99ae3a5
 +    raise SystemExit(1)
 +print("ALL HANDICAP SETTLEMENT CHECKS PASSED")
 diff --git a/tracker.html b/tracker.html
-index 4335b2f..ef3e281 100644
+index 4335b2f..27d09f6 100644
 --- a/tracker.html
 +++ b/tracker.html
-@@ -655,6 +655,27 @@ function ouRowHTML(m){
-     +'<div style="display:flex;gap:5px;flex:1 1 150px;min-width:150px;align-items:stretch">'+mkOU('OVER','Over')+mkOU('UNDER','Under')+'</div>'
-     +'</div>';
- }
+@@ -640,36 +640,71 @@ function samePick(p, mid, sel, market, line){   // are two picks the exact same
+ function ouLineFor(mid,odds){ let ln=OULINE[mid]||'2.5';   // default to the most common line
+   if(odds&&!odds[ln]){ const ks=Object.keys(odds).sort((a,b)=>Math.abs(parseFloat(a)-2.5)-Math.abs(parseFloat(b)-2.5)); ln=ks[0]||ln; }  // picked line no longer offered -> nearest available
+   return ln; }
++function ouBtnsHTML(m){   // just the two price buttons for the CURRENT line — rebuilt in place on a line change
++  const ln=ouLineFor(m.matchId,m.ouOdds), leg=(m.ouOdds||{})[ln];
++  if(!leg) return '';
++  const mkOU=(sel,lbl)=>{ const o=leg[sel]; if(!o) return '';
++    const on=ACCAMODE?ACCA.some(l=>samePick(l,m.matchId,sel,'ou',ln)):samePick(BETPICK,m.matchId,sel,'ou',ln);
++    return '<button class="betodd'+(on?' on':'')+'" style="min-width:64px;padding:6px 5px;font-size:12px" data-mid="'+m.matchId+'" data-sel="'+sel+'" data-market="ou" data-line="'+ln+'" data-frac="'+o.frac+'">'+lbl+' <b>'+o.frac+'</b></button>'; };
++  return mkOU('OVER','Over')+mkOU('UNDER','Under');
++}
+ function ouRowHTML(m){
+   if(!m.ouOdds) return '';
+   const ln=ouLineFor(m.matchId,m.ouOdds), leg=m.ouOdds[ln];
+   if(!leg) return '';
+   const opts=Object.keys(m.ouOdds).sort((a,b)=>parseFloat(a)-parseFloat(b))
+     .map(k=>'<option value="'+k+'"'+(k===ln?' selected':'')+'>'+k+'</option>').join('');
+-  const mkOU=(sel,lbl)=>{ const o=leg[sel]; if(!o) return '';
+-    const on=ACCAMODE?ACCA.some(l=>samePick(l,m.matchId,sel,'ou',ln)):samePick(BETPICK,m.matchId,sel,'ou',ln);
+-    return '<button class="betodd'+(on?' on':'')+'" style="min-width:64px;padding:6px 5px;font-size:12px" data-mid="'+m.matchId+'" data-sel="'+sel+'" data-market="ou" data-line="'+ln+'" data-frac="'+o.frac+'">'+lbl+' <b>'+o.frac+'</b></button>'; };
+   return '<div style="display:flex;gap:5px;margin-top:5px;flex-wrap:wrap;align-items:stretch">'
+     +'<span title="Goals line" style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);white-space:nowrap">⚽'
+     +'<select class="ouline" data-mid="'+esc(m.matchId)+'" style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 4px;font-size:12px;font-family:Sora,sans-serif">'+opts+'</select></span>'
+-    +'<div style="display:flex;gap:5px;flex:1 1 150px;min-width:150px;align-items:stretch">'+mkOU('OVER','Over')+mkOU('UNDER','Under')+'</div>'
++    +'<div class="oubtns" data-mid="'+esc(m.matchId)+'" style="display:flex;gap:5px;flex:1 1 150px;min-width:150px;align-items:stretch">'+ouBtnsHTML(m)+'</div>'
++    +'</div>';
++}
 +const HCLINE={};            // per-match selected handicap HOME line (matchId -> '-1.5'); the dropdown sets it
 +function fmtHc(v){ v=Number(v); return (v>0?'+':'')+v; }   // signed half-line label: -1.5 / +1.5
 +function hcLineFor(mid,odds){ let ln=HCLINE[mid]||'-1.5';   // default to the classic favourite line
 +  if(odds&&!odds[ln]){ const ks=Object.keys(odds).sort((a,b)=>Math.abs(parseFloat(a))-Math.abs(parseFloat(b))||parseFloat(a)-parseFloat(b)); ln=ks[0]||ln; }  // picked line not offered -> tightest available
 +  return ln; }
++function hcBtnsHTML(m){   // the two handicap price buttons for the CURRENT line — rebuilt in place on a line change
++  const ln=hcLineFor(m.matchId,m.hcOdds), leg=(m.hcOdds||{})[ln];
++  if(!leg) return '';
++  const mkHC=(sel)=>{ const o=leg[sel]; if(!o) return '';
++    const team=sel==='HOME'?m.home:m.away, shown=sel==='HOME'?fmtHc(ln):fmtHc(-parseFloat(ln));
++    const on=samePick(BETPICK,m.matchId,sel,'hc',ln);
++    return '<button class="betodd'+(on?' on':'')+'" style="min-width:64px;padding:6px 5px;font-size:12px" data-mid="'+m.matchId+'" data-sel="'+sel+'" data-market="hc" data-line="'+ln+'" data-frac="'+o.frac+'">'+esc(team)+' '+shown+' <b>'+o.frac+'</b></button>'; };
++  return mkHC('HOME')+mkHC('AWAY');
++}
 +function hcRowHTML(m){
 +  if(!m.hcOdds) return '';
 +  const ln=hcLineFor(m.matchId,m.hcOdds), leg=m.hcOdds[ln];
 +  if(!leg) return '';
 +  const opts=Object.keys(m.hcOdds).sort((a,b)=>parseFloat(a)-parseFloat(b))
 +    .map(k=>'<option value="'+k+'"'+(k===ln?' selected':'')+'>'+fmtHc(k)+'</option>').join('');
-+  const mkHC=(sel)=>{ const o=leg[sel]; if(!o) return '';
-+    const team=sel==='HOME'?m.home:m.away, shown=sel==='HOME'?fmtHc(ln):fmtHc(-parseFloat(ln));
-+    const on=samePick(BETPICK,m.matchId,sel,'hc',ln);
-+    return '<button class="betodd'+(on?' on':'')+'" style="min-width:64px;padding:6px 5px;font-size:12px" data-mid="'+m.matchId+'" data-sel="'+sel+'" data-market="hc" data-line="'+ln+'" data-frac="'+o.frac+'">'+esc(team)+' '+shown+' <b>'+o.frac+'</b></button>'; };
 +  return '<div style="display:flex;gap:5px;margin-top:5px;flex-wrap:wrap;align-items:stretch">'
 +    +'<span title="Handicap (home line) — settles on the 90&#39;+ET score, pens excluded" style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);white-space:nowrap">±'
 +    +'<select class="hcline" data-mid="'+esc(m.matchId)+'" style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 4px;font-size:12px;font-family:Sora,sans-serif">'+opts+'</select></span>'
-+    +'<div style="display:flex;gap:5px;flex:1 1 150px;min-width:150px;align-items:stretch">'+mkHC('HOME')+mkHC('AWAY')+'</div>'
-+    +'</div>';
-+}
++    +'<div class="hcbtns" data-mid="'+esc(m.matchId)+'" style="display:flex;gap:5px;flex:1 1 150px;min-width:150px;align-items:stretch">'+hcBtnsHTML(m)+'</div>'
+     +'</div>';
+ }
  const CSPICK={};            // per-match selected scoreline for the exact-score market
++function csBtnHTML(m){      // just the price button (or hint) for the CURRENT pick — rebuilt in place as you type
++  const pick=CSPICK[m.matchId]||'1-0';
++  const o=(m.csOdds||{})[pick];
++  const on=samePick(BETPICK,m.matchId,pick,'cs',null);
++  return o?('<button class="betodd'+(on?' on':'')+'" style="min-width:88px;padding:6px 8px;font-size:12px" data-mid="'+m.matchId+'" data-sel="'+pick+'" data-market="cs" data-frac="'+o.frac+'">'+pick+' <b>'+o.frac+'</b></button>')
++          :('<span style="font-size:11.5px;color:var(--muted)">scores 0\u20139 each</span>');
++}
  function csRowHTML(m){
    if(!m.csOdds) return '';
-@@ -763,7 +784,7 @@ function renderBets(){
+   const pick=CSPICK[m.matchId]||'1-0';
+   const parts=pick.split('-'), hh=parts[0]||'1', aa=parts[1]||'0';
+-  const o=m.csOdds[pick];
+-  const on=samePick(BETPICK,m.matchId,pick,'cs',null);
+   const num='style="width:44px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 4px;font-size:13px;text-align:center;font-family:Sora,sans-serif"';
+   return '<div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;align-items:center">'
+     +'<span title="Exact score — type the final score (after extra time)" style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);white-space:nowrap">\ud83c\udfaf'
+     +'<input class="csh" type="number" min="0" max="9" inputmode="numeric" value="'+esc(hh)+'" data-mid="'+esc(m.matchId)+'" '+num+'>'
+     +'<span style="color:var(--muted)">\u2013</span>'
+     +'<input class="csa" type="number" min="0" max="9" inputmode="numeric" value="'+esc(aa)+'" data-mid="'+esc(m.matchId)+'" '+num+'></span>'
+-    +(o?('<button class="betodd'+(on?' on':'')+'" style="min-width:88px;padding:6px 8px;font-size:12px" data-mid="'+m.matchId+'" data-sel="'+pick+'" data-market="cs" data-frac="'+o.frac+'">'+pick+' <b>'+o.frac+'</b></button>')
+-       :('<span style="font-size:11.5px;color:var(--muted)">scores 0\u20139 each</span>'))
++    +'<span class="csout" data-mid="'+esc(m.matchId)+'" style="display:flex;align-items:center">'+csBtnHTML(m)+'</span>'
+     +'</div>';
+ }
+ function renderBets(){
+@@ -751,7 +786,7 @@ function renderBets(){
+   } else if(fbet.open && fbMine){
+     h+='<div style="margin:0 0 12px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;color:var(--muted)">🎁 You\'ve claimed today\'s free points — they\'re in your balance above. Bet them on any game. The next drop is another day.</div>';
+   }
+-  h+='<div style="color:var(--muted);font-size:12px;margin:0 0 10px">Tap a game to bet · tap it again to remove'+(accasOn?' · tap a second game to build a 🎰 accumulator':'')+'. Each game also has an <b>\u26bd Over/Under goals</b> market (pick a goals line \u2014 near-certain lines pay on a deeper ladder, down to 1/14) and a <b>\ud83c\udfaf Exact score</b> market \u2014 type the final score (after extra time, 0\u20139 each way) and back it. Result = who goes through (a shootout win counts); all three settle automatically.</div>';
++  h+='<div style="color:var(--muted);font-size:12px;margin:0 0 10px">Tap a game to bet · tap it again to remove'+(accasOn?' · tap a second game to build a 🎰 accumulator':'')+'. Each game also has an <b>\u26bd Over/Under goals</b> market (pick a goals line \u2014 near-certain lines pay on a deeper ladder, down to 1/14), a <b>\u00b1 Handicap</b> market (give a side a goal start or deficit \u2014 pick the line, settles on the 90&#39;+extra-time score, penalties don\u2019t count, singles only) and a <b>\ud83c\udfaf Exact score</b> market \u2014 type the final score (after extra time, 0\u20139 each way) and back it. Result = who goes through (a shootout win counts); all four settle automatically.</div>';
+   if(ACCAMODE) h+='<div style="color:var(--muted);font-size:12.5px;margin:0 0 10px">🎰 Building an accumulator — odds multiply, but <b>every</b> leg must win. Up to '+maxLegs+' legs, and up to '+((caps.max_active_accas)||2)+' accas running at once.'+(retCap?(' Max return: <b>'+retCap+'</b>.'):'')+'</div>';
+   if(!fx.length) h+='<div class="empty">No upcoming games to bet on right now — check back before kick-off.</div>';
+   else h+='<div class="mdgrid">'+fx.map(m=>{
+@@ -763,7 +798,7 @@ function renderBets(){
        return `<button class="betodd${on?' on':''}" data-mid="${m.matchId}" data-sel="${k}" data-market="result" data-frac="${o.frac}">${esc(lbl)} <b>${o.frac}</b></button>`; };
      const homeAway='<div style="display:flex;gap:6px">'+mk('HOME',m.home)+mk('AWAY',m.away)+'</div>';   // home left, away right
      const drawRow=(!ko && m.odds.DRAW)?('<div style="display:flex;margin-top:6px">'+mk('DRAW','Draw')+'</div>'):'';   // draw below, full width
@@ -891,7 +1032,7 @@ index 4335b2f..ef3e281 100644
      return `<div class="mdcard"><div class="mdmeta">${ko?(STAGE_LABEL[m.stage]||m.stage):'Group '+(m.group||'?')} · ${esc(when)}</div>
        <div class="mdteams" style="margin-bottom:6px"><span>${flag(m.home)}${esc(m.home)}</span><span style="color:var(--muted)">v</span><span class="mdr">${flag(m.away)}${esc(m.away)}</span></div>
        <div class="betodds" style="display:block">${homeAway}${drawRow}${ouRow}</div></div>`;
-@@ -783,7 +804,8 @@ function renderBets(){
+@@ -783,7 +818,8 @@ function renderBets(){
      const fxp=fx.find(m=>m.matchId===BETPICK.matchId);
      if(fxp){ const isOU=(BETPICK.market||'result')==='ou';
        const isCS=(BETPICK.market||'result')==='cs';
@@ -901,15 +1042,43 @@ index 4335b2f..ef3e281 100644
        const fracDisp=BETPICK.frac; const smax=Math.min(fxp.maxStake||caps.max_stake, headroom, budgetLeft);
        h+='<div class="betcta" style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
          +'<div style="font-size:13.5px;margin-bottom:8px">Bet on <b>'+esc(who)+'</b> @ <b style="color:var(--gold)">'+fracDisp+'</b> <span style="color:var(--muted)">· max '+smax+'</span></div>'
-@@ -874,6 +896,7 @@ function renderBets(){
+@@ -873,11 +909,20 @@ function renderBets(){
+       else box.textContent=j.error||'Could not unlink.';
      }catch(e){ box.textContent='Could not reach the server.'; }
    };
-   el.querySelectorAll('.ouline').forEach(s=>s.onchange=()=>{ OULINE[s.dataset.mid]=s.value; BETMSG=''; renderBets(); });
-+  el.querySelectorAll('.hcline').forEach(s=>s.onchange=()=>{ HCLINE[s.dataset.mid]=s.value; BETMSG=''; renderBets(); });
-   const csIn=s=>{ const mid=s.dataset.mid, h=el.querySelector('.csh[data-mid="'+mid+'"]'), a=el.querySelector('.csa[data-mid="'+mid+'"]');
-     const c=v=>Math.max(0,Math.min(9,parseInt(v,10)||0)); CSPICK[mid]=c(h?h.value:1)+'-'+c(a?a.value:0); BETMSG=''; renderBets(); };
-   el.querySelectorAll('.csh,.csa').forEach(s=>s.onchange=()=>csIn(s));
-@@ -974,6 +997,7 @@ function refreshBetsLive(){
+-  el.querySelectorAll('.ouline').forEach(s=>s.onchange=()=>{ OULINE[s.dataset.mid]=s.value; BETMSG=''; renderBets(); });
+-  const csIn=s=>{ const mid=s.dataset.mid, h=el.querySelector('.csh[data-mid="'+mid+'"]'), a=el.querySelector('.csa[data-mid="'+mid+'"]');
+-    const c=v=>Math.max(0,Math.min(9,parseInt(v,10)||0)); CSPICK[mid]=c(h?h.value:1)+'-'+c(a?a.value:0); BETMSG=''; renderBets(); };
+-  el.querySelectorAll('.csh,.csa').forEach(s=>s.onchange=()=>csIn(s));
+-  el.querySelectorAll('.betodd').forEach(b=>b.onclick=()=>{
++  // Line/score changes update ONLY the price buttons, in place. NEVER call renderBets() from a select's
++  // onchange or a focused input's handler: el.innerHTML=… destroys the control while iOS Safari's wheel
++  // picker / keyboard is still attached to it, and WebKit kills the page ("a problem repeatedly occurred").
++  const patchBtns=(mid,cls,html)=>{ const box=el.querySelector('.'+cls+'[data-mid="'+mid+'"]');
++    if(box){ box.innerHTML=html; box.querySelectorAll('.betodd').forEach(bindOdd); } };
++  el.querySelectorAll('.ouline').forEach(s=>s.onchange=()=>{ OULINE[s.dataset.mid]=s.value;
++    const m=fx.find(x=>x.matchId===s.dataset.mid); if(m) patchBtns(m.matchId,'oubtns',ouBtnsHTML(m)); });
++  el.querySelectorAll('.hcline').forEach(s=>s.onchange=()=>{ HCLINE[s.dataset.mid]=s.value;
++    const m=fx.find(x=>x.matchId===s.dataset.mid); if(m) patchBtns(m.matchId,'hcbtns',hcBtnsHTML(m)); });
++  const csIn=s=>{ const mid=s.dataset.mid, hEl=el.querySelector('.csh[data-mid="'+mid+'"]'), aEl=el.querySelector('.csa[data-mid="'+mid+'"]');
++    const c=v=>Math.max(0,Math.min(9,parseInt(v,10)||0)); CSPICK[mid]=c(hEl?hEl.value:1)+'-'+c(aEl?aEl.value:0);
++    const m=fx.find(x=>x.matchId===mid); if(m) patchBtns(mid,'csout',csBtnHTML(m)); };
++  el.querySelectorAll('.csh,.csa').forEach(s=>{ s.onchange=()=>csIn(s); s.oninput=()=>csIn(s); });
++  function bindOdd(b){ b.onclick=()=>{
+     const mid=b.dataset.mid, sel=b.dataset.sel, frac=b.dataset.frac;
+     const market=b.dataset.market||'result', line=(b.dataset.line!=null && b.dataset.line!=='')?parseFloat(b.dataset.line):null;
+     const pick=()=>({matchId:mid,sel:sel,frac:frac,market:market,line:line});
+@@ -906,7 +951,8 @@ function renderBets(){
+       }
+       BETMSG=''; renderBets();
+     }
+-  });
++  }; }
++  el.querySelectorAll('.betodd').forEach(bindOdd);
+   const cfb=document.getElementById('claimFreeBtn'); if(cfb) cfb.onclick=claimFreePoints;
+   el.querySelectorAll('.accarm').forEach(b=>b.onclick=()=>{ ACCA.splice(+b.dataset.i,1); if(ACCA.length===1){ BETPICK=ACCA[0]; ACCA=[]; ACCAMODE=false; } else if(ACCA.length===0){ ACCAMODE=false; } renderBets(); });
+   const ap=document.getElementById('accaPlace'); if(ap) ap.onclick=placeAcca;
+@@ -974,6 +1020,7 @@ function refreshBetsLive(){
  // ---- "is this bet currently winning?" — provisional result from the live score (display only; never settles anything) ----
  function pickName(o){   // human label for a bet or an acca leg, result OR over/under
    if((o.market||'result')==='ou') return (o.selection==='OVER'?'Over':'Under')+' '+o.line+' goals';
@@ -917,7 +1086,7 @@ index 4335b2f..ef3e281 100644
    if((o.market||'result')==='cs') return 'Exact score '+(o.selection==='OTHER'?'Any other':o.selection);
    return o.selection==='HOME'?o.home:(o.selection==='AWAY'?o.away:'Draw');
  }
-@@ -981,6 +1005,7 @@ function provResult(o, hs, as_){   // live/settled outcome of a bet or leg from
+@@ -981,6 +1028,7 @@ function provResult(o, hs, as_){   // live/settled outcome of a bet or leg from
    if(hs==null||as_==null) return null;           // no score yet -> unknown (don't coerce null to 0)
    hs=Number(hs); as_=Number(as_); if(isNaN(hs)||isNaN(as_)) return null;
    if((o.market||'result')==='ou'){ const over=(hs+as_)>Number(o.line); return (o.selection==='OVER'?over:!over)?'win':'lose'; }  // half-line: never level
@@ -926,7 +1095,7 @@ index 4335b2f..ef3e281 100644
    if(o.selection==='AWAY') return as_>hs?'win':(as_<hs?'lose':'level');
    return hs===as_?'win':'lose';   // DRAW selection
 diff --git a/wager.py b/wager.py
-index aca4590..aefefb6 100644
+index aca4590..416a12b 100644
 --- a/wager.py
 +++ b/wager.py
 @@ -333,6 +333,12 @@ def _winner_side(m):
@@ -1009,7 +1178,7 @@ index aca4590..aefefb6 100644
      out = {}
      for h in range(CS_GRID_MAX + 1):
          for a in range(CS_GRID_MAX + 1):
-@@ -770,6 +790,113 @@ def _cs_result(selection, match):
+@@ -770,6 +790,114 @@ def _cs_result(selection, match):
      return "won" if selection == ("%d-%d" % (int(hs), int(as_))) else "lost"
  
  
@@ -1017,12 +1186,13 @@ index aca4590..aefefb6 100644
 +HC_OVERROUND = 1.13          # same margin class as the O/U goals book (a touch above the 1X2's 1.08)
 +HC_MIN_MARGIN = 0.02         # minimum book overround on any offered line (a capped near-certainty still has an edge)
 +HC_MAX_PROB = 0.93           # deep price ladder like O/U (shortest ~1/13); beyond it the line is NOT offered
-+HC_LINES = [-2.5, -1.5, 1.5, 2.5]   # HOME-team half-lines only -> a bet can never push. ±0.5 is deliberately
-+                                    #   absent: it duplicates the 1X2 result market under a DIFFERENT probability
-+                                    #   model (this Poisson grid vs _fair_probs), and two prices for one event
-+                                    #   across two models is exactly the cross-market dutch a sharp bettor farms.
-+                                    #   With |L| >= 1.5 no handicap side has a 1X2 twin, and every combination of
-+                                    #   selections that covers all outcomes must route through a margined book.
++HC_LINES = [-3.5, -2.5, -1.5, 1.5, 2.5, 3.5]   # HOME-team half-lines only -> a bet can never push. ±0.5 is
++                                    #   deliberately absent: it duplicates the 1X2 result market under a DIFFERENT
++                                    #   probability model (this Poisson grid vs _fair_probs), and two prices for one
++                                    #   event across two models is exactly the cross-market dutch a sharp bettor
++                                    #   farms. With |L| >= 1.5 no handicap side has a 1X2 twin, and every combination
++                                    #   of selections that covers all outcomes must route through a margined book.
++                                    #   ±3.5 only survives the ladder rule for big favourites — elsewhere it's filtered.
 +HC_GRID_MAX = 14             # score grid depth for margin probs (lambda tops out at 4.2 -> the tail beyond is dust)
 +
 +
@@ -1123,7 +1293,7 @@ index aca4590..aefefb6 100644
  def _match_total(match):
      """Final total goals for a finished match, or None if no valid score. Penalties never count
      (a shootout isn't goals); a knockout's score is its 90+ET total, which is what the tracker shows."""
-@@ -809,6 +936,10 @@ def _leg_result(leg, match):
+@@ -809,6 +937,10 @@ def _leg_result(leg, match):
          if status not in ("FINISHED", "AWARDED"):
              return None
          return _cs_result(leg.get("selection"), match)
@@ -1134,7 +1304,7 @@ index aca4590..aefefb6 100644
      side = _winner_side(match)
      if status not in ("FINISHED", "AWARDED") or side is None:
          return None
-@@ -889,6 +1020,18 @@ def settle(wagers, match, now=None):
+@@ -889,6 +1021,18 @@ def settle(wagers, match, now=None):
                  w["status"] = "lost"; w["return"] = 0
              w["result"] = r
              w["settled_at"] = ts; n += 1; continue
@@ -1153,7 +1323,7 @@ index aca4590..aefefb6 100644
          if status not in ("FINISHED", "AWARDED") or side is None:
              continue
          if side == "DRAW" and _norm_stage(w.get("stage")) != "GROUP_STAGE":
-@@ -969,6 +1112,8 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
+@@ -969,6 +1113,8 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
          mk = (str(s.get("market") or "result")).lower()
          if mk == "cs":
              return False, "Exact-score bets are singles only — they can't go in an accumulator."

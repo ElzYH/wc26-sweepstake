@@ -794,12 +794,13 @@ def _cs_result(selection, match):
 HC_OVERROUND = 1.13          # same margin class as the O/U goals book (a touch above the 1X2's 1.08)
 HC_MIN_MARGIN = 0.02         # minimum book overround on any offered line (a capped near-certainty still has an edge)
 HC_MAX_PROB = 0.93           # deep price ladder like O/U (shortest ~1/13); beyond it the line is NOT offered
-HC_LINES = [-2.5, -1.5, 1.5, 2.5]   # HOME-team half-lines only -> a bet can never push. ±0.5 is deliberately
-                                    #   absent: it duplicates the 1X2 result market under a DIFFERENT probability
-                                    #   model (this Poisson grid vs _fair_probs), and two prices for one event
-                                    #   across two models is exactly the cross-market dutch a sharp bettor farms.
-                                    #   With |L| >= 1.5 no handicap side has a 1X2 twin, and every combination of
-                                    #   selections that covers all outcomes must route through a margined book.
+HC_LINES = [-3.5, -2.5, -1.5, 1.5, 2.5, 3.5]   # HOME-team half-lines only -> a bet can never push. ±0.5 is
+                                    #   deliberately absent: it duplicates the 1X2 result market under a DIFFERENT
+                                    #   probability model (this Poisson grid vs _fair_probs), and two prices for one
+                                    #   event across two models is exactly the cross-market dutch a sharp bettor
+                                    #   farms. With |L| >= 1.5 no handicap side has a 1X2 twin, and every combination
+                                    #   of selections that covers all outcomes must route through a margined book.
+                                    #   ±3.5 only survives the ladder rule for big favourites — elsewhere it's filtered.
 HC_GRID_MAX = 14             # score grid depth for margin probs (lambda tops out at 4.2 -> the tail beyond is dust)
 
 
