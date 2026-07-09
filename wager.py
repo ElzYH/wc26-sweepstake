@@ -938,8 +938,8 @@ def _leg_result(leg, match):
             return None
         return _cs_result(leg.get("selection"), match)
     if leg.get("market") == "hc":                    # handicap settles on the goal margin (ET incl., pens excl.)
-        if status not in ("FINISHED", "AWARDED"):    #   accas can't contain one, but a legacy/hand-edited leg must
-            return None                              #   NEVER fall through and be settled as a match-winner pick
+        if status not in ("FINISHED", "AWARDED"):    #   an hc leg must NEVER fall through and be settled as a
+            return None                              #   match-winner pick
         return _hc_result(leg.get("line"), leg.get("selection"), match)
     side = _winner_side(match)
     if status not in ("FINISHED", "AWARDED") or side is None:
@@ -1112,10 +1112,36 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
             return False, "One of those games has kicked off or finished — accas must be all upcoming."
         mk = (str(s.get("market") or "result")).lower()
         if mk == "cs":
-            return False, "Exact-score bets are singles only — they can't go in an accumulator."
-        if mk == "hc":
-            return False, "Handicap bets are singles only — they can't go in an accumulator."
-        if mk == "ou":
+            # Exact-score legs are fine ACROSS matches: each cell is priced off the 1.22-margined grid and
+            # legs on different games are independent, so the product of prices only compounds the margin.
+            # The dangerous combo (a cs leg correlated with another market on the SAME game) is impossible
+            # here — the one-leg-per-game dedupe above blocks it before any leg is priced.
+            if not isinstance(s.get("selection"), str) or not re.fullmatch(r"[0-%d]-[0-%d]" % (CS_GRID_MAX, CS_GRID_MAX), s.get("selection")):
+                return False, "Pick a scoreline for every exact-score leg — home goals then away, each 0-%d." % CS_GRID_MAX
+            o = cs_odds(s["comp_home"], s["comp_away"]).get(s["selection"])
+            if not o:
+                return False, "Couldn't price one of those exact-score legs — try again."
+            legs.append({"matchId": match_id(s["match"]), "selection": s["selection"], "market": "cs",
+                         "home": s["match"].get("home"), "away": s["match"].get("away"),
+                         "stage": s["match"].get("stage"), "num": o["num"], "den": o["den"], "frac": o["frac"]})
+        elif mk == "hc":
+            # Handicap legs, same reasoning: distinct matches (enforced above) -> independent margined
+            # prices, no covering combination exists across games. Settles by _leg_result on the margin.
+            if s.get("selection") not in ("HOME", "AWAY"):
+                return False, "Pick a side for every handicap leg — home or away."
+            try:
+                ln = float(s.get("line"))
+            except (TypeError, ValueError):
+                return False, "Pick a handicap line for every handicap leg."
+            if ln not in HC_LINES:
+                return False, "That handicap line isn't offered."
+            o = hc_odds(s["comp_home"], s["comp_away"]).get(_line_key(ln), {}).get(s["selection"])
+            if not o:
+                return False, "Couldn't price one of those handicap legs — try again."
+            legs.append({"matchId": match_id(s["match"]), "selection": s["selection"], "market": "hc", "line": ln,
+                         "home": s["match"].get("home"), "away": s["match"].get("away"),
+                         "stage": s["match"].get("stage"), "num": o["num"], "den": o["den"], "frac": o["frac"]})
+        elif mk == "ou":
             if s.get("selection") not in ("OVER", "UNDER"):
                 return False, "Pick Over or Under for every goals leg."
             try:

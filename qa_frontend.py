@@ -122,7 +122,7 @@ _ci = HTML.index("const csIn=")
 _cs = HTML[_ci:HTML.index("function bindOdd", _ci)]   # csIn + the input bindings, before the shared click handler
 ck("the exact-score inputs NEVER trigger renderBets (would rebuild the input being typed in)", "renderBets(" not in _cs, _cs[:160])
 ck("the exact-score inputs patch just the price button (.csout)", "patchBtns(mid,'csout'" in _cs.replace(" ", ""), None)
-ck("price-button containers exist to patch into", all(('class="' + c + '"') in HTML for c in ("oubtns", "hcbtns", "csout")), None)
+ck("price-button containers exist to patch into", all((c + '" data-mid=') in HTML for c in ("oubtns", "hcbtns", "csout")), None)
 ck("rebuilt buttons are re-bound via a shared bindOdd", "function bindOdd(b)" in HTML and "forEach(bindOdd)" in HTML and "box.querySelectorAll('.betodd').forEach(bindOdd)" in HTML, None)
 try:
     import subprocess as _sp7
@@ -144,7 +144,7 @@ try:
     CSPICK['M1']='7-7';  const cs3=csBtnHTML(m);           // no such cell -> hint, not a broken button
     console.log(JSON.stringify({
       def:row.includes('value="-1.5" selected')&&row.includes('Brazil -1.5 <b>5/6</b>')&&row.includes('Serbia +1.5 <b>4/6</b>'),
-      wrap:row.includes('class="hcbtns" data-mid="M1"'),
+      wrap:row.includes('hcbtns" data-mid="M1"'),
       swap:b2.includes('Brazil -2.5 <b>5/2</b>')&&b2.includes('Serbia +2.5 <b>1/5</b>'),
       cs:cs2.includes('2-0 <b>9/1</b>'), csHint:cs3.includes('scores 0')}));""")
     open("/tmp/_hc.js", "w").write(_js)

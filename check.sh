@@ -92,7 +92,7 @@ if python3 test_ou_acca.py >/dev/null; then echo "  ok"; else echo "  FAIL"; pyt
 say "Handicap odds model (complementarity, ladder rule, margin, monotonicity, no ±0.5 twin, hostile inputs)"
 if python3 test_hc_odds.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_hc_odds.py | tail -20; FAIL=1; fi
 
-say "Handicap placement (struck at live price, line/selection validation, caps/budget, singles-only, kickoff lock)"
+say "Handicap placement (struck at live price, line/selection validation, caps/budget, cross-game accas in / same-game blocked, kickoff lock)"
 if python3 test_hc_place.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_hc_place.py | tail -24; FAIL=1; fi
 
 say "Handicap settlement (margin goldens, 90'+ET pens-excluded basis vs result bets, voids, hostile scores)"

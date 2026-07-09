@@ -156,9 +156,12 @@ ok, w = W.place(wl, "Erol", g1cs, "2-1", 5, 1000, 95, 55, now=NOW, market="cs")
 ck("a scoreline places as a single with locked odds", ok and w.get("market") == "cs" and w.get("frac"), w if not ok else None)
 ck("garbage scorelines are rejected", not W.place([], "Erol", g1cs, "12-0", 5, 1000, 95, 55, now=NOW, market="cs")[0]
    and not W.place([], "Erol", g1cs, "2:1", 5, 1000, 95, 55, now=NOW, market="cs")[0], None)
-ck("cs can't ride in an accumulator", not W.place_acca([], "Erol",
+ck("a cs leg rides in a CROSS-game accumulator (independent margined events — nothing to dutch)", W.place_acca([], "Erol",
    [{"match": g1cs, "selection": "2-1", "market": "cs", "comp_home": 95, "comp_away": 55},
     {"match": g2, "selection": "HOME", "comp_home": 95, "comp_away": 55}], 5, 1000, now=NOW)[0], None)
+ck("a cs leg NEVER combines with another pick on the SAME game (the correlated-combo exploit gate)", not W.place_acca([], "Erol",
+   [{"match": g1cs, "selection": "2-1", "market": "cs", "comp_home": 95, "comp_away": 55},
+    {"match": g1cs, "selection": "HOME", "comp_home": 95, "comp_away": 55}], 5, 1000, now=NOW)[0], None)
 ck("cs alongside a result bet is allowed (mutually-exclusive cells, margin-protected — not a hedge)",
    W.place(wl, "Erol", g1cs, "HOME", 5, 1000, 95, 55, now=NOW)[0], None)
 import copy as _cp

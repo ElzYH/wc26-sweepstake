@@ -61,11 +61,28 @@ print("\n== knockout: handicap has no draw problem ==")
 ok_ko, w_ko = W.place([], "Erol", KO, "AWAY", 5, 100, CH, CA, now=NOW, market="hc", line=1.5)
 ck("hc places on a knockout (settles on the 90+ET margin, not the shootout)", ok_ko and w_ko.get("market") == "hc", w_ko)
 
-print("\n== singles only: accas reject a handicap leg ==")
+print("\n== accumulators: hc and cs legs are IN (distinct games), same-game combos stay blocked ==")
 sel_hc = {"match": FUTURE, "selection": "HOME", "market": "hc", "line": -1.5, "comp_home": CH, "comp_away": CA}
 sel_res = {"match": dict(FUTURE, home="France", away="Ghana"), "selection": "HOME", "comp_home": 70, "comp_away": 50}
-ok_acc, msg_acc = W.place_acca([], "Erol", [sel_hc, sel_res], 5, 100, now=NOW)
-ck("acca with an hc leg is rejected with a clear message", not ok_acc and "single" in str(msg_acc).lower(), msg_acc)
+ok_acc, w_acc = W.place_acca([], "Erol", [sel_hc, sel_res], 5, 100, now=NOW)
+ck("an hc leg + a result leg on DIFFERENT games places", ok_acc and isinstance(w_acc, dict), w_acc)
+_hleg = next((l for l in (w_acc.get("legs") or []) if l.get("market") == "hc"), None) if ok_acc else None
+ck("the hc leg is struck at the live hc_odds price with its line stored",
+   ok_acc and _hleg and _hleg.get("line") == -1.5 and _hleg["num"] == W.hc_odds(CH, CA)["-1.5"]["HOME"]["num"], _hleg)
+sel_cs = {"match": dict(FUTURE, home="Japan", away="Chile"), "selection": "2-1", "market": "cs", "comp_home": 60, "comp_away": 60}
+ok_cs, w_cs = W.place_acca([], "Erol", [sel_cs, sel_res], 5, 100, now=NOW)
+ck("a cs leg on a different game places too", ok_cs and any(l.get("market") == "cs" for l in (w_cs.get("legs") or [])), w_cs)
+ok_sg, msg_sg = W.place_acca([], "Erol",
+                             [sel_hc, {"match": FUTURE, "selection": "OVER", "market": "ou", "line": 2.5,
+                                       "comp_home": CH, "comp_away": CA}], 5, 100, now=NOW)
+ck("two legs on the SAME game are still rejected (the exploit gate)", not ok_sg, msg_sg if ok_sg else None)
+ck("the rejection explains correlated same-game combos", (not ok_sg) and "once" in str(msg_sg).lower(), msg_sg)
+ok_bl, msg_bl = W.place_acca([], "Erol", [dict(sel_hc, line=0.5), sel_res], 5, 100, now=NOW)
+ck("an off-ladder hc line in a leg is rejected", not ok_bl, msg_bl if ok_bl else None)
+ok_dr, msg_dr = W.place_acca([], "Erol", [dict(sel_hc, selection="DRAW"), sel_res], 5, 100, now=NOW)
+ck("a DRAW handicap leg is rejected", not ok_dr, msg_dr if ok_dr else None)
+ok_bc, msg_bc = W.place_acca([], "Erol", [dict(sel_cs, selection="12-1"), sel_res], 5, 100, now=NOW)
+ck("an off-grid exact-score leg is rejected", not ok_bc, msg_bc if ok_bc else None)
 ok_acc2, w_acc2 = W.place_acca([], "Erol", [sel_res, {"match": dict(FUTURE, home="Japan", away="Chile"),
                                                       "selection": "OVER", "market": "ou", "line": 2.5,
                                                       "comp_home": 60, "comp_away": 60}], 5, 100, now=NOW)

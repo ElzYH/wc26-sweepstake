@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Handicap over the wire — boot the REAL server, bet real HTTP, settle through the real poll.
 Locks in: the tracker payload carries margined hcOdds for a bettable fixture; a bet struck via
-POST /api/place_wager locks EXACTLY the served price (display == placement); junk lines and hc acca
-legs are rejected cleanly over HTTP; both sides of one hc line are allowed (own-margin market);
+POST /api/place_wager locks EXACTLY the served price (display == placement); junk lines and SAME-GAME
+acca combos are rejected cleanly over HTTP while a cross-game hc acca leg is accepted and settles;
+both sides of one hc line are allowed (own-margin market);
 a finished match settles hc bets to the right statuses + returns via /api/poll; and on a knockout
 decided by penalties the RESULT bet wins off the shootout while HOME -1.5 loses on the 90'+ET margin
 — the two settlement bases proven divergent end-to-end."""
@@ -142,8 +143,16 @@ try:
     st4, b4 = S.req("POST", "/api/place_acca", {"player": "James", "stake": 3, "pin": "WXYZ",
                                                 "legs": [{"matchId": "g1", "selection": "HOME", "market": "hc", "line": float(ln)},
                                                          {"matchId": "g2", "selection": "HOME"}]})
-    ck("an acca with an hc leg is rejected with the singles-only message",
-       json.loads(b4).get("ok") is not True and "single" in json.loads(b4).get("error", "").lower(), b4[:160])
+    j4 = json.loads(b4)
+    ck("an acca with an hc leg on a DIFFERENT game is accepted over HTTP", st4 == 200 and j4.get("ok"), b4[:160])
+    ck("the acca's hc leg is struck at the served price",
+       j4.get("ok") and any(l.get("market") == "hc" and l.get("num") == served["num"] and l.get("den") == served["den"]
+                            for l in (j4.get("wager") or {}).get("legs", [])), j4.get("wager"))
+    st5, b5 = S.req("POST", "/api/place_acca", {"player": "James", "stake": 3, "pin": "WXYZ",
+                                                "legs": [{"matchId": "g1", "selection": "HOME", "market": "hc", "line": float(ln)},
+                                                         {"matchId": "g1", "selection": "OVER", "market": "ou", "line": 2.5}]})
+    ck("two acca legs on the SAME game are still rejected over HTTP (the exploit gate)",
+       json.loads(b5).get("ok") is not True and "once" in json.loads(b5).get("error", "").lower(), b5[:160])
 
     # -------- settle through the real poll --------
     S.set_results([match("g1", HOME, AWAY, "FINISHED", hs=3, as_=1), match("g2", OTHERH, OTHERA, "FINISHED", hs=1, as_=0)])
@@ -156,6 +165,9 @@ try:
     want = round(2 * (1 + wh.get("num", 0) / wh.get("den", 1)), 2)
     ck("HOME %s on 3-1 WON with stake x odds back" % ln, wh.get("status") == "won" and abs(wh.get("return", 0) - want) < 0.011, wh)
     ck("AWAY %s on 3-1 LOST with return 0" % ln, wa.get("status") == "lost" and wa.get("return") == 0, wa)
+    acc = next((x for x in ws if x.get("legs")), {})
+    ck("the hc+result acca settled WON (hc leg by margin, result leg by winner)",
+       acc.get("status") == "won" and all(l.get("result") == "won" for l in acc.get("legs", [])), acc)
 finally:
     S.stop()
 
