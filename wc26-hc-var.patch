@@ -1,0 +1,1164 @@
+diff --git a/BETTING_SETUP.md b/BETTING_SETUP.md
+index a4db098..63e094d 100644
+--- a/BETTING_SETUP.md
++++ b/BETTING_SETUP.md
+@@ -202,9 +202,13 @@ You link your Discord account once, then you never type your code in chat:
+ - **Open-stake limit:** the total you have on open bets at once can't beat the current max — it frees up as bets settle.
+ - Up to **8** open bets. **No cap on winnings by default** — the organiser can optionally set a max return per bet.
+ - **Accumulator:** up to **3 legs by default** (the organiser can change this); all must win, and **if one leg loses the whole acca pays nothing**; a postponed leg drops out and it pays on the rest.
++- **Handicap bets:** back a team with a goal start or deficit (−1.5, +1.5, −2.5, +2.5 where offered). Settles on the **90'+extra-time score — penalties don't count** (same basis as Over/Under and exact score, *not* the "to advance" market: a 1–1 game decided on pens means −1.5 **loses** and +1.5 **wins** regardless of the shootout). Half-lines only, so a handicap bet can never push. **Singles only** — no handicap legs in accas. Web only for now (not on Discord `/bet`).
+ - **No draw bets on knockouts** (it goes to extra time / penalties — pick the side to go through).
+ - You can't stake more than you have, and your points can never go below zero.
+ 
++### Alerts: disallowed goals (VAR)
++If a live score **drops back** (a goal chalked off by VAR), everyone gets told once — the chalked team's owner gets a personal DM/push, the channel and all-games feed get a 🚫 line with the corrected score. A feed flap replaying the same reversion, or a server restart, can never re-send it. A score correction to an already-finished game is treated as a results fix and stays silent.
++
+ ---
+ 
+ ## 4) When something goes wrong (client side)
+diff --git a/check.sh b/check.sh
+index 7298126..5640368 100644
+--- a/check.sh
++++ b/check.sh
+@@ -89,6 +89,24 @@ if python3 test_ou_settle.py >/dev/null; then echo "  ok"; else echo "  FAIL"; p
+ say "Over/Under accumulators (O/U legs, mixed with 1X2, combined odds, partial/void/losing-leg settle; 1X2 accas unchanged)"
+ if python3 test_ou_acca.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_ou_acca.py | tail -24; FAIL=1; fi
+ 
++say "Handicap odds model (complementarity, ladder rule, margin, monotonicity, no ±0.5 twin, hostile inputs)"
++if python3 test_hc_odds.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_hc_odds.py | tail -20; FAIL=1; fi
++
++say "Handicap placement (struck at live price, line/selection validation, caps/budget, singles-only, kickoff lock)"
++if python3 test_hc_place.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_hc_place.py | tail -24; FAIL=1; fi
++
++say "Handicap settlement (margin goldens, 90'+ET pens-excluded basis vs result bets, voids, hostile scores)"
++if python3 test_hc_settle.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_hc_settle.py | tail -24; FAIL=1; fi
++
++say "Handicap exploit sweep (book overround grid, covering dutches hc x 1X2 / hc x hc / OU x hc, randomized dutch fuzz)"
++if python3 qa_hc_exploit.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_hc_exploit.py | tail -20; FAIL=1; fi
++
++say "Disallowed-goal (VAR) alerts (score reversion fires once, flap/restart silent, FT-tick fires, post-FT correction silent)"
++if python3 qa_var_alerts.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_var_alerts.py | tail -24; FAIL=1; fi
++
++say "Handicap end-to-end over REAL HTTP (served hcOdds, placement, acca rejection, margin settlement, shootout basis)"
++if python3 qa_hc_http.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_hc_http.py | tail -24; FAIL=1; fi
++
+ say "Betting QA (void lifecycle, mid-game/last-min void, accas, sequencing, free-points)"
+ if python3 qa_betting.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_betting.py | tail -20; FAIL=1; fi
+ 
+diff --git a/qa_hc_exploit.py b/qa_hc_exploit.py
+new file mode 100644
+index 0000000..8841c4c
+--- /dev/null
++++ b/qa_hc_exploit.py
+@@ -0,0 +1,115 @@
++#!/usr/bin/env python3
++"""Handicap exploit sweep — proves the new book can't be farmed, alone or in combination.
++(1) Per-side EV floor: on every offered side, rounded implied >= fair (no long-run bettor-positive rung).
++(2) Analytic covering dutches: every 2-leg combination that COVERS all outcomes — hc x 1X2 across the two
++    different probability models (group 3-way AND the knockout 2-way advance book, where a shootout can
++    decide the result leg), and hc x hc across lines — must cost more than 1.0 implied. These are the exact
++    baskets a sharp bettor would try, priced from the books the server actually serves.
++(3) Seeded dutch fuzz: 4000 random baskets of <=3 legs across result/OU/handicap/exact-score; the
++    worst-case winning-leg count over the outcome space never exceeds the basket's implied cost, so no
++    basket is a guaranteed profit. Deterministic seed -> a stable gate."""
++import random
++import wager as W
++
++fails = []
++def ck(name, cond, extra=""):
++    print(("  PASS " if cond else "  FAIL ") + name + ("" if cond or extra == "" else "  -> %r" % (extra,)))
++    if not cond:
++        fails.append(name)
++
++COMPS = [(c1, c2) for c1 in range(0, 101, 10) for c2 in range(0, 101, 10)]
++
++print("== (1) per-side EV floor: implied >= fair on every offered handicap side ==")
++bad = []
++for c1, c2 in COMPS:
++    lh, la = W._team_lambdas(c1, c2)
++    for k, leg in W.hc_odds(c1, c2).items():
++        fair_h = W._hc_home_prob(lh, la, float(k))
++        for sel, fair in (("HOME", fair_h), ("AWAY", 1.0 - fair_h)):
++            if 1.0 / leg[sel]["decimal"] < fair - 1e-9:
++                bad.append((c1, c2, k, sel, 1.0 / leg[sel]["decimal"], fair))
++ck("no rounded side ever pays better than fair (121 strength pairs)", not bad, bad[:4])
++
++print("\n== (2) analytic covering dutches always cost > 1.0 implied ==")
++def covers_all_hc_1x2(key, hc_sel):
++    # hc HOME@key wins margin > -key; hc AWAY@key wins margin < -key (half keys: exact complement)
++    # HOME(1x2) covers margin >= 1 ... AWAY(1x2) covers margin <= -1 (a KO 'advance' side covers at least that)
++    return ("HOME_1X2",) if (hc_sel == "AWAY" and key < 0) else (("AWAY_1X2",) if (hc_sel == "HOME" and key > 0) else ())
++worst = None
++for c1, c2 in COMPS:
++    hc = W.hc_odds(c1, c2)
++    for ko in (False, True):
++        mo = W.match_odds(c1, c2, knockout=ko)
++        for k, leg in hc.items():
++            key = float(k)
++            for hc_sel in ("HOME", "AWAY"):
++                for partner in covers_all_hc_1x2(key, hc_sel):
++                    part = mo["HOME"] if partner == "HOME_1X2" else mo["AWAY"]
++                    cost = 1.0 / leg[hc_sel]["decimal"] + 1.0 / part["decimal"]
++                    if worst is None or cost < worst[0]:
++                        worst = (cost, c1, c2, k, hc_sel, partner, "KO" if ko else "GRP")
++                    if cost <= 1.0 + 1e-9:
++                        fails.append("hc x 1X2 cover under 1.0 at %r" % ((c1, c2, k, hc_sel, partner, ko),))
++ck("every covering hc x 1X2 dutch (group AND knockout books) costs > 1.0", 
++   not any(f.startswith("hc x 1X2") for f in fails), worst)
++print("     tightest hc x 1X2 cover found: %.4f implied at comps (%d,%d) line %s %s + %s [%s]" % worst)
++
++worst2 = None
++for c1, c2 in COMPS:
++    hc = W.hc_odds(c1, c2)
++    keys = sorted((float(k) for k in hc), reverse=True)
++    for L1 in keys:              # HOME@L1 wins m > -L1 ; AWAY@L2 wins m < -L2 ; union covers all <=> L2 < L1
++        for L2 in keys:
++            if L2 < L1:
++                cost = 1.0 / hc[W._line_key(L1)]["HOME"]["decimal"] + 1.0 / hc[W._line_key(L2)]["AWAY"]["decimal"]
++                if worst2 is None or cost < worst2[0]:
++                    worst2 = (cost, c1, c2, L1, L2)
++                if cost <= 1.0 + 1e-9:
++                    fails.append("hc x hc cover under 1.0 at %r" % ((c1, c2, L1, L2),))
++ck("every covering hc x hc dutch costs > 1.0", not any(f.startswith("hc x hc") for f in fails), worst2)
++print("     tightest hc x hc cover found: %.4f implied at comps (%d,%d) HOME@%+g + AWAY@%+g" % worst2)
++
++print("\n== (3) seeded dutch fuzz across ALL four markets: no basket guarantees profit ==")
++rng = random.Random(26)
++OUTCOMES = [(h, a) for h in range(10) for a in range(10)] + [(12, 0), (0, 12), (12, 5), (5, 12)]
++def leg_wins(leg, h, a):
++    kind = leg[0]
++    if kind == "res":
++        m = h - a
++        return (m > 0) if leg[1] == "HOME" else ((m < 0) if leg[1] == "AWAY" else m == 0)
++    if kind == "ou":
++        return (h + a) > leg[2] if leg[1] == "OVER" else (h + a) < leg[2]
++    if kind == "hc":
++        cov = (h + leg[2]) > a
++        return cov if leg[1] == "HOME" else not cov
++    return "%d-%d" % (h, a) == leg[1]                       # cs
++checked = 0
++for _ in range(4000):
++    c1, c2 = rng.choice(COMPS)
++    pool = []
++    mo = W.match_odds(c1, c2)
++    for sel in ("HOME", "DRAW", "AWAY"):
++        pool.append((("res", sel), 1.0 / mo[sel]["decimal"]))
++    for k, leg in W.goals_odds(c1, c2).items():
++        for sel in ("OVER", "UNDER"):
++            pool.append((("ou", sel, float(k)), 1.0 / leg[sel]["decimal"]))
++    for k, leg in W.hc_odds(c1, c2).items():
++        for sel in ("HOME", "AWAY"):
++            pool.append((("hc", sel, float(k)), 1.0 / leg[sel]["decimal"]))
++    cs = W.cs_odds(c1, c2)
++    for cell in rng.sample(sorted(cs), 12):
++        pool.append((("cs", cell), 1.0 / cs[cell]["decimal"]))
++    basket = rng.sample(pool, rng.randint(1, 3))
++    implied = sum(p for _leg, p in basket)
++    min_wins = min(sum(1 for leg, _p in basket if leg_wins(leg, h, a)) for h, a in OUTCOMES)
++    checked += 1
++    if min_wins > implied + 1e-9:
++        fails.append("guaranteed-profit basket at (%d,%d): %r" % (c1, c2, basket))
++ck("4000 random <=3-leg baskets: worst-case wins never exceed the implied cost", 
++   not any(f.startswith("guaranteed-profit") for f in fails), checked)
++
++print()
++if fails:
++    print("FAILED: %d -> %s" % (len(fails), fails[:6]))
++    raise SystemExit(1)
++print("ALL HANDICAP EXPLOIT CHECKS PASSED")
+diff --git a/qa_hc_http.py b/qa_hc_http.py
+new file mode 100644
+index 0000000..80e8af2
+--- /dev/null
++++ b/qa_hc_http.py
+@@ -0,0 +1,190 @@
++#!/usr/bin/env python3
++"""Handicap over the wire — boot the REAL server, bet real HTTP, settle through the real poll.
++Locks in: the tracker payload carries margined hcOdds for a bettable fixture; a bet struck via
++POST /api/place_wager locks EXACTLY the served price (display == placement); junk lines and hc acca
++legs are rejected cleanly over HTTP; both sides of one hc line are allowed (own-margin market);
++a finished match settles hc bets to the right statuses + returns via /api/poll; and on a knockout
++decided by penalties the RESULT bet wins off the shootout while HOME -1.5 loses on the 90'+ET margin
++— the two settlement bases proven divergent end-to-end."""
++import os, sys, json, time, shutil, tempfile, subprocess, socket
++import urllib.request, urllib.error
++
++REPO = os.path.dirname(os.path.abspath(__file__))
++sys.path.insert(0, REPO)
++KEY = "QA_ADMIN_KEY_1234567"
++FAILS = []
++def ck(name, cond, extra=""):
++    print(("  PASS " if cond else "  FAIL ") + name + ("" if cond or extra == "" else "  -> %r" % (extra,)))
++    if not cond:
++        FAILS.append(name)
++
++def free_port():
++    s = socket.socket(); s.bind(("127.0.0.1", 0)); p = s.getsockname()[1]; s.close(); return p
++
++TJ = json.load(open(os.path.join(REPO, "teams.json")))
++NAMES = [t["name"] for t in TJ["teams"]]
++HOME, AWAY, OTHERH, OTHERA = NAMES[0], NAMES[1], NAMES[2], NAMES[3]
++UP = "2099-06-15T18:00:00Z"
++
++def match(mid, h, a, status, hs=None, as_=None, winner=None, stage="GROUP_STAGE", utc=UP, **kw):
++    m = {"id": mid, "home": h, "away": a, "status": status, "homeScore": hs, "awayScore": as_,
++         "winner": winner, "stage": stage, "utcDate": utc, "group": "A"}
++    m.update(kw)
++    return m
++
++class Server:
++    def __init__(self, results, extra_cfg=None):
++        self.tmp = tempfile.mkdtemp(prefix="wc26_hchttp_")
++        self.port = free_port(); self.base = "http://127.0.0.1:%d" % self.port
++        shutil.copy2(os.path.join(REPO, "teams.json"), os.path.join(self.tmp, "teams.json"))
++        draw = {"players": [
++            {"name": "Erol", "teams": [{"name": HOME, "tier": 1, "group": "A"}, {"name": OTHERH, "tier": 2, "group": "B"}]},
++            {"name": "James", "teams": [{"name": AWAY, "tier": 1, "group": "A"}, {"name": OTHERA, "tier": 2, "group": "B"}]},
++        ]}
++        json.dump(draw, open(os.path.join(self.tmp, "draw_result.json"), "w"))
++        json.dump({"matches": results}, open(os.path.join(self.tmp, "results.json"), "w"))
++        json.dump([], open(os.path.join(self.tmp, "wagers.json"), "w"))
++        cfg = {"configured": True, "wagering_enabled": True, "players": ["Erol", "James"],
++               "admin_key": KEY, "token": "dummy-token-so-fetch-fails-closed",
++               "wager_pins": {"Erol": "ABCD", "James": "WXYZ"}, "scoring_mode": "points"}
++        cfg.update(extra_cfg or {})
++        json.dump(cfg, open(os.path.join(self.tmp, "config.json"), "w"))
++        last_err = None
++        for _attempt in range(4):
++            env = dict(os.environ, WC26_DATA=self.tmp, WC26_CONFIG=os.path.join(self.tmp, "config.json"),
++                       PORT=str(self.port), HOST="127.0.0.1", ADMIN_KEY=KEY)
++            self.proc = subprocess.Popen([sys.executable, os.path.join(REPO, "server.py")], env=env,
++                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
++            ready = False
++            for _ in range(150):
++                if self.proc.poll() is not None:
++                    last_err = "server exited during startup"
++                    break
++                try:
++                    urllib.request.urlopen(self.base + "/api/summary", timeout=1)
++                    ready = True
++                    break
++                except Exception:
++                    time.sleep(0.1)
++            if ready:
++                return
++            try:
++                self.proc.terminate(); self.proc.wait(timeout=3)
++            except Exception:
++                pass
++            self.port = free_port(); self.base = "http://127.0.0.1:%d" % self.port
++        raise RuntimeError("server would not come up: %s" % last_err)
++
++    def req(self, method, path, body=None):
++        data = json.dumps(body).encode() if body is not None else None
++        r = urllib.request.Request(self.base + path, data=data, method=method,
++                                   headers={"Content-Type": "application/json"})
++        try:
++            with urllib.request.urlopen(r, timeout=10) as resp:
++                return resp.status, resp.read()
++        except urllib.error.HTTPError as e:
++            return e.code, e.read()
++
++    def wait(self, cond, timeout=12):
++        end = time.time() + timeout
++        while time.time() < end:
++            try:
++                if cond():
++                    return True
++            except Exception:
++                pass
++            time.sleep(0.05)
++        return False
++
++    def tracker(self):
++        return json.load(open(os.path.join(self.tmp, "tracker_data.json")))
++
++    def wagers(self):
++        return json.load(open(os.path.join(self.tmp, "wagers.json")))
++
++    def set_results(self, results):
++        json.dump({"matches": results}, open(os.path.join(self.tmp, "results.json"), "w"))
++
++    def stop(self):
++        self.proc.terminate()
++        try:
++            self.proc.wait(timeout=5)
++        except Exception:
++            self.proc.kill()
++        shutil.rmtree(self.tmp, ignore_errors=True)
++
++# ============================================================ 1. served odds == struck odds
++print("\n== 1. tracker payload carries margined hcOdds; a real bet strikes the served price ==")
++S = Server([match("g1", HOME, AWAY, "TIMED"), match("g2", OTHERH, OTHERA, "TIMED")])
++try:
++    ok_fx = S.wait(lambda: (next((f for f in S.tracker().get("fixtures", []) if f.get("matchId") == "g1"), {}) or {}).get("hcOdds"))
++    fx = next((f for f in S.tracker().get("fixtures", []) if f.get("matchId") == "g1"), {})
++    hc = fx.get("hcOdds") or {}
++    ck("fixture payload has hcOdds", ok_fx and isinstance(hc, dict) and hc, sorted(hc))
++    ck("every served line key is a real HC line", all(any(k == ("%g" % L) for L in (-2.5, -1.5, 1.5, 2.5)) for k in hc), sorted(hc))
++    ck("every served hc book overrounds", all((1.0 / v["HOME"]["decimal"] + 1.0 / v["AWAY"]["decimal"]) > 1.0 + 1e-6 for v in hc.values()), hc)
++    ln = "-1.5" if "-1.5" in hc else sorted(hc, key=lambda k: abs(float(k)))[0]
++    served = hc[ln]["HOME"]
++    st, b = S.req("POST", "/api/place_wager", {"player": "Erol", "matchId": "g1", "selection": "HOME",
++                                               "market": "hc", "line": float(ln), "stake": 2, "pin": "ABCD"})
++    j = json.loads(b)
++    w = j.get("wager") or {}
++    ck("hc bet accepted over HTTP (200/ok)", st == 200 and j.get("ok"), b[:160])
++    ck("stored as market=hc with the line", w.get("market") == "hc" and w.get("line") == float(ln), w)
++    ck("struck odds EXACTLY equal the served price", w.get("num") == served["num"] and w.get("den") == served["den"],
++       (w.get("frac"), served["frac"]))
++    st2, b2 = S.req("POST", "/api/place_wager", {"player": "Erol", "matchId": "g1", "selection": "AWAY",
++                                                 "market": "hc", "line": float(ln), "stake": 2, "pin": "ABCD"})
++    ck("the other side of the same line is allowed (own-margin market)", json.loads(b2).get("ok") is True, b2[:140])
++    st3, b3 = S.req("POST", "/api/place_wager", {"player": "Erol", "matchId": "g1", "selection": "HOME",
++                                                 "market": "hc", "line": 0.5, "stake": 3, "pin": "ABCD"})
++    ck("a half-goal line is rejected over HTTP", json.loads(b3).get("ok") is not True and "line" in json.loads(b3).get("error", "").lower(), b3[:140])
++    st4, b4 = S.req("POST", "/api/place_acca", {"player": "James", "stake": 3, "pin": "WXYZ",
++                                                "legs": [{"matchId": "g1", "selection": "HOME", "market": "hc", "line": float(ln)},
++                                                         {"matchId": "g2", "selection": "HOME"}]})
++    ck("an acca with an hc leg is rejected with the singles-only message",
++       json.loads(b4).get("ok") is not True and "single" in json.loads(b4).get("error", "").lower(), b4[:160])
++
++    # -------- settle through the real poll --------
++    S.set_results([match("g1", HOME, AWAY, "FINISHED", hs=3, as_=1), match("g2", OTHERH, OTHERA, "FINISHED", hs=1, as_=0)])
++    S.req("POST", "/api/poll")
++    done = S.wait(lambda: all(x.get("status") != "pending" for x in S.wagers()))
++    ws = S.wagers()
++    wh = next((x for x in ws if x.get("selection") == "HOME" and x.get("market") == "hc"), {})
++    wa = next((x for x in ws if x.get("selection") == "AWAY" and x.get("market") == "hc"), {})
++    ck("both hc bets settled via /api/poll", done and wh and wa, ws)
++    want = round(2 * (1 + wh.get("num", 0) / wh.get("den", 1)), 2)
++    ck("HOME %s on 3-1 WON with stake x odds back" % ln, wh.get("status") == "won" and abs(wh.get("return", 0) - want) < 0.011, wh)
++    ck("AWAY %s on 3-1 LOST with return 0" % ln, wa.get("status") == "lost" and wa.get("return") == 0, wa)
++finally:
++    S.stop()
++
++# ============================================================ 2. knockout: pens decide the result, never the handicap
++print("\n== 2. knockout decided on penalties: result bet wins, HOME -1.5 loses (bases diverge) ==")
++S = Server([match("k1", HOME, AWAY, "TIMED", stage="QUARTER_FINALS")])
++try:
++    S.wait(lambda: (next((f for f in S.tracker().get("fixtures", []) if f.get("matchId") == "k1"), {}) or {}).get("hcOdds"))
++    st, b = S.req("POST", "/api/place_wager", {"player": "Erol", "matchId": "k1", "selection": "HOME",
++                                               "market": "hc", "line": -1.5, "stake": 3, "pin": "ABCD"})
++    ck("hc places on a knockout over HTTP", json.loads(b).get("ok") is True, b[:140])
++    st2, b2 = S.req("POST", "/api/place_wager", {"player": "Erol", "matchId": "k1", "selection": "HOME",
++                                                 "stake": 3, "pin": "ABCD"})
++    ck("a result (to-advance) bet places alongside it", json.loads(b2).get("ok") is True, b2[:140])
++    S.set_results([match("k1", HOME, AWAY, "FINISHED", hs=1, as_=1, stage="QUARTER_FINALS",
++                         penHome=4, penAway=2, shootout=True)])
++    S.req("POST", "/api/poll")
++    done = S.wait(lambda: all(x.get("status") != "pending" for x in S.wagers()))
++    ws = S.wagers()
++    hc_bet = next((x for x in ws if x.get("market") == "hc"), {})
++    res_bet = next((x for x in ws if "market" not in x or x.get("market") in (None, "result")), {})
++    ck("both bets settled", done and hc_bet and res_bet, ws)
++    ck("HOME -1.5 on 1-1 (4-2 pens) LOST — pens never count for the margin", hc_bet.get("status") == "lost", hc_bet)
++    ck("the result bet WON off the shootout", res_bet.get("status") == "won", res_bet)
++finally:
++    S.stop()
++
++print()
++if FAILS:
++    print("FAILED: %d -> %s" % (len(FAILS), FAILS))
++    raise SystemExit(1)
++print("ALL HANDICAP HTTP CHECKS PASSED")
+diff --git a/qa_var_alerts.py b/qa_var_alerts.py
+new file mode 100644
+index 0000000..0cccd63
+--- /dev/null
++++ b/qa_var_alerts.py
+@@ -0,0 +1,110 @@
++#!/usr/bin/env python3
++"""Disallowed-goal (VAR) alert QA — a live score that ROSE then drops back must notify everyone exactly
++once. Locks in: the alert fires on a live reversion (owner push + DM, channel line, all-games feed);
++a feed flap replaying the same drop is silent (persistent at-most-once guard, which also covers a
++service restart re-comparing snapshots); a LATER distinct chalk-off still gets its own single alert;
++a revert landing on the full-time tick itself fires; a correction to an already-FINISHED game stays
++silent; a 1-0 -> 0-1 swap fires the away goal AND the home disallowed together; and plain goal /
++kickoff alerts are untouched."""
++import os, sys, json, tempfile
++
++REPO = os.path.dirname(os.path.abspath(__file__))
++sys.path.insert(0, REPO)
++FAILS = []
++def ck(name, cond, extra=""):
++    print(("  PASS " if cond else "  FAIL ") + name + ("" if cond or extra == "" else "  -> %r" % (extra,)))
++    if not cond:
++        FAILS.append(name)
++
++t = tempfile.mkdtemp(prefix="wc26_var_")
++os.environ["WC26_DATA"] = t
++os.environ["WC26_CONFIG"] = os.path.join(t, "config.json")
++json.dump({"configured": True, "discord_webhook": "https://example/webhook", "site_url": "https://example"},
++          open(os.environ["WC26_CONFIG"], "w"))
++import server as S
++
++PUSH, DM, CHAN, DMALL = [], [], [], []
++S.discord_send = lambda text: None
++S.push_player = lambda player, etype, title, body: PUSH.append((player, etype, title, body))
++S._bot_dm_player = lambda player, text, match_id=None: (DM.append((player, text)) or 1)
++S._channel_event = lambda text, mid=None: CHAN.append(text)
++S._dm_all_games = lambda text, exclude_players=None: DMALL.append((text, list(exclude_players or [])))
++S.discord_mention = lambda who, msg: None
++
++def clear_caps():
++    PUSH.clear(); DM.clear(); CHAN.clear(); DMALL.clear()
++
++def clear_guard():
++    try:
++        os.remove(os.path.join(t, "alerts_sent.json"))
++    except OSError:
++        pass
++
++def tracker(mp, status, hs, as_):
++    return {"stats": {"matches_played": mp},
++            "leaderboards": {"points": [{"name": "Erol"}, {"name": "James"}], "survival": [{"name": "Erol"}]},
++            "players": [{"name": "Erol"}, {"name": "James"}],
++            "fixtures": [{"home": "Spain", "away": "France", "status": status,
++                          "homeOwner": "Erol", "awayOwner": "James",
++                          "homeScore": hs, "awayScore": as_, "stage": "GROUP_STAGE", "group": "A"}]}
++
++def transition(old_td, new_td):
++    json.dump(old_td, open(os.path.join(t, "tracker_data.json"), "w"))
++    old = S._load_tracker()
++    json.dump(new_td, open(os.path.join(t, "tracker_data.json"), "w"))
++    clear_caps()
++    S.notify_changes(old)
++
++def var_chan():
++    return [c for c in CHAN if "disallowed" in c.lower()]
++
++print("== a live 1-0 -> 0-0 reversion fires the full fan-out, once ==")
++clear_guard()
++transition(tracker(0, "IN_PLAY", 1, 0), tracker(0, "IN_PLAY", 0, 0))
++ck("channel got exactly one disallowed line", len(var_chan()) == 1, CHAN)
++ck("the line names the chalked team + the corrected score", var_chan() and "Spain" in var_chan()[0] and "0–0" in var_chan()[0], var_chan())
++ck("the owner of the chalked goal got a push (goal class)", any(p == ("Erol",) + p[1:] and p[1] == "goal" and "disallowed" in p[2].lower() for p in PUSH), PUSH)
++ck("the owner got a personal DM", any(pl == "Erol" and "disallowed" in tx.lower() for pl, tx in DM), DM)
++ck("the all-games feed got it, owner excluded", any("disallowed" in tx.lower() and "Erol" in ex for tx, ex in DMALL), DMALL)
++ck("no goal-scored alert fired for the drop", not any("scored" in c for c in CHAN), CHAN)
++
++print("\n== the same drop replayed (feed flap / restart re-compare) is silent ==")
++transition(tracker(0, "IN_PLAY", 1, 0), tracker(0, "IN_PLAY", 0, 0))   # guard file NOT cleared
++ck("no second alert for the identical reversion", len(var_chan()) == 0, CHAN)
++
++print("\n== a LATER, different chalk-off still gets its own single alert ==")
++transition(tracker(0, "IN_PLAY", 2, 1), tracker(0, "IN_PLAY", 1, 1))
++ck("distinct reversion (2-1 -> 1-1) fires once", len(var_chan()) == 1, CHAN)
++transition(tracker(0, "IN_PLAY", 2, 1), tracker(0, "IN_PLAY", 1, 1))
++ck("...and never again", len(var_chan()) == 0, CHAN)
++
++print("\n== a revert landing on the full-time tick itself still fires ==")
++clear_guard()
++transition(tracker(0, "IN_PLAY", 1, 0), tracker(1, "FINISHED", 0, 0))
++ck("IN_PLAY 1-0 -> FINISHED 0-0 fires the disallowed alert", len(var_chan()) == 1, CHAN)
++
++print("\n== a correction to an ALREADY-finished game is results territory: silent ==")
++clear_guard()
++transition(tracker(1, "FINISHED", 1, 0), tracker(1, "FINISHED", 0, 0))
++ck("FINISHED -> FINISHED score change fires nothing", len(var_chan()) == 0, CHAN)
++
++print("\n== a 1-0 -> 0-1 live swap fires the away goal AND the home disallowed ==")
++clear_guard()
++transition(tracker(0, "IN_PLAY", 1, 0), tracker(0, "IN_PLAY", 0, 1))
++ck("France's goal alert fired", any("France" in c and "scored" in c for c in CHAN), CHAN)
++ck("Spain's disallowed alert fired", len(var_chan()) == 1 and "Spain" in var_chan()[0], CHAN)
++
++print("\n== plain goal + kickoff alerts are untouched (regression) ==")
++clear_guard()
++transition(tracker(0, "TIMED", None, None), tracker(0, "IN_PLAY", 0, 0))
++ck("kickoff still fires, no disallowed noise", any("Kicked off" in c for c in CHAN) and not var_chan(), CHAN)
++transition(tracker(0, "IN_PLAY", 0, 0), tracker(0, "IN_PLAY", 1, 0))
++ck("a normal goal still fires, no disallowed noise", any("scored" in c for c in CHAN) and not var_chan(), CHAN)
++transition(tracker(0, "IN_PLAY", None, None), tracker(0, "IN_PLAY", 0, 0))
++ck("None -> 0-0 is not a reversion", not var_chan(), CHAN)
++
++print()
++if FAILS:
++    print("FAILED: %d -> %s" % (len(FAILS), FAILS))
++    raise SystemExit(1)
++print("ALL DISALLOWED-GOAL ALERT CHECKS PASSED")
+diff --git a/scoring.py b/scoring.py
+index b61d202..a2f1c4d 100644
+--- a/scoring.py
++++ b/scoring.py
+@@ -866,6 +866,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
+                     f["odds"] = wager.match_odds(ch, ca, knockout=wager.is_knockout(f))
+                     f["ouOdds"] = wager.goals_odds(ch, ca)        # Over/Under prices per line (ladder-rule filtered)
+                     f["csOdds"] = wager.cs_odds(ch, ca)           # exact-scoreline prices (0-0..4-4 + OTHER)
++                    f["hcOdds"] = wager.hc_odds(ch, ca)           # handicap (goal-margin) prices per HOME line
+                     f["matchId"] = wager.match_id(m)
+                     f["maxStake"] = wager.stage_max_stake(f.get("stage"))
+             data["wager_stats"] = wager.stats(wagers)
+diff --git a/server.py b/server.py
+index 034f9b0..ab78045 100644
+--- a/server.py
++++ b/server.py
+@@ -1290,6 +1290,13 @@ def _pick_label(w, draw="the draw"):
+             return ("Over %g goals" if w.get("selection") == "OVER" else "Under %g goals") % float(w.get("line"))
+         except (TypeError, ValueError):
+             return "Over/Under goals"
++    if (w.get("market") or "result") == "hc":
++        try:
++            ln = float(w.get("line"))
++            team = w.get("home") if w.get("selection") == "HOME" else w.get("away")
++            return "%s %+g (handicap)" % (team, ln if w.get("selection") == "HOME" else -ln)
++        except (TypeError, ValueError):
++            return "Handicap"
+     return w["home"] if w.get("selection") == "HOME" else (w["away"] if w.get("selection") == "AWAY" else draw)
+ 
+ 
+@@ -1822,6 +1829,26 @@ def notify_changes(old):
+                         _bot_dm_player(ao, "⚽ **%s** scored — %s" % (a, score), match_id=mid)     # personal -> DM
+                         _channel_event("⚽ **%s** (%s) scored — %s" % (a, ao, score), mid)
+                         _dm_all_games("⚽ **%s** (%s) scored — %s" % (a, ao, score), exclude_players=[ao])   # owner already got the personal DM above
++            # disallowed goal (VAR): a score that rose earlier DROPS back while the game is live, or on the
++            # very tick it goes full-time (a chalk-off right at the whistle still lands with the FT feed).
++            # At-most-once per exact reversion via the persistent flow-alert guard, so a feed flap replaying
++            # the same drop — or a restart re-comparing the saved snapshot — can never re-send it. A change
++            # to an ALREADY-finished score is a results correction, not a VAR moment: stays silent here.
++            if ov is not None and (st in LIVE_STATUSES or (st in FT_STATUSES and was in LIVE_STATUSES)):
++                vhs, vas = ov[3], ov[4]
++                if None not in (nhs, nas, vhs, vas) and (nhs < vhs or nas < vas):
++                    vscore = "%s %d–%d %s" % (h, nhs, nas, a)
++                    vev = "var:%d-%d>%d-%d" % (vhs, vas, nhs, nas)
++                    if _alert_first_time(mid, h, a, vev):
++                        chalked = ([(h, ho, ho_ok)] if nhs < vhs else []) + ([(a, ao, ao_ok)] if nas < vas else [])
++                        for vt, vo, vok in chalked:
++                            if vok:
++                                push_player(vo, "goal", "Goal disallowed 🚫", "%s's goal was chalked off — %s" % (vt, vscore))
++                                _bot_dm_player(vo, "🚫 **%s** goal disallowed — %s" % (vt, vscore), match_id=mid)   # personal -> DM
++                        vline = "🚫 Goal disallowed — %s: now %s" % (
++                            " & ".join("**%s** (%s)" % (vt, own(vo)) for vt, vo, _k in chalked), vscore)
++                        _channel_event(vline, mid)
++                        _dm_all_games(vline, exclude_players=[vo for _t, vo, vok in chalked if vok])
+     except Exception:
+         pass
+     # a player's team is knocked out
+@@ -2895,6 +2922,10 @@ def _odds_integrity_violations(td, teams):
+                 bo = _odds_book_overround([leg["OVER"]["decimal"], leg["UNDER"]["decimal"]])
+                 if bo is not None and bo <= 1.0:
+                     out.append("%s v %s — O/U %s book %.1f%%" % (h, a, ln, bo * 100))
++            for ln, leg in (wager_mod.hc_odds(ch, ca) or {}).items():
++                bh = _odds_book_overround([leg["HOME"]["decimal"], leg["AWAY"]["decimal"]])
++                if bh is not None and bh <= 1.0:
++                    out.append("%s v %s — handicap %s book %.1f%%" % (h, a, ln, bh * 100))
+     except Exception as e:
+         log("odds integrity check error (non-fatal):", e)
+     return out
+diff --git a/test_hc_odds.py b/test_hc_odds.py
+new file mode 100644
+index 0000000..b1de52a
+--- /dev/null
++++ b/test_hc_odds.py
+@@ -0,0 +1,92 @@
++#!/usr/bin/env python3
++"""Handicap odds model QA — hc_odds() prices goal-margin lines off the SAME Poisson grid as the
++exact-score book. Checks: dict shape, exact HOME/AWAY complement, the ladder rule (never quote a side
++we can't price inside the ladder), guaranteed post-rounding overround, mirror symmetry at even
++strengths, monotonicity in both line and strength, hostile inputs, and the shared-model invariants
++(cs split == hc split; lambdas sum to expected_goals). Also proves ±0.5 is not on the menu."""
++import wager as W
++
++fails = []
++def ck(name, cond, extra=""):
++    print(("  PASS " if cond else "  FAIL ") + name + ("" if cond or extra == "" else "  -> %r" % (extra,)))
++    if not cond:
++        fails.append(name)
++
++print("== shape + fraction coherence ==")
++book = W.hc_odds(80, 60)
++ck("returns a dict of offered lines", isinstance(book, dict) and len(book) >= 1, book)
++ck("every key is a stringified member of HC_LINES", all(any(k == W._line_key(L) for L in W.HC_LINES) for k in book), sorted(book))
++for k, leg in book.items():
++    for sel in ("HOME", "AWAY"):
++        o = leg.get(sel) or {}
++        ok_frac = o.get("frac") == "%d/%d" % (o.get("num", -1), o.get("den", -2))
++        ok_dec = abs(o.get("decimal", 0) - round(1.0 + o["num"] / o["den"], 3)) < 1e-9 if o.get("den") else False
++        ck("line %s %s: frac/num/den/decimal agree" % (k, sel), ok_frac and ok_dec, o)
++
++print("\n== the model: exact complement + monotone in the line ==")
++lh, la = W._team_lambdas(80, 60)
++probs = {L: W._hc_home_prob(lh, la, L) for L in (-2.5, -1.5, 1.5, 2.5)}
++ck("P(home covers) strictly rises with the line", probs[-2.5] < probs[-1.5] < probs[1.5] < probs[2.5], probs)
++ck("a bigger favourite covers -1.5 more often", W._hc_home_prob(*W._team_lambdas(95, 40), line=-1.5) > probs[-1.5],
++   (W._hc_home_prob(*W._team_lambdas(95, 40), line=-1.5), probs[-1.5]))
++
++print("\n== ladder rule + margin on every offered line (11x11 strength grid) ==")
++grid_bad = []
++for c1 in range(0, 101, 10):
++    for c2 in range(0, 101, 10):
++        b = W.hc_odds(c1, c2)
++        lam_h, lam_a = W._team_lambdas(c1, c2)
++        for k, leg in b.items():
++            imp = 1.0 / leg["HOME"]["decimal"] + 1.0 / leg["AWAY"]["decimal"]
++            fair = W._hc_home_prob(lam_h, lam_a, float(k))
++            if imp <= 1.0 + 1e-6:
++                grid_bad.append(("underround", c1, c2, k, imp))
++            if fair > W.HC_MAX_PROB + 1e-9 or (1 - fair) > W.HC_MAX_PROB + 1e-9:
++                grid_bad.append(("ladder", c1, c2, k, fair))
++            if max(1.0 / leg["HOME"]["decimal"], 1.0 / leg["AWAY"]["decimal"]) > 0.94:
++                grid_bad.append(("shortprice", c1, c2, k, leg))
++ck("every offered book overrounds; no side beats the ladder", not grid_bad, grid_bad[:4])
++
++print("\n== symmetry at even strengths ==")
++ev = W.hc_odds(50, 50)
++if "-1.5" in ev and "1.5" in ev:
++    ck("even game: HOME -1.5 mirrors AWAY +1.5", ev["-1.5"]["HOME"]["frac"] == ev["1.5"]["AWAY"]["frac"],
++       (ev["-1.5"]["HOME"]["frac"], ev["1.5"]["AWAY"]["frac"]))
++    ck("even game: AWAY of -1.5 mirrors HOME of +1.5", ev["-1.5"]["AWAY"]["frac"] == ev["1.5"]["HOME"]["frac"],
++       (ev["-1.5"]["AWAY"]["frac"], ev["1.5"]["HOME"]["frac"]))
++else:
++    ck("even game offers the ±1.5 pair", False, sorted(ev))
++
++print("\n== ±0.5 is deliberately not a thing (no cross-model 1X2 twin) ==")
++ck("0.5 and -0.5 are not in HC_LINES", 0.5 not in W.HC_LINES and -0.5 not in W.HC_LINES, W.HC_LINES)
++ck("the standard book never quotes a half-goal line", all(abs(float(k)) >= 1.5 for k in W.hc_odds(70, 55)), sorted(W.hc_odds(70, 55)))
++
++print("\n== shared model invariants (exact score and handicap can never disagree) ==")
++for c1, c2 in ((80, 60), (50, 50), (10, 95)):
++    lh2, la2 = W._team_lambdas(c1, c2)
++    ck("lambdas at (%d,%d) sum to expected_goals" % (c1, c2), abs((lh2 + la2) - W.expected_goals(c1, c2)) < 1e-9, (lh2, la2))
++    ph, pd, pa = W._fair_probs(c1, c2)
++    share = min(0.85, max(0.15, ph + pd / 2.0))
++    ck("home share at (%d,%d) matches the exact-score split" % (c1, c2), abs(lh2 - W.expected_goals(c1, c2) * share) < 1e-9, lh2)
++
++print("\n== hostile inputs never crash, never underround ==")
++for junk in (float("nan"), float("inf"), -5, None, "x", 1e18):
++    try:
++        b = W.hc_odds(junk, 55)
++        good = isinstance(b, dict) and all(
++            1.0 / leg["HOME"]["decimal"] + 1.0 / leg["AWAY"]["decimal"] > 1.0 + 1e-6 for leg in b.values())
++        ck("junk comp %r -> sane, margined book" % (junk,), good, b)
++    except Exception as e:
++        ck("junk comp %r -> sane, margined book" % (junk,), False, e)
++ck("junk line in the prob model -> neutral 0.5", W._hc_home_prob(1.3, 1.3, "x") == 0.5 and W._hc_home_prob(1.3, 1.3, float("nan")) == 0.5)
++
++print("\n== grid depth: the truncated tail really is dust ==")
++lh3, la3 = W._team_lambdas(100, 0)
++tail = (1.0 - W._poisson_cdf(W.HC_GRID_MAX, lh3)) + (1.0 - W._poisson_cdf(W.HC_GRID_MAX, la3))
++ck("worst-case off-grid probability mass < 1e-4", tail < 1e-4, tail)
++
++print()
++if fails:
++    print("FAILED: %d -> %s" % (len(fails), fails))
++    raise SystemExit(1)
++print("ALL HANDICAP ODDS CHECKS PASSED")
+diff --git a/test_hc_place.py b/test_hc_place.py
+new file mode 100644
+index 0000000..dcba044
+--- /dev/null
++++ b/test_hc_place.py
+@@ -0,0 +1,96 @@
++#!/usr/bin/env python3
++"""Handicap placement QA — wager.place(market='hc'). Mirrors the O/U placement suite: valid placement
++with locked server-side odds, selection + line validation (only offered HC_LINES; a ladder-filtered
++line prices to a clean error), the pre-kickoff lock, stake floor/caps/budget, singles-only (acca
++rejection), the O/U-style exemption from the opposing-bet block, knockout placement — and proof that
++result, O/U and exact-score placement are completely unchanged by the new branch."""
++import wager as W
++
++fails = []
++def ck(name, cond, extra=""):
++    print(("  PASS " if cond else "  FAIL ") + name + ("" if cond or extra == "" else "  -> %r" % (extra,)))
++    if not cond:
++        fails.append(name)
++
++NOW = 1_700_000_000
++FUTURE = {"home": "Brazil", "away": "Serbia", "stage": "GROUP_STAGE", "utcDate": "2099-01-01T00:00:00Z", "status": "TIMED"}
++KO = {"home": "Brazil", "away": "Serbia", "stage": "QUARTER_FINALS", "utcDate": "2099-01-01T00:00:00Z", "status": "TIMED"}
++KICKED = {"home": "Brazil", "away": "Serbia", "stage": "GROUP_STAGE", "utcDate": "2000-01-01T00:00:00Z", "status": "IN_PLAY"}
++CH, CA = 80, 60
++
++print("== a valid handicap bet places cleanly ==")
++ws = []
++ok, w = W.place(ws, "Erol", FUTURE, "HOME", 5, 100, CH, CA, now=NOW, market="hc", line=-1.5)
++ck("HOME -1.5 placed", ok and isinstance(w, dict), w)
++ck("stored as the hc market with the line", ok and w.get("market") == "hc" and w.get("line") == -1.5, w if ok else None)
++ck("selection + odds + return stored", ok and w["selection"] == "HOME" and w["num"] and w["return"] > 0, w if ok else None)
++ck("it was appended to the list", len(ws) == 1, len(ws))
++_live = W.hc_odds(CH, CA)["-1.5"]["HOME"]
++ck("struck odds == server price for that line/side", ok and w["num"] == _live["num"] and w["den"] == _live["den"],
++   (w.get("frac") if ok else None, _live["frac"]))
++ok2, w2 = W.place(ws, "Erol", FUTURE, "AWAY", 4, 100, CH, CA, now=NOW, market="hc", line=-1.5)
++ck("AWAY on the -1.5 key (underdog GETTING 1.5) places too", ok2 and w2.get("selection") == "AWAY" and w2.get("line") == -1.5, w2 if ok2 else None)
++
++print("\n== selection + line validation ==")
++for bad_sel in ("DRAW", "OVER", "BRAZIL", "", None, "home"):
++    ok_b, msg = W.place([], "Erol", FUTURE, bad_sel, 5, 100, CH, CA, now=NOW, market="hc", line=-1.5)
++    ck("selection %r is rejected" % (bad_sel,), not ok_b, msg if ok_b else None)
++for bad in (0.5, -0.5, 1.0, 3.0, 9.5, 0, "x", None, float("nan"), float("inf")):
++    ok_b, msg = W.place([], "Erol", FUTURE, "HOME", 5, 100, CH, CA, now=NOW, market="hc", line=bad)
++    ck("line %r is rejected" % (bad,), not ok_b, msg if ok_b else None)
++for good in sorted(W.hc_odds(CH, CA).keys(), key=float):
++    ok_g, _ = W.place([], "Erol", FUTURE, "HOME", 5, 100, CH, CA, now=NOW, market="hc", line=float(good))
++    ck("offered line %s is accepted" % good, ok_g, None)
++# a line the ladder filtered at these strengths is VALID input but prices to a clean error, not a crash
++filtered = [L for L in W.HC_LINES if W._line_key(L) not in W.hc_odds(CH, CA)]
++for L in filtered:
++    ok_f, msg = W.place([], "Erol", FUTURE, "HOME", 5, 100, CH, CA, now=NOW, market="hc", line=L)
++    ck("ladder-filtered line %+g -> clean 'couldn't price' error" % L, (not ok_f) and isinstance(msg, str), msg)
++
++print("\n== the usual guardrails all still apply ==")
++ok_k, msg_k = W.place([], "Erol", KICKED, "HOME", 5, 100, CH, CA, now=NOW, market="hc", line=-1.5)
++ck("kicked-off game is locked", not ok_k, msg_k if ok_k else None)
++ok_s, msg_s = W.place([], "Erol", FUTURE, "HOME", 0, 100, CH, CA, now=NOW, market="hc", line=-1.5)
++ck("zero stake rejected", not ok_s)
++ok_c, msg_c = W.place([], "Erol", FUTURE, "HOME", 10 ** 6, 100, CH, CA, now=NOW, market="hc", line=-1.5)
++ck("over-cap stake rejected", not ok_c)
++ok_a, msg_a = W.place([], "Erol", FUTURE, "HOME", 50, 10, CH, CA, now=NOW, market="hc", line=-1.5)
++ck("stake beyond available points rejected", not ok_a)
++
++print("\n== knockout: handicap has no draw problem ==")
++ok_ko, w_ko = W.place([], "Erol", KO, "AWAY", 5, 100, CH, CA, now=NOW, market="hc", line=1.5)
++ck("hc places on a knockout (settles on the 90+ET margin, not the shootout)", ok_ko and w_ko.get("market") == "hc", w_ko)
++
++print("\n== singles only: accas reject a handicap leg ==")
++sel_hc = {"match": FUTURE, "selection": "HOME", "market": "hc", "line": -1.5, "comp_home": CH, "comp_away": CA}
++sel_res = {"match": dict(FUTURE, home="France", away="Ghana"), "selection": "HOME", "comp_home": 70, "comp_away": 50}
++ok_acc, msg_acc = W.place_acca([], "Erol", [sel_hc, sel_res], 5, 100, now=NOW)
++ck("acca with an hc leg is rejected with a clear message", not ok_acc and "single" in str(msg_acc).lower(), msg_acc)
++ok_acc2, w_acc2 = W.place_acca([], "Erol", [sel_res, {"match": dict(FUTURE, home="Japan", away="Chile"),
++                                                      "selection": "OVER", "market": "ou", "line": 2.5,
++                                                      "comp_home": 60, "comp_away": 60}], 5, 100, now=NOW)
++ck("a normal result+OU acca still places (regression)", ok_acc2, w_acc2)
++
++print("\n== hedge policy: hc carries its own margin, so it's exempt like O/U ==")
++ws3 = []
++ok_h1, _ = W.place(ws3, "Erol", FUTURE, "HOME", 3, 100, CH, CA, now=NOW, market="hc", line=-1.5)
++ok_h2, w_h2 = W.place(ws3, "Erol", FUTURE, "AWAY", 3, 100, CH, CA, now=NOW, market="hc", line=-1.5)
++ck("both sides of one hc line allowed (guaranteed margin LOSS, not an arb)", ok_h1 and ok_h2, w_h2)
++ok_h3, _ = W.place(ws3, "Erol", FUTURE, "HOME", 3, 100, CH, CA, now=NOW)
++ok_h4, msg_h4 = W.place(ws3, "Erol", FUTURE, "AWAY", 3, 100, CH, CA, now=NOW)
++ck("the result opposing-bet block is untouched (regression)", ok_h3 and not ok_h4, msg_h4)
++
++print("\n== other markets are completely unchanged ==")
++ws4 = []
++ok_r, w_r = W.place(ws4, "Erol", FUTURE, "DRAW", 5, 100, CH, CA, now=NOW)
++ck("a result bet still places with no market/line fields", ok_r and "market" not in w_r and "line" not in w_r, w_r)
++ok_o, w_o = W.place(ws4, "Erol", FUTURE, "UNDER", 5, 100, CH, CA, now=NOW, market="ou", line=2.5)
++ck("an O/U bet still places exactly as before", ok_o and w_o.get("market") == "ou" and w_o.get("line") == 2.5, w_o)
++ok_cs, w_cs = W.place(ws4, "Erol", FUTURE, "2-1", 5, 100, CH, CA, now=NOW, market="cs")
++ck("an exact-score bet still places exactly as before", ok_cs and w_cs.get("market") == "cs", w_cs)
++
++print()
++if fails:
++    print("FAILED: %d -> %s" % (len(fails), fails))
++    raise SystemExit(1)
++print("ALL HANDICAP PLACEMENT CHECKS PASSED")
+diff --git a/test_hc_settle.py b/test_hc_settle.py
+new file mode 100644
+index 0000000..99ae3a5
+--- /dev/null
++++ b/test_hc_settle.py
+@@ -0,0 +1,98 @@
++#!/usr/bin/env python3
++"""Handicap settlement QA — settle() for market='hc'. Golden margin vectors on both signs of line,
++the 90'+ET basis (a level knockout score after ET loses HOME -1.5 even when a shootout sends home
++through — while the RESULT bet on the same match settles off the shootout), voids, unfinished games,
++hostile scores, won-return arithmetic, the defensive acca-leg branch (an hc leg can never be settled
++as a match-winner pick) — and proof result + O/U settlement are untouched."""
++import wager as W
++
++fails = []
++def ck(name, cond, extra=""):
++    print(("  PASS " if cond else "  FAIL ") + name + ("" if cond or extra == "" else "  -> %r" % (extra,)))
++    if not cond:
++        fails.append(name)
++
++NOW = 1_700_000_000
++BASE = {"home": "Brazil", "away": "Serbia", "stage": "GROUP_STAGE", "utcDate": "2099-01-01T00:00:00Z", "status": "TIMED"}
++CH, CA = 80, 60
++
++def bet(sel, line, stake=5):
++    # settlement is driven by the STORED record (line, selection, locked odds) — build one directly so a
++    # ladder-filtered line at these comps can't block a golden vector; placement pricing has its own suite
++    w = {"id": "t-%s-%s" % (sel, line), "player": "Erol", "matchId": W.match_id(BASE),
++         "home": BASE["home"], "away": BASE["away"], "stage": BASE["stage"], "utcDate": BASE["utcDate"],
++         "selection": sel, "stake": stake, "epoch": 0, "num": 3, "den": 1, "frac": "3/1",
++         "return": W.potential_return(stake, 3, 1), "status": "pending", "placed_at": NOW,
++         "market": "hc", "line": line}
++    return [w], w
++
++def fin(hs, as_, status="FINISHED", **kw):
++    m = dict(BASE, status=status, homeScore=hs, awayScore=as_)
++    m.update(kw)
++    return m
++
++print("== golden margin vectors (line applies to the HOME side; half-lines never push) ==")
++GOLDEN = [
++    ("HOME", -1.5, 3, 1, "won"), ("HOME", -1.5, 2, 1, "lost"), ("AWAY", -1.5, 2, 1, "won"),
++    ("HOME", -1.5, 2, 0, "won"), ("AWAY", -1.5, 0, 0, "won"),  ("HOME", -2.5, 3, 0, "won"),
++    ("HOME", -2.5, 2, 0, "lost"), ("AWAY", 1.5, 0, 1, "lost"), ("HOME", 1.5, 0, 1, "won"),  ("AWAY", -1.5, 0, 1, "won"),
++    ("HOME", 1.5, 0, 2, "lost"), ("AWAY", 1.5, 0, 2, "won"),   ("HOME", 2.5, 0, 2, "won"),
++    ("AWAY", 2.5, 0, 3, "won"),  ("HOME", 2.5, 0, 3, "lost"),  ("AWAY", -2.5, 5, 3, "won"),
++]
++for sel, line, hs, as_, want in GOLDEN:
++    ws, w = bet(sel, line)
++    W.settle(ws, fin(hs, as_), now=NOW)
++    ck("%s %+g on %d-%d -> %s" % (sel, line, hs, as_, want), w.get("status") == want, w.get("status"))
++    if want == "won":
++        ck("  won return == stake x odds", abs(w["return"] - W.potential_return(w["stake"], w["num"], w["den"])) < 1e-9, w["return"])
++    else:
++        ck("  lost return == 0", w.get("return") == 0, w.get("return"))
++
++print("\n== knockout basis: 90'+ET margin, shootout excluded ==")
++KOM = dict(BASE, stage="QUARTER_FINALS")
++ws = []
++okh, wh = W.place(ws, "Erol", KOM, "HOME", 5, 100, CH, CA, now=NOW, market="hc", line=-1.5)
++oka, wa = W.place(ws, "Erol", KOM, "AWAY", 5, 100, CH, CA, now=NOW, market="hc", line=-1.5)   # away GETTING 1.5 (the key is the HOME line)
++okr, wr = W.place(ws, "Erol", KOM, "HOME", 5, 100, CH, CA, now=NOW)          # result: to advance
++level_pens = dict(KOM, status="FINISHED", homeScore=1, awayScore=1, penHome=4, penAway=2, shootout=True)
++W.settle(ws, level_pens, now=NOW)
++ck("KO level after ET: HOME -1.5 LOSES even though home advance on pens", wh.get("status") == "lost", wh.get("status"))
++ck("KO level after ET: AWAY +1.5 start WINS", wa.get("status") == "won", wa.get("status"))
++ck("the result bet on the same game settles off the shootout (won)", wr.get("status") == "won", wr.get("status"))
++
++print("\n== voids, unfinished games, hostile scores ==")
++ws, w = bet("HOME", -1.5)
++W.settle(ws, fin(None, None, status="CANCELLED"), now=NOW)
++ck("cancelled game -> void, stake back", w.get("status") == "void" and w.get("return") == w.get("stake"), w)
++ws, w = bet("HOME", -1.5)
++W.settle(ws, fin(2, 0, status="IN_PLAY"), now=NOW)
++ck("in-play game doesn't settle", w.get("status") == "pending", w.get("status"))
++for hs, as_ in ((None, 1), (float("nan"), 0), (float("inf"), 0), (-1, 0), ("x", 0)):
++    ws, w = bet("AWAY", 1.5)
++    W.settle(ws, fin(hs, as_), now=NOW)
++    ck("hostile score %r-%r stays pending" % (hs, as_), w.get("status") == "pending", w.get("status"))
++
++print("\n== defensive: an hc acca LEG settles on the margin, never as a match-winner pick ==")
++leg = {"matchId": W.match_id(BASE), "selection": "HOME", "market": "hc", "line": -1.5,
++       "home": "Brazil", "away": "Serbia", "stage": "GROUP_STAGE", "num": 3, "den": 1, "frac": "3/1"}
++acca = {"id": "x1", "player": "Erol", "stake": 5, "status": "pending", "legs": [leg], "return": 20}
++ws = [acca]
++W.settle(ws, fin(2, 1), now=NOW)   # home WON the match, but only by 1 -> the -1.5 leg must LOSE
++ck("hand-crafted hc leg on 2-1: leg result is 'lost' (a fallthrough would say won)", leg.get("result") == "lost", leg)
++ck("the acca settles lost accordingly", acca.get("status") == "lost", acca.get("status"))
++
++print("\n== other markets settle exactly as before (regression) ==")
++ws = []
++ok1, w1 = W.place(ws, "Erol", BASE, "HOME", 5, 100, CH, CA, now=NOW)
++ok2, w2 = W.place(ws, "Erol", BASE, "OVER", 5, 100, CH, CA, now=NOW, market="ou", line=2.5)
++ok3, w3 = W.place(ws, "Erol", BASE, "2-1", 5, 100, CH, CA, now=NOW, market="cs")
++W.settle(ws, fin(2, 1), now=NOW)
++ck("result HOME on 2-1 still wins", w1.get("status") == "won", w1.get("status"))
++ck("OVER 2.5 on 2-1 still wins", w2.get("status") == "won", w2.get("status"))
++ck("exact score 2-1 still wins", w3.get("status") == "won", w3.get("status"))
++
++print()
++if fails:
++    print("FAILED: %d -> %s" % (len(fails), fails))
++    raise SystemExit(1)
++print("ALL HANDICAP SETTLEMENT CHECKS PASSED")
+diff --git a/tracker.html b/tracker.html
+index 4335b2f..ef3e281 100644
+--- a/tracker.html
++++ b/tracker.html
+@@ -655,6 +655,27 @@ function ouRowHTML(m){
+     +'<div style="display:flex;gap:5px;flex:1 1 150px;min-width:150px;align-items:stretch">'+mkOU('OVER','Over')+mkOU('UNDER','Under')+'</div>'
+     +'</div>';
+ }
++const HCLINE={};            // per-match selected handicap HOME line (matchId -> '-1.5'); the dropdown sets it
++function fmtHc(v){ v=Number(v); return (v>0?'+':'')+v; }   // signed half-line label: -1.5 / +1.5
++function hcLineFor(mid,odds){ let ln=HCLINE[mid]||'-1.5';   // default to the classic favourite line
++  if(odds&&!odds[ln]){ const ks=Object.keys(odds).sort((a,b)=>Math.abs(parseFloat(a))-Math.abs(parseFloat(b))||parseFloat(a)-parseFloat(b)); ln=ks[0]||ln; }  // picked line not offered -> tightest available
++  return ln; }
++function hcRowHTML(m){
++  if(!m.hcOdds) return '';
++  const ln=hcLineFor(m.matchId,m.hcOdds), leg=m.hcOdds[ln];
++  if(!leg) return '';
++  const opts=Object.keys(m.hcOdds).sort((a,b)=>parseFloat(a)-parseFloat(b))
++    .map(k=>'<option value="'+k+'"'+(k===ln?' selected':'')+'>'+fmtHc(k)+'</option>').join('');
++  const mkHC=(sel)=>{ const o=leg[sel]; if(!o) return '';
++    const team=sel==='HOME'?m.home:m.away, shown=sel==='HOME'?fmtHc(ln):fmtHc(-parseFloat(ln));
++    const on=samePick(BETPICK,m.matchId,sel,'hc',ln);
++    return '<button class="betodd'+(on?' on':'')+'" style="min-width:64px;padding:6px 5px;font-size:12px" data-mid="'+m.matchId+'" data-sel="'+sel+'" data-market="hc" data-line="'+ln+'" data-frac="'+o.frac+'">'+esc(team)+' '+shown+' <b>'+o.frac+'</b></button>'; };
++  return '<div style="display:flex;gap:5px;margin-top:5px;flex-wrap:wrap;align-items:stretch">'
++    +'<span title="Handicap (home line) — settles on the 90&#39;+ET score, pens excluded" style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);white-space:nowrap">±'
++    +'<select class="hcline" data-mid="'+esc(m.matchId)+'" style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 4px;font-size:12px;font-family:Sora,sans-serif">'+opts+'</select></span>'
++    +'<div style="display:flex;gap:5px;flex:1 1 150px;min-width:150px;align-items:stretch">'+mkHC('HOME')+mkHC('AWAY')+'</div>'
++    +'</div>';
++}
+ const CSPICK={};            // per-match selected scoreline for the exact-score market
+ function csRowHTML(m){
+   if(!m.csOdds) return '';
+@@ -763,7 +784,7 @@ function renderBets(){
+       return `<button class="betodd${on?' on':''}" data-mid="${m.matchId}" data-sel="${k}" data-market="result" data-frac="${o.frac}">${esc(lbl)} <b>${o.frac}</b></button>`; };
+     const homeAway='<div style="display:flex;gap:6px">'+mk('HOME',m.home)+mk('AWAY',m.away)+'</div>';   // home left, away right
+     const drawRow=(!ko && m.odds.DRAW)?('<div style="display:flex;margin-top:6px">'+mk('DRAW','Draw')+'</div>'):'';   // draw below, full width
+-    const ouRow=ouRowHTML(m)+(ACCAMODE?'':csRowHTML(m));                               // Over/Under row + exact-score row (singles only)
++    const ouRow=ouRowHTML(m)+(ACCAMODE?'':(hcRowHTML(m)+csRowHTML(m)));                // Over/Under row + handicap + exact-score rows (singles only)
+     return `<div class="mdcard"><div class="mdmeta">${ko?(STAGE_LABEL[m.stage]||m.stage):'Group '+(m.group||'?')} · ${esc(when)}</div>
+       <div class="mdteams" style="margin-bottom:6px"><span>${flag(m.home)}${esc(m.home)}</span><span style="color:var(--muted)">v</span><span class="mdr">${flag(m.away)}${esc(m.away)}</span></div>
+       <div class="betodds" style="display:block">${homeAway}${drawRow}${ouRow}</div></div>`;
+@@ -783,7 +804,8 @@ function renderBets(){
+     const fxp=fx.find(m=>m.matchId===BETPICK.matchId);
+     if(fxp){ const isOU=(BETPICK.market||'result')==='ou';
+       const isCS=(BETPICK.market||'result')==='cs';
+-      const who=isCS?('Exact score '+(BETPICK.sel==='OTHER'?'Any other':BETPICK.sel)+' ('+esc(fxp.home)+' v '+esc(fxp.away)+')'):(isOU?((BETPICK.sel==='OVER'?'Over':'Under')+' '+BETPICK.line+' goals ('+esc(fxp.home)+' v '+esc(fxp.away)+')'):(BETPICK.sel==='HOME'?fxp.home:(BETPICK.sel==='AWAY'?fxp.away:'Draw')));
++      const isHC=(BETPICK.market||'result')==='hc';
++      const who=isCS?('Exact score '+(BETPICK.sel==='OTHER'?'Any other':BETPICK.sel)+' ('+esc(fxp.home)+' v '+esc(fxp.away)+')'):(isHC?((BETPICK.sel==='HOME'?esc(fxp.home):esc(fxp.away))+' '+fmtHc(BETPICK.sel==='HOME'?parseFloat(BETPICK.line):-parseFloat(BETPICK.line))+' handicap ('+esc(fxp.home)+' v '+esc(fxp.away)+')'):(isOU?((BETPICK.sel==='OVER'?'Over':'Under')+' '+BETPICK.line+' goals ('+esc(fxp.home)+' v '+esc(fxp.away)+')'):(BETPICK.sel==='HOME'?fxp.home:(BETPICK.sel==='AWAY'?fxp.away:'Draw'))));
+       const fracDisp=BETPICK.frac; const smax=Math.min(fxp.maxStake||caps.max_stake, headroom, budgetLeft);
+       h+='<div class="betcta" style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
+         +'<div style="font-size:13.5px;margin-bottom:8px">Bet on <b>'+esc(who)+'</b> @ <b style="color:var(--gold)">'+fracDisp+'</b> <span style="color:var(--muted)">· max '+smax+'</span></div>'
+@@ -874,6 +896,7 @@ function renderBets(){
+     }catch(e){ box.textContent='Could not reach the server.'; }
+   };
+   el.querySelectorAll('.ouline').forEach(s=>s.onchange=()=>{ OULINE[s.dataset.mid]=s.value; BETMSG=''; renderBets(); });
++  el.querySelectorAll('.hcline').forEach(s=>s.onchange=()=>{ HCLINE[s.dataset.mid]=s.value; BETMSG=''; renderBets(); });
+   const csIn=s=>{ const mid=s.dataset.mid, h=el.querySelector('.csh[data-mid="'+mid+'"]'), a=el.querySelector('.csa[data-mid="'+mid+'"]');
+     const c=v=>Math.max(0,Math.min(9,parseInt(v,10)||0)); CSPICK[mid]=c(h?h.value:1)+'-'+c(a?a.value:0); BETMSG=''; renderBets(); };
+   el.querySelectorAll('.csh,.csa').forEach(s=>s.onchange=()=>csIn(s));
+@@ -974,6 +997,7 @@ function refreshBetsLive(){
+ // ---- "is this bet currently winning?" — provisional result from the live score (display only; never settles anything) ----
+ function pickName(o){   // human label for a bet or an acca leg, result OR over/under
+   if((o.market||'result')==='ou') return (o.selection==='OVER'?'Over':'Under')+' '+o.line+' goals';
++  if((o.market||'result')==='hc') return (o.selection==='HOME'?o.home:o.away)+' '+fmtHc(o.selection==='HOME'?parseFloat(o.line):-parseFloat(o.line))+' (hcp)';
+   if((o.market||'result')==='cs') return 'Exact score '+(o.selection==='OTHER'?'Any other':o.selection);
+   return o.selection==='HOME'?o.home:(o.selection==='AWAY'?o.away:'Draw');
+ }
+@@ -981,6 +1005,7 @@ function provResult(o, hs, as_){   // live/settled outcome of a bet or leg from
+   if(hs==null||as_==null) return null;           // no score yet -> unknown (don't coerce null to 0)
+   hs=Number(hs); as_=Number(as_); if(isNaN(hs)||isNaN(as_)) return null;
+   if((o.market||'result')==='ou'){ const over=(hs+as_)>Number(o.line); return (o.selection==='OVER'?over:!over)?'win':'lose'; }  // half-line: never level
++  if((o.market||'result')==='hc'){ const cov=(hs+Number(o.line))>as_; return (o.selection==='HOME'?cov:!cov)?'win':'lose'; }     // half-line: never level
+   if(o.selection==='HOME') return hs>as_?'win':(hs<as_?'lose':'level');
+   if(o.selection==='AWAY') return as_>hs?'win':(as_<hs?'lose':'level');
+   return hs===as_?'win':'lose';   // DRAW selection
+diff --git a/wager.py b/wager.py
+index aca4590..aefefb6 100644
+--- a/wager.py
++++ b/wager.py
+@@ -333,6 +333,12 @@ def _winner_side(m):
+     hs, as_ = m.get("homeScore"), m.get("awayScore")
+     if hs is None or as_ is None:
+         return None
++    try:
++        hs = float(hs); as_ = float(as_)
++    except (TypeError, ValueError):
++        return None                                 # junk-typed score: unreadable, and it must NEVER raise —
++                                                    #   settle() calls this once per match, so an exception here
++                                                    #   would abort settlement of EVERY pending bet on the pass
+     if hs == as_:                                   # level after 90/120 mins
+         ph, pa = m.get("penHome"), m.get("penAway")
+         if ph is not None and pa is not None and ph != pa:
+@@ -565,14 +571,15 @@ def applied_points(base_points, player, wagers):
+ 
+ def _open_result_picks(wagers, player):
+     """{matchId: set(result selections)} the player ALREADY has riding on OPEN bets — across singles AND acca legs.
+-    Over/Under legs are ignored (that market carries its own margin and isn't a both-sides arb)."""
++    Over/Under and handicap legs are ignored (those markets carry their own margin, their HOME/AWAY are
++    goal-margin picks rather than match-result picks, and neither is a both-sides arb)."""
+     out = {}
+     for w in (wagers or []):
+         if w.get("player") != player or w.get("status") != "pending" or w.get("credit"):
+             continue
+         rows = w.get("legs") or [w]
+         for r in rows:
+-            if (str(r.get("market") or "result")).lower() != "ou":
++            if (str(r.get("market") or "result")).lower() not in ("ou", "hc"):
+                 mid, sel = r.get("matchId"), r.get("selection")
+                 if mid and sel in SELECTIONS:
+                     out.setdefault(mid, set()).add(sel)
+@@ -616,6 +623,17 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
+             return False, "Pick a goals line."
+         if line not in OU_LINES:
+             return False, "That goals line isn't offered."
++    elif market == "hc":
++        if selection not in ("HOME", "AWAY"):
++            return False, "Pick a side for a handicap bet — home or away."
++        try:
++            line = float(line)
++        except (TypeError, ValueError):
++            return False, "Pick a handicap line."
++        if line not in HC_LINES:
++            return False, "That handicap line isn't offered."
++        # a handicap book carries its own margin and its two sides can't both win, so backing both is a
++        # guaranteed margin LOSS, never an arb — like O/U it's exempt from the result opposing-bet block
+     else:
+         if selection not in SELECTIONS:
+             return False, "Pick home, draw or away."
+@@ -661,6 +679,8 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
+         odds = cs_odds(comp_home, comp_away).get(selection)
+     elif market == "ou":
+         odds = goals_odds(comp_home, comp_away).get(_line_key(line), {}).get(selection)
++    elif market == "hc":
++        odds = hc_odds(comp_home, comp_away).get(_line_key(line), {}).get(selection)
+     else:
+         odds = match_odds(comp_home, comp_away, knockout=is_knockout(match)).get(selection)
+     if not odds:
+@@ -676,6 +696,9 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
+     if market == "ou":
+         w["market"] = "ou"
+         w["line"] = line
++    elif market == "hc":
++        w["market"] = "hc"
++        w["line"] = line
+     elif market == "cs":
+         w["market"] = "cs"
+     wagers.append(w)
+@@ -740,10 +763,7 @@ def cs_odds(comp_home, comp_away):
+     the grid is the single 'OTHER' bucket, so the selections PARTITION all outcomes -- pricing each at
+     fair * CS_OVERROUND makes the whole book overround by construction and dutching every cell a
+     guaranteed loss. Settles on the final score (after extra time, penalties excluded).""" % (CS_GRID_MAX, CS_GRID_MAX)
+-    lam = expected_goals(comp_home, comp_away)
+-    ph, pd, pa = _fair_probs(comp_home, comp_away)
+-    share = min(0.85, max(0.15, ph + pd / 2.0))     # home goal share, kept off the rails
+-    lh, la = lam * share, lam * (1.0 - share)
++    lh, la = _team_lambdas(comp_home, comp_away)
+     out = {}
+     for h in range(CS_GRID_MAX + 1):
+         for a in range(CS_GRID_MAX + 1):
+@@ -770,6 +790,113 @@ def _cs_result(selection, match):
+     return "won" if selection == ("%d-%d" % (int(hs), int(as_))) else "lost"
+ 
+ 
++# ---- Handicap (goal-margin) market — the SAME Poisson grid as the exact-score book -------------
++HC_OVERROUND = 1.13          # same margin class as the O/U goals book (a touch above the 1X2's 1.08)
++HC_MIN_MARGIN = 0.02         # minimum book overround on any offered line (a capped near-certainty still has an edge)
++HC_MAX_PROB = 0.93           # deep price ladder like O/U (shortest ~1/13); beyond it the line is NOT offered
++HC_LINES = [-2.5, -1.5, 1.5, 2.5]   # HOME-team half-lines only -> a bet can never push. ±0.5 is deliberately
++                                    #   absent: it duplicates the 1X2 result market under a DIFFERENT probability
++                                    #   model (this Poisson grid vs _fair_probs), and two prices for one event
++                                    #   across two models is exactly the cross-market dutch a sharp bettor farms.
++                                    #   With |L| >= 1.5 no handicap side has a 1X2 twin, and every combination of
++                                    #   selections that covers all outcomes must route through a margined book.
++HC_GRID_MAX = 14             # score grid depth for margin probs (lambda tops out at 4.2 -> the tail beyond is dust)
++
++
++def _team_lambdas(comp_home, comp_away):
++    """Split the match goal expectation into independent home/away Poisson means by the 1X2 fair
++    strengths (home share = p_home + p_draw/2, kept off the rails). This is the ONE model behind both
++    the exact-score grid and the handicap book, so those two markets can never disagree with each other."""
++    lam = expected_goals(comp_home, comp_away)
++    ph, pd, pa = _fair_probs(comp_home, comp_away)
++    share = min(0.85, max(0.15, ph + pd / 2.0))     # home goal share, kept off the rails
++    return lam * share, lam * (1.0 - share)
++
++
++def _hc_home_prob(lh, la, line):
++    """P(home covers `line`) = P(home_goals + line > away_goals), summed on the shared Poisson grid and
++    normalised over the grid so HOME and AWAY are EXACT complements (the book maths depends on that).
++    Half-lines only, so equality is impossible and the two sides partition every scoreline."""
++    try:
++        line = float(line)
++    except (TypeError, ValueError):
++        return 0.5
++    if line != line or line in (float("inf"), float("-inf")):
++        return 0.5
++    ph_pmf = [_poisson_pmf(k, lh) for k in range(HC_GRID_MAX + 1)]
++    pa_pmf = [_poisson_pmf(k, la) for k in range(HC_GRID_MAX + 1)]
++    cover = mass = 0.0
++    for h in range(HC_GRID_MAX + 1):
++        for a in range(HC_GRID_MAX + 1):
++            p = ph_pmf[h] * pa_pmf[a]
++            mass += p
++            if h + line > a:
++                cover += p
++    return (cover / mass) if mass > 0 else 0.5
++
++
++def hc_odds(comp_home, comp_away, lines=None):
++    """Handicap (goal-margin) prices per HOME line: {'-1.5': {'HOME': {...}, 'AWAY': {...}}, ...}.
++    The line is the handicap applied to the HOME side: HOME wins when home + line > away; AWAY is the exact
++    complement (half-lines -> never a push). Settles on the 90'+ET score, penalties excluded — the same basis
++    as Over/Under and exact score (NOT the knockout 'to advance' book, which a shootout can decide).
++    Built exactly like goals_odds(): the ladder rule (never quote a line one side of which we can't price
++    inside the ladder), a guaranteed minimum book margin, and a post-rounding re-check, so an offered line
++    can never go bettor-positive."""
++    lh, la = _team_lambdas(comp_home, comp_away)
++    out = {}
++    for L in (lines or HC_LINES):
++        p_home = min(0.999, max(1e-6, _hc_home_prob(lh, la, L)))
++        p_away = min(0.999, max(1e-6, 1.0 - p_home))
++        if p_home > HC_MAX_PROB or p_away > HC_MAX_PROB:
++            continue                                # same rule as O/U: a capped near-certainty is a farmable edge
++        iH = min(HC_MAX_PROB, p_home * HC_OVERROUND)
++        iA = min(HC_MAX_PROB, p_away * HC_OVERROUND)
++        target = 1.0 + HC_MIN_MARGIN
++        if iH + iA < target:                        # a capped side can't carry the margin -> lift the other side
++            if iH <= iA:
++                iH = min(HC_MAX_PROB, target - iA)
++            else:
++                iA = min(HC_MAX_PROB, target - iH)
++        leg = {}
++        for _ in range(8):                          # rebuild + re-check after fraction rounding, like goals_odds()
++            leg = {}
++            for sel, implied in (("HOME", iH), ("AWAY", iA)):
++                num, den = _nearest_fraction(1.0 / implied)
++                leg[sel] = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
++            if (1.0 / leg["HOME"]["decimal"]) + (1.0 / leg["AWAY"]["decimal"]) > 1.0 + 1e-6:
++                break
++            if iH <= iA:
++                iH = min(HC_MAX_PROB, iH + 0.01)
++            else:
++                iA = min(HC_MAX_PROB, iA + 0.01)
++        out[_line_key(L)] = leg                     # every OFFERED line overrounds; neither side beats the ladder
++    return out
++
++
++def _hc_result(line, selection, match):
++    """'won'/'lost' for a handicap bet against the FINAL score (extra time included, penalties excluded),
++    or None while it can't be settled. `line` is the stored HOME-team line; HOME covers when home + line > away,
++    AWAY covers the exact complement — half-lines only, so a push is impossible."""
++    try:
++        line = float(line)
++    except (TypeError, ValueError):
++        return None
++    if line != line or line in (float("inf"), float("-inf")) or selection not in ("HOME", "AWAY"):
++        return None
++    hs, as_ = match.get("homeScore"), match.get("awayScore")
++    if hs is None or as_ is None:
++        return None
++    try:
++        hs = float(hs); as_ = float(as_)
++    except (TypeError, ValueError):
++        return None
++    if hs != hs or as_ != as_ or hs in (float("inf"), float("-inf")) or as_ in (float("inf"), float("-inf")) or hs < 0 or as_ < 0:
++        return None
++    home_covers = (hs + line) > as_
++    return "won" if (home_covers if selection == "HOME" else not home_covers) else "lost"
++
++
+ def _match_total(match):
+     """Final total goals for a finished match, or None if no valid score. Penalties never count
+     (a shootout isn't goals); a knockout's score is its 90+ET total, which is what the tracker shows."""
+@@ -809,6 +936,10 @@ def _leg_result(leg, match):
+         if status not in ("FINISHED", "AWARDED"):
+             return None
+         return _cs_result(leg.get("selection"), match)
++    if leg.get("market") == "hc":                    # handicap settles on the goal margin (ET incl., pens excl.)
++        if status not in ("FINISHED", "AWARDED"):    #   accas can't contain one, but a legacy/hand-edited leg must
++            return None                              #   NEVER fall through and be settled as a match-winner pick
++        return _hc_result(leg.get("line"), leg.get("selection"), match)
+     side = _winner_side(match)
+     if status not in ("FINISHED", "AWARDED") or side is None:
+         return None
+@@ -889,6 +1020,18 @@ def settle(wagers, match, now=None):
+                 w["status"] = "lost"; w["return"] = 0
+             w["result"] = r
+             w["settled_at"] = ts; n += 1; continue
++        if w.get("market") == "hc":                  # handicap single: settle on the final goal margin (pens excluded)
++            if status not in ("FINISHED", "AWARDED"):
++                continue
++            r = _hc_result(w.get("line"), w.get("selection"), match)
++            if r is None:
++                continue                             # no valid score yet -> leave it pending
++            if r == "won":
++                w["status"] = "won"
++            else:
++                w["status"] = "lost"; w["return"] = 0
++            w["result"] = r
++            w["settled_at"] = ts; n += 1; continue
+         if status not in ("FINISHED", "AWARDED") or side is None:
+             continue
+         if side == "DRAW" and _norm_stage(w.get("stage")) != "GROUP_STAGE":
+@@ -969,6 +1112,8 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
+         mk = (str(s.get("market") or "result")).lower()
+         if mk == "cs":
+             return False, "Exact-score bets are singles only — they can't go in an accumulator."
++        if mk == "hc":
++            return False, "Handicap bets are singles only — they can't go in an accumulator."
+         if mk == "ou":
+             if s.get("selection") not in ("OVER", "UNDER"):
+                 return False, "Pick Over or Under for every goals leg."

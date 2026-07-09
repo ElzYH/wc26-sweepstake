@@ -866,6 +866,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                     f["odds"] = wager.match_odds(ch, ca, knockout=wager.is_knockout(f))
                     f["ouOdds"] = wager.goals_odds(ch, ca)        # Over/Under prices per line (ladder-rule filtered)
                     f["csOdds"] = wager.cs_odds(ch, ca)           # exact-scoreline prices (0-0..4-4 + OTHER)
+                    f["hcOdds"] = wager.hc_odds(ch, ca)           # handicap (goal-margin) prices per HOME line
                     f["matchId"] = wager.match_id(m)
                     f["maxStake"] = wager.stage_max_stake(f.get("stage"))
             data["wager_stats"] = wager.stats(wagers)

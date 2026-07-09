@@ -1290,6 +1290,13 @@ def _pick_label(w, draw="the draw"):
             return ("Over %g goals" if w.get("selection") == "OVER" else "Under %g goals") % float(w.get("line"))
         except (TypeError, ValueError):
             return "Over/Under goals"
+    if (w.get("market") or "result") == "hc":
+        try:
+            ln = float(w.get("line"))
+            team = w.get("home") if w.get("selection") == "HOME" else w.get("away")
+            return "%s %+g (handicap)" % (team, ln if w.get("selection") == "HOME" else -ln)
+        except (TypeError, ValueError):
+            return "Handicap"
     return w["home"] if w.get("selection") == "HOME" else (w["away"] if w.get("selection") == "AWAY" else draw)
 
 
@@ -1822,6 +1829,26 @@ def notify_changes(old):
                         _bot_dm_player(ao, "⚽ **%s** scored — %s" % (a, score), match_id=mid)     # personal -> DM
                         _channel_event("⚽ **%s** (%s) scored — %s" % (a, ao, score), mid)
                         _dm_all_games("⚽ **%s** (%s) scored — %s" % (a, ao, score), exclude_players=[ao])   # owner already got the personal DM above
+            # disallowed goal (VAR): a score that rose earlier DROPS back while the game is live, or on the
+            # very tick it goes full-time (a chalk-off right at the whistle still lands with the FT feed).
+            # At-most-once per exact reversion via the persistent flow-alert guard, so a feed flap replaying
+            # the same drop — or a restart re-comparing the saved snapshot — can never re-send it. A change
+            # to an ALREADY-finished score is a results correction, not a VAR moment: stays silent here.
+            if ov is not None and (st in LIVE_STATUSES or (st in FT_STATUSES and was in LIVE_STATUSES)):
+                vhs, vas = ov[3], ov[4]
+                if None not in (nhs, nas, vhs, vas) and (nhs < vhs or nas < vas):
+                    vscore = "%s %d–%d %s" % (h, nhs, nas, a)
+                    vev = "var:%d-%d>%d-%d" % (vhs, vas, nhs, nas)
+                    if _alert_first_time(mid, h, a, vev):
+                        chalked = ([(h, ho, ho_ok)] if nhs < vhs else []) + ([(a, ao, ao_ok)] if nas < vas else [])
+                        for vt, vo, vok in chalked:
+                            if vok:
+                                push_player(vo, "goal", "Goal disallowed 🚫", "%s's goal was chalked off — %s" % (vt, vscore))
+                                _bot_dm_player(vo, "🚫 **%s** goal disallowed — %s" % (vt, vscore), match_id=mid)   # personal -> DM
+                        vline = "🚫 Goal disallowed — %s: now %s" % (
+                            " & ".join("**%s** (%s)" % (vt, own(vo)) for vt, vo, _k in chalked), vscore)
+                        _channel_event(vline, mid)
+                        _dm_all_games(vline, exclude_players=[vo for _t, vo, vok in chalked if vok])
     except Exception:
         pass
     # a player's team is knocked out
@@ -2895,6 +2922,10 @@ def _odds_integrity_violations(td, teams):
                 bo = _odds_book_overround([leg["OVER"]["decimal"], leg["UNDER"]["decimal"]])
                 if bo is not None and bo <= 1.0:
                     out.append("%s v %s — O/U %s book %.1f%%" % (h, a, ln, bo * 100))
+            for ln, leg in (wager_mod.hc_odds(ch, ca) or {}).items():
+                bh = _odds_book_overround([leg["HOME"]["decimal"], leg["AWAY"]["decimal"]])
+                if bh is not None and bh <= 1.0:
+                    out.append("%s v %s — handicap %s book %.1f%%" % (h, a, ln, bh * 100))
     except Exception as e:
         log("odds integrity check error (non-fatal):", e)
     return out

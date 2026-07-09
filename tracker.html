@@ -655,6 +655,27 @@ function ouRowHTML(m){
     +'<div style="display:flex;gap:5px;flex:1 1 150px;min-width:150px;align-items:stretch">'+mkOU('OVER','Over')+mkOU('UNDER','Under')+'</div>'
     +'</div>';
 }
+const HCLINE={};            // per-match selected handicap HOME line (matchId -> '-1.5'); the dropdown sets it
+function fmtHc(v){ v=Number(v); return (v>0?'+':'')+v; }   // signed half-line label: -1.5 / +1.5
+function hcLineFor(mid,odds){ let ln=HCLINE[mid]||'-1.5';   // default to the classic favourite line
+  if(odds&&!odds[ln]){ const ks=Object.keys(odds).sort((a,b)=>Math.abs(parseFloat(a))-Math.abs(parseFloat(b))||parseFloat(a)-parseFloat(b)); ln=ks[0]||ln; }  // picked line not offered -> tightest available
+  return ln; }
+function hcRowHTML(m){
+  if(!m.hcOdds) return '';
+  const ln=hcLineFor(m.matchId,m.hcOdds), leg=m.hcOdds[ln];
+  if(!leg) return '';
+  const opts=Object.keys(m.hcOdds).sort((a,b)=>parseFloat(a)-parseFloat(b))
+    .map(k=>'<option value="'+k+'"'+(k===ln?' selected':'')+'>'+fmtHc(k)+'</option>').join('');
+  const mkHC=(sel)=>{ const o=leg[sel]; if(!o) return '';
+    const team=sel==='HOME'?m.home:m.away, shown=sel==='HOME'?fmtHc(ln):fmtHc(-parseFloat(ln));
+    const on=samePick(BETPICK,m.matchId,sel,'hc',ln);
+    return '<button class="betodd'+(on?' on':'')+'" style="min-width:64px;padding:6px 5px;font-size:12px" data-mid="'+m.matchId+'" data-sel="'+sel+'" data-market="hc" data-line="'+ln+'" data-frac="'+o.frac+'">'+esc(team)+' '+shown+' <b>'+o.frac+'</b></button>'; };
+  return '<div style="display:flex;gap:5px;margin-top:5px;flex-wrap:wrap;align-items:stretch">'
+    +'<span title="Handicap (home line) — settles on the 90&#39;+ET score, pens excluded" style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);white-space:nowrap">±'
+    +'<select class="hcline" data-mid="'+esc(m.matchId)+'" style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 4px;font-size:12px;font-family:Sora,sans-serif">'+opts+'</select></span>'
+    +'<div style="display:flex;gap:5px;flex:1 1 150px;min-width:150px;align-items:stretch">'+mkHC('HOME')+mkHC('AWAY')+'</div>'
+    +'</div>';
+}
 const CSPICK={};            // per-match selected scoreline for the exact-score market
 function csRowHTML(m){
   if(!m.csOdds) return '';
@@ -763,7 +784,7 @@ function renderBets(){
       return `<button class="betodd${on?' on':''}" data-mid="${m.matchId}" data-sel="${k}" data-market="result" data-frac="${o.frac}">${esc(lbl)} <b>${o.frac}</b></button>`; };
     const homeAway='<div style="display:flex;gap:6px">'+mk('HOME',m.home)+mk('AWAY',m.away)+'</div>';   // home left, away right
     const drawRow=(!ko && m.odds.DRAW)?('<div style="display:flex;margin-top:6px">'+mk('DRAW','Draw')+'</div>'):'';   // draw below, full width
-    const ouRow=ouRowHTML(m)+(ACCAMODE?'':csRowHTML(m));                               // Over/Under row + exact-score row (singles only)
+    const ouRow=ouRowHTML(m)+(ACCAMODE?'':(hcRowHTML(m)+csRowHTML(m)));                // Over/Under row + handicap + exact-score rows (singles only)
     return `<div class="mdcard"><div class="mdmeta">${ko?(STAGE_LABEL[m.stage]||m.stage):'Group '+(m.group||'?')} · ${esc(when)}</div>
       <div class="mdteams" style="margin-bottom:6px"><span>${flag(m.home)}${esc(m.home)}</span><span style="color:var(--muted)">v</span><span class="mdr">${flag(m.away)}${esc(m.away)}</span></div>
       <div class="betodds" style="display:block">${homeAway}${drawRow}${ouRow}</div></div>`;
@@ -783,7 +804,8 @@ function renderBets(){
     const fxp=fx.find(m=>m.matchId===BETPICK.matchId);
     if(fxp){ const isOU=(BETPICK.market||'result')==='ou';
       const isCS=(BETPICK.market||'result')==='cs';
-      const who=isCS?('Exact score '+(BETPICK.sel==='OTHER'?'Any other':BETPICK.sel)+' ('+esc(fxp.home)+' v '+esc(fxp.away)+')'):(isOU?((BETPICK.sel==='OVER'?'Over':'Under')+' '+BETPICK.line+' goals ('+esc(fxp.home)+' v '+esc(fxp.away)+')'):(BETPICK.sel==='HOME'?fxp.home:(BETPICK.sel==='AWAY'?fxp.away:'Draw')));
+      const isHC=(BETPICK.market||'result')==='hc';
+      const who=isCS?('Exact score '+(BETPICK.sel==='OTHER'?'Any other':BETPICK.sel)+' ('+esc(fxp.home)+' v '+esc(fxp.away)+')'):(isHC?((BETPICK.sel==='HOME'?esc(fxp.home):esc(fxp.away))+' '+fmtHc(BETPICK.sel==='HOME'?parseFloat(BETPICK.line):-parseFloat(BETPICK.line))+' handicap ('+esc(fxp.home)+' v '+esc(fxp.away)+')'):(isOU?((BETPICK.sel==='OVER'?'Over':'Under')+' '+BETPICK.line+' goals ('+esc(fxp.home)+' v '+esc(fxp.away)+')'):(BETPICK.sel==='HOME'?fxp.home:(BETPICK.sel==='AWAY'?fxp.away:'Draw'))));
       const fracDisp=BETPICK.frac; const smax=Math.min(fxp.maxStake||caps.max_stake, headroom, budgetLeft);
       h+='<div class="betcta" style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
         +'<div style="font-size:13.5px;margin-bottom:8px">Bet on <b>'+esc(who)+'</b> @ <b style="color:var(--gold)">'+fracDisp+'</b> <span style="color:var(--muted)">· max '+smax+'</span></div>'
@@ -874,6 +896,7 @@ function renderBets(){
     }catch(e){ box.textContent='Could not reach the server.'; }
   };
   el.querySelectorAll('.ouline').forEach(s=>s.onchange=()=>{ OULINE[s.dataset.mid]=s.value; BETMSG=''; renderBets(); });
+  el.querySelectorAll('.hcline').forEach(s=>s.onchange=()=>{ HCLINE[s.dataset.mid]=s.value; BETMSG=''; renderBets(); });
   const csIn=s=>{ const mid=s.dataset.mid, h=el.querySelector('.csh[data-mid="'+mid+'"]'), a=el.querySelector('.csa[data-mid="'+mid+'"]');
     const c=v=>Math.max(0,Math.min(9,parseInt(v,10)||0)); CSPICK[mid]=c(h?h.value:1)+'-'+c(a?a.value:0); BETMSG=''; renderBets(); };
   el.querySelectorAll('.csh,.csa').forEach(s=>s.onchange=()=>csIn(s));
@@ -974,6 +997,7 @@ function refreshBetsLive(){
 // ---- "is this bet currently winning?" — provisional result from the live score (display only; never settles anything) ----
 function pickName(o){   // human label for a bet or an acca leg, result OR over/under
   if((o.market||'result')==='ou') return (o.selection==='OVER'?'Over':'Under')+' '+o.line+' goals';
+  if((o.market||'result')==='hc') return (o.selection==='HOME'?o.home:o.away)+' '+fmtHc(o.selection==='HOME'?parseFloat(o.line):-parseFloat(o.line))+' (hcp)';
   if((o.market||'result')==='cs') return 'Exact score '+(o.selection==='OTHER'?'Any other':o.selection);
   return o.selection==='HOME'?o.home:(o.selection==='AWAY'?o.away:'Draw');
 }
@@ -981,6 +1005,7 @@ function provResult(o, hs, as_){   // live/settled outcome of a bet or leg from 
   if(hs==null||as_==null) return null;           // no score yet -> unknown (don't coerce null to 0)
   hs=Number(hs); as_=Number(as_); if(isNaN(hs)||isNaN(as_)) return null;
   if((o.market||'result')==='ou'){ const over=(hs+as_)>Number(o.line); return (o.selection==='OVER'?over:!over)?'win':'lose'; }  // half-line: never level
+  if((o.market||'result')==='hc'){ const cov=(hs+Number(o.line))>as_; return (o.selection==='HOME'?cov:!cov)?'win':'lose'; }     // half-line: never level
   if(o.selection==='HOME') return hs>as_?'win':(hs<as_?'lose':'level');
   if(o.selection==='AWAY') return as_>hs?'win':(as_<hs?'lose':'level');
   return hs===as_?'win':'lose';   // DRAW selection

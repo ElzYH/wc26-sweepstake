@@ -333,6 +333,12 @@ def _winner_side(m):
     hs, as_ = m.get("homeScore"), m.get("awayScore")
     if hs is None or as_ is None:
         return None
+    try:
+        hs = float(hs); as_ = float(as_)
+    except (TypeError, ValueError):
+        return None                                 # junk-typed score: unreadable, and it must NEVER raise —
+                                                    #   settle() calls this once per match, so an exception here
+                                                    #   would abort settlement of EVERY pending bet on the pass
     if hs == as_:                                   # level after 90/120 mins
         ph, pa = m.get("penHome"), m.get("penAway")
         if ph is not None and pa is not None and ph != pa:
@@ -565,14 +571,15 @@ def applied_points(base_points, player, wagers):
 
 def _open_result_picks(wagers, player):
     """{matchId: set(result selections)} the player ALREADY has riding on OPEN bets — across singles AND acca legs.
-    Over/Under legs are ignored (that market carries its own margin and isn't a both-sides arb)."""
+    Over/Under and handicap legs are ignored (those markets carry their own margin, their HOME/AWAY are
+    goal-margin picks rather than match-result picks, and neither is a both-sides arb)."""
     out = {}
     for w in (wagers or []):
         if w.get("player") != player or w.get("status") != "pending" or w.get("credit"):
             continue
         rows = w.get("legs") or [w]
         for r in rows:
-            if (str(r.get("market") or "result")).lower() != "ou":
+            if (str(r.get("market") or "result")).lower() not in ("ou", "hc"):
                 mid, sel = r.get("matchId"), r.get("selection")
                 if mid and sel in SELECTIONS:
                     out.setdefault(mid, set()).add(sel)
@@ -616,6 +623,17 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
             return False, "Pick a goals line."
         if line not in OU_LINES:
             return False, "That goals line isn't offered."
+    elif market == "hc":
+        if selection not in ("HOME", "AWAY"):
+            return False, "Pick a side for a handicap bet — home or away."
+        try:
+            line = float(line)
+        except (TypeError, ValueError):
+            return False, "Pick a handicap line."
+        if line not in HC_LINES:
+            return False, "That handicap line isn't offered."
+        # a handicap book carries its own margin and its two sides can't both win, so backing both is a
+        # guaranteed margin LOSS, never an arb — like O/U it's exempt from the result opposing-bet block
     else:
         if selection not in SELECTIONS:
             return False, "Pick home, draw or away."
@@ -661,6 +679,8 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
         odds = cs_odds(comp_home, comp_away).get(selection)
     elif market == "ou":
         odds = goals_odds(comp_home, comp_away).get(_line_key(line), {}).get(selection)
+    elif market == "hc":
+        odds = hc_odds(comp_home, comp_away).get(_line_key(line), {}).get(selection)
     else:
         odds = match_odds(comp_home, comp_away, knockout=is_knockout(match)).get(selection)
     if not odds:
@@ -675,6 +695,9 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
          "status": "pending", "placed_at": int(now if now is not None else time.time())}
     if market == "ou":
         w["market"] = "ou"
+        w["line"] = line
+    elif market == "hc":
+        w["market"] = "hc"
         w["line"] = line
     elif market == "cs":
         w["market"] = "cs"
@@ -740,10 +763,7 @@ def cs_odds(comp_home, comp_away):
     the grid is the single 'OTHER' bucket, so the selections PARTITION all outcomes -- pricing each at
     fair * CS_OVERROUND makes the whole book overround by construction and dutching every cell a
     guaranteed loss. Settles on the final score (after extra time, penalties excluded).""" % (CS_GRID_MAX, CS_GRID_MAX)
-    lam = expected_goals(comp_home, comp_away)
-    ph, pd, pa = _fair_probs(comp_home, comp_away)
-    share = min(0.85, max(0.15, ph + pd / 2.0))     # home goal share, kept off the rails
-    lh, la = lam * share, lam * (1.0 - share)
+    lh, la = _team_lambdas(comp_home, comp_away)
     out = {}
     for h in range(CS_GRID_MAX + 1):
         for a in range(CS_GRID_MAX + 1):
@@ -768,6 +788,113 @@ def _cs_result(selection, match):
     if selection == "OTHER":
         return "won" if (int(hs) > 4 or int(as_) > 4) else "lost"
     return "won" if selection == ("%d-%d" % (int(hs), int(as_))) else "lost"
+
+
+# ---- Handicap (goal-margin) market — the SAME Poisson grid as the exact-score book -------------
+HC_OVERROUND = 1.13          # same margin class as the O/U goals book (a touch above the 1X2's 1.08)
+HC_MIN_MARGIN = 0.02         # minimum book overround on any offered line (a capped near-certainty still has an edge)
+HC_MAX_PROB = 0.93           # deep price ladder like O/U (shortest ~1/13); beyond it the line is NOT offered
+HC_LINES = [-2.5, -1.5, 1.5, 2.5]   # HOME-team half-lines only -> a bet can never push. ±0.5 is deliberately
+                                    #   absent: it duplicates the 1X2 result market under a DIFFERENT probability
+                                    #   model (this Poisson grid vs _fair_probs), and two prices for one event
+                                    #   across two models is exactly the cross-market dutch a sharp bettor farms.
+                                    #   With |L| >= 1.5 no handicap side has a 1X2 twin, and every combination of
+                                    #   selections that covers all outcomes must route through a margined book.
+HC_GRID_MAX = 14             # score grid depth for margin probs (lambda tops out at 4.2 -> the tail beyond is dust)
+
+
+def _team_lambdas(comp_home, comp_away):
+    """Split the match goal expectation into independent home/away Poisson means by the 1X2 fair
+    strengths (home share = p_home + p_draw/2, kept off the rails). This is the ONE model behind both
+    the exact-score grid and the handicap book, so those two markets can never disagree with each other."""
+    lam = expected_goals(comp_home, comp_away)
+    ph, pd, pa = _fair_probs(comp_home, comp_away)
+    share = min(0.85, max(0.15, ph + pd / 2.0))     # home goal share, kept off the rails
+    return lam * share, lam * (1.0 - share)
+
+
+def _hc_home_prob(lh, la, line):
+    """P(home covers `line`) = P(home_goals + line > away_goals), summed on the shared Poisson grid and
+    normalised over the grid so HOME and AWAY are EXACT complements (the book maths depends on that).
+    Half-lines only, so equality is impossible and the two sides partition every scoreline."""
+    try:
+        line = float(line)
+    except (TypeError, ValueError):
+        return 0.5
+    if line != line or line in (float("inf"), float("-inf")):
+        return 0.5
+    ph_pmf = [_poisson_pmf(k, lh) for k in range(HC_GRID_MAX + 1)]
+    pa_pmf = [_poisson_pmf(k, la) for k in range(HC_GRID_MAX + 1)]
+    cover = mass = 0.0
+    for h in range(HC_GRID_MAX + 1):
+        for a in range(HC_GRID_MAX + 1):
+            p = ph_pmf[h] * pa_pmf[a]
+            mass += p
+            if h + line > a:
+                cover += p
+    return (cover / mass) if mass > 0 else 0.5
+
+
+def hc_odds(comp_home, comp_away, lines=None):
+    """Handicap (goal-margin) prices per HOME line: {'-1.5': {'HOME': {...}, 'AWAY': {...}}, ...}.
+    The line is the handicap applied to the HOME side: HOME wins when home + line > away; AWAY is the exact
+    complement (half-lines -> never a push). Settles on the 90'+ET score, penalties excluded — the same basis
+    as Over/Under and exact score (NOT the knockout 'to advance' book, which a shootout can decide).
+    Built exactly like goals_odds(): the ladder rule (never quote a line one side of which we can't price
+    inside the ladder), a guaranteed minimum book margin, and a post-rounding re-check, so an offered line
+    can never go bettor-positive."""
+    lh, la = _team_lambdas(comp_home, comp_away)
+    out = {}
+    for L in (lines or HC_LINES):
+        p_home = min(0.999, max(1e-6, _hc_home_prob(lh, la, L)))
+        p_away = min(0.999, max(1e-6, 1.0 - p_home))
+        if p_home > HC_MAX_PROB or p_away > HC_MAX_PROB:
+            continue                                # same rule as O/U: a capped near-certainty is a farmable edge
+        iH = min(HC_MAX_PROB, p_home * HC_OVERROUND)
+        iA = min(HC_MAX_PROB, p_away * HC_OVERROUND)
+        target = 1.0 + HC_MIN_MARGIN
+        if iH + iA < target:                        # a capped side can't carry the margin -> lift the other side
+            if iH <= iA:
+                iH = min(HC_MAX_PROB, target - iA)
+            else:
+                iA = min(HC_MAX_PROB, target - iH)
+        leg = {}
+        for _ in range(8):                          # rebuild + re-check after fraction rounding, like goals_odds()
+            leg = {}
+            for sel, implied in (("HOME", iH), ("AWAY", iA)):
+                num, den = _nearest_fraction(1.0 / implied)
+                leg[sel] = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
+            if (1.0 / leg["HOME"]["decimal"]) + (1.0 / leg["AWAY"]["decimal"]) > 1.0 + 1e-6:
+                break
+            if iH <= iA:
+                iH = min(HC_MAX_PROB, iH + 0.01)
+            else:
+                iA = min(HC_MAX_PROB, iA + 0.01)
+        out[_line_key(L)] = leg                     # every OFFERED line overrounds; neither side beats the ladder
+    return out
+
+
+def _hc_result(line, selection, match):
+    """'won'/'lost' for a handicap bet against the FINAL score (extra time included, penalties excluded),
+    or None while it can't be settled. `line` is the stored HOME-team line; HOME covers when home + line > away,
+    AWAY covers the exact complement — half-lines only, so a push is impossible."""
+    try:
+        line = float(line)
+    except (TypeError, ValueError):
+        return None
+    if line != line or line in (float("inf"), float("-inf")) or selection not in ("HOME", "AWAY"):
+        return None
+    hs, as_ = match.get("homeScore"), match.get("awayScore")
+    if hs is None or as_ is None:
+        return None
+    try:
+        hs = float(hs); as_ = float(as_)
+    except (TypeError, ValueError):
+        return None
+    if hs != hs or as_ != as_ or hs in (float("inf"), float("-inf")) or as_ in (float("inf"), float("-inf")) or hs < 0 or as_ < 0:
+        return None
+    home_covers = (hs + line) > as_
+    return "won" if (home_covers if selection == "HOME" else not home_covers) else "lost"
 
 
 def _match_total(match):
@@ -809,6 +936,10 @@ def _leg_result(leg, match):
         if status not in ("FINISHED", "AWARDED"):
             return None
         return _cs_result(leg.get("selection"), match)
+    if leg.get("market") == "hc":                    # handicap settles on the goal margin (ET incl., pens excl.)
+        if status not in ("FINISHED", "AWARDED"):    #   accas can't contain one, but a legacy/hand-edited leg must
+            return None                              #   NEVER fall through and be settled as a match-winner pick
+        return _hc_result(leg.get("line"), leg.get("selection"), match)
     side = _winner_side(match)
     if status not in ("FINISHED", "AWARDED") or side is None:
         return None
@@ -883,6 +1014,18 @@ def settle(wagers, match, now=None):
             r = _ou_result(w.get("line"), w.get("selection"), _match_total(match))
             if r is None:
                 continue                             # no valid score yet -> leave pending
+            if r == "won":
+                w["status"] = "won"
+            else:
+                w["status"] = "lost"; w["return"] = 0
+            w["result"] = r
+            w["settled_at"] = ts; n += 1; continue
+        if w.get("market") == "hc":                  # handicap single: settle on the final goal margin (pens excluded)
+            if status not in ("FINISHED", "AWARDED"):
+                continue
+            r = _hc_result(w.get("line"), w.get("selection"), match)
+            if r is None:
+                continue                             # no valid score yet -> leave it pending
             if r == "won":
                 w["status"] = "won"
             else:
@@ -969,6 +1112,8 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
         mk = (str(s.get("market") or "result")).lower()
         if mk == "cs":
             return False, "Exact-score bets are singles only — they can't go in an accumulator."
+        if mk == "hc":
+            return False, "Handicap bets are singles only — they can't go in an accumulator."
         if mk == "ou":
             if s.get("selection") not in ("OVER", "UNDER"):
                 return False, "Pick Over or Under for every goals leg."

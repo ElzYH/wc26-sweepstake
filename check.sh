@@ -89,6 +89,24 @@ if python3 test_ou_settle.py >/dev/null; then echo "  ok"; else echo "  FAIL"; p
 say "Over/Under accumulators (O/U legs, mixed with 1X2, combined odds, partial/void/losing-leg settle; 1X2 accas unchanged)"
 if python3 test_ou_acca.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_ou_acca.py | tail -24; FAIL=1; fi
 
+say "Handicap odds model (complementarity, ladder rule, margin, monotonicity, no ±0.5 twin, hostile inputs)"
+if python3 test_hc_odds.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_hc_odds.py | tail -20; FAIL=1; fi
+
+say "Handicap placement (struck at live price, line/selection validation, caps/budget, singles-only, kickoff lock)"
+if python3 test_hc_place.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_hc_place.py | tail -24; FAIL=1; fi
+
+say "Handicap settlement (margin goldens, 90'+ET pens-excluded basis vs result bets, voids, hostile scores)"
+if python3 test_hc_settle.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_hc_settle.py | tail -24; FAIL=1; fi
+
+say "Handicap exploit sweep (book overround grid, covering dutches hc x 1X2 / hc x hc / OU x hc, randomized dutch fuzz)"
+if python3 qa_hc_exploit.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_hc_exploit.py | tail -20; FAIL=1; fi
+
+say "Disallowed-goal (VAR) alerts (score reversion fires once, flap/restart silent, FT-tick fires, post-FT correction silent)"
+if python3 qa_var_alerts.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_var_alerts.py | tail -24; FAIL=1; fi
+
+say "Handicap end-to-end over REAL HTTP (served hcOdds, placement, acca rejection, margin settlement, shootout basis)"
+if python3 qa_hc_http.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_hc_http.py | tail -24; FAIL=1; fi
+
 say "Betting QA (void lifecycle, mid-game/last-min void, accas, sequencing, free-points)"
 if python3 qa_betting.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_betting.py | tail -20; FAIL=1; fi
 

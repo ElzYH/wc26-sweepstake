@@ -202,8 +202,12 @@ You link your Discord account once, then you never type your code in chat:
 - **Open-stake limit:** the total you have on open bets at once can't beat the current max — it frees up as bets settle.
 - Up to **8** open bets. **No cap on winnings by default** — the organiser can optionally set a max return per bet.
 - **Accumulator:** up to **3 legs by default** (the organiser can change this); all must win, and **if one leg loses the whole acca pays nothing**; a postponed leg drops out and it pays on the rest.
+- **Handicap bets:** back a team with a goal start or deficit (−1.5, +1.5, −2.5, +2.5 where offered). Settles on the **90'+extra-time score — penalties don't count** (same basis as Over/Under and exact score, *not* the "to advance" market: a 1–1 game decided on pens means −1.5 **loses** and +1.5 **wins** regardless of the shootout). Half-lines only, so a handicap bet can never push. **Singles only** — no handicap legs in accas. Web only for now (not on Discord `/bet`).
 - **No draw bets on knockouts** (it goes to extra time / penalties — pick the side to go through).
 - You can't stake more than you have, and your points can never go below zero.
+
+### Alerts: disallowed goals (VAR)
+If a live score **drops back** (a goal chalked off by VAR), everyone gets told once — the chalked team's owner gets a personal DM/push, the channel and all-games feed get a 🚫 line with the corrected score. A feed flap replaying the same reversion, or a server restart, can never re-send it. A score correction to an already-finished game is treated as a results fix and stays silent.
 
 ---
 
