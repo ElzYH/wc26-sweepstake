@@ -1174,9 +1174,9 @@ def _cards_result(line, selection, match):
 
 
 # ---------------------------------------------------------------- both teams to score (works on EVERY feed tier)
-BTTS_OVERROUND = 1.13
-BTTS_MAX_PROB = 0.6
-BTTS_MIN_MARGIN = 0.02
+BTTS_OVERROUND = 1.17
+BTTS_MAX_PROB = 0.93
+BTTS_MIN_MARGIN = 0.04
 
 
 def btts_odds(comp_home, comp_away):
