@@ -40,13 +40,19 @@ def clear_guard():
     except OSError:
         pass
 
-def tracker(mp, status, hs, as_):
+def tracker(mp, status, hs, as_, redH=0, redA=0, lineups=None, scorers=None):
+    fx = {"home": "Spain", "away": "France", "status": status,
+          "homeOwner": "Erol", "awayOwner": "James", "redHome": redH, "redAway": redA,
+          "homeScore": hs, "awayScore": as_, "stage": "GROUP_STAGE", "group": "A"}
+    if lineups:
+        fx["homeLineup"] = [{"name": "Keeper", "position": "Goalkeeper", "shirtNumber": 1}]
+        fx["awayLineup"] = [{"name": "Gardien", "position": "Goalkeeper", "shirtNumber": 1}]
+    if scorers:
+        fx["scorers"] = scorers
     return {"stats": {"matches_played": mp},
             "leaderboards": {"points": [{"name": "Erol"}, {"name": "James"}], "survival": [{"name": "Erol"}]},
             "players": [{"name": "Erol"}, {"name": "James"}],
-            "fixtures": [{"home": "Spain", "away": "France", "status": status,
-                          "homeOwner": "Erol", "awayOwner": "James",
-                          "homeScore": hs, "awayScore": as_, "stage": "GROUP_STAGE", "group": "A"}]}
+            "fixtures": [fx]}
 
 def transition(old_td, new_td):
     json.dump(old_td, open(os.path.join(t, "tracker_data.json"), "w"))
@@ -102,6 +108,45 @@ transition(tracker(0, "IN_PLAY", 0, 0), tracker(0, "IN_PLAY", 1, 0))
 ck("a normal goal still fires, no disallowed noise", any("scored" in c for c in CHAN) and not var_chan(), CHAN)
 transition(tracker(0, "IN_PLAY", None, None), tracker(0, "IN_PLAY", 0, 0))
 ck("None -> 0-0 is not a reversion", not var_chan(), CHAN)
+
+
+print("\n== red cards (deep-data feed): a rising 90' red count alerts everyone once ==")
+clear_guard()
+def red_chan():   return [c for c in CHAN if "Red card" in c or "🟥" in c]
+def red_pushes(): return [p for p in PUSH if "Red card" in (p[2] or "")]
+transition(tracker(0, "IN_PLAY", 0, 0, redH=0), tracker(0, "IN_PLAY", 0, 0, redH=1))
+ck("the sent-off team's owner gets the push", any(p[0] == "Erol" for p in red_pushes()), PUSH)
+ck("the channel gets the red-card line naming team + owner", len(red_chan()) == 1 and "Spain" in red_chan()[0] and "Erol" in red_chan()[0], CHAN)
+ck("the all-games feed carries it, excluding the owner", any("🟥" in tx and "Erol" in ex for tx, ex in DMALL), DMALL)
+transition(tracker(0, "IN_PLAY", 0, 0, redH=1), tracker(0, "IN_PLAY", 0, 0, redH=1))
+ck("a feed flap on the same count is silent", not red_chan() and not red_pushes(), CHAN)
+transition(tracker(0, "IN_PLAY", 0, 0, redH=1), tracker(0, "IN_PLAY", 0, 0, redH=1, redA=1))
+ck("the OTHER team's later red fires its own alert (James)", any(p[0] == "James" for p in red_pushes()) and "France" in (red_chan() or [""])[0], (PUSH, CHAN))
+transition(tracker(1, "FINISHED", 1, 0, redH=1), tracker(1, "FINISHED", 1, 0, redH=2))
+ck("a post-FT bookings correction stays silent (not live drama)", not red_chan() and not red_pushes(), CHAN)
+transition(tracker(0, "IN_PLAY", 0, 0, redH=1), tracker(0, "IN_PLAY", 1, 0, redH=1))
+ck("a goal with an unchanged red count fires no red alert (regression)", not red_chan(), CHAN)
+
+
+print("\n== line-ups released: owners pushed + channel line, once; post-FT backfill silent ==")
+clear_guard()
+def lu_chan(): return [c for c in CHAN if "Line-ups" in c]
+transition(tracker(1, "TIMED", None, None), tracker(1, "TIMED", None, None, lineups=True))   # mp=1: past the pre-tournament silence gate
+ck("both owners get the line-ups push", {p[0] for p in PUSH if "Line-ups" in (p[2] or "")} == {"Erol", "James"}, PUSH)
+ck("the channel announces the XIs once", len(lu_chan()) == 1 and "Spain" in lu_chan()[0], CHAN)
+transition(tracker(1, "TIMED", None, None, lineups=True), tracker(1, "TIMED", None, None, lineups=True))
+ck("a re-poll with the same XIs is silent", not lu_chan() and not any("Line-ups" in (p[2] or "") for p in PUSH), CHAN)
+transition(tracker(1, "FINISHED", 1, 0), tracker(1, "FINISHED", 1, 0, lineups=True))
+ck("a post-FT line-up backfill stays silent (history, not news)", not lu_chan(), CHAN)
+
+print("\n== goal alerts name the scorer when the feed carries one ==")
+clear_guard()
+transition(tracker(0, "IN_PLAY", 0, 0), tracker(0, "IN_PLAY", 1, 0,
+           scorers=[{"minute": 23, "team": "HOME", "player": "El Nueve"}]))
+ck("the channel goal line names the scorer", any("El Nueve" in c and "scored" in c for c in CHAN), CHAN)
+clear_guard()
+transition(tracker(0, "IN_PLAY", 0, 0), tracker(0, "IN_PLAY", 1, 0))
+ck("no scorers in the feed -> the plain goal line still fires (free tier)", any("Spain" in c and "scored" in c for c in CHAN), CHAN)
 
 print()
 if FAILS:

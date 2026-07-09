@@ -634,6 +634,25 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
             return False, "That handicap line isn't offered."
         # a handicap book carries its own margin and its two sides can't both win, so backing both is a
         # guaranteed margin LOSS, never an arb — like O/U it's exempt from the result opposing-bet block
+    elif market == "mov":
+        if selection not in MOV_SELECTIONS:
+            return False, "Pick how they win it — in 90, in extra time, or on penalties."
+        if not is_knockout(match):
+            return False, "Method of victory is a knockout-only market."
+        # six mutually exclusive outcomes on their own 1.22-margined book — hedge-block exempt like cs
+    elif market == "btts":
+        if selection not in ("YES", "NO"):
+            return False, "Pick Yes or No — do both teams score?"
+        # a two-way book with its own margin; hedge-block exempt like O/U
+    elif market == "cards":
+        if selection not in ("OVER", "UNDER"):
+            return False, "Pick Over or Under on cards."
+        try:
+            line = float(line)
+        except (TypeError, ValueError):
+            return False, "Pick a cards line."
+        if line not in CARDS_LINES:
+            return False, "That cards line isn't offered."
     else:
         if selection not in SELECTIONS:
             return False, "Pick home, draw or away."
@@ -681,6 +700,12 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
         odds = goals_odds(comp_home, comp_away).get(_line_key(line), {}).get(selection)
     elif market == "hc":
         odds = hc_odds(comp_home, comp_away).get(_line_key(line), {}).get(selection)
+    elif market == "mov":
+        odds = mov_odds(comp_home, comp_away).get(selection)
+    elif market == "btts":
+        odds = btts_odds(comp_home, comp_away).get(selection)
+    elif market == "cards":
+        odds = cards_odds(knockout=is_knockout(match)).get(_line_key(line), {}).get(selection)
     else:
         odds = match_odds(comp_home, comp_away, knockout=is_knockout(match)).get(selection)
     if not odds:
@@ -699,6 +724,13 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
     elif market == "hc":
         w["market"] = "hc"
         w["line"] = line
+    elif market == "cards":
+        w["market"] = "cards"
+        w["line"] = line
+    elif market == "mov":
+        w["market"] = "mov"
+    elif market == "btts":
+        w["market"] = "btts"
     elif market == "cs":
         w["market"] = "cs"
     wagers.append(w)
@@ -841,16 +873,30 @@ def hc_odds(comp_home, comp_away, lines=None):
     The line is the handicap applied to the HOME side: HOME wins when home + line > away; AWAY is the exact
     complement (half-lines -> never a push). Settles on the 90'+ET score, penalties excluded — the same basis
     as Over/Under and exact score (NOT the knockout 'to advance' book, which a shootout can decide).
-    Built exactly like goals_odds(): the ladder rule (never quote a line one side of which we can't price
-    inside the ladder), a guaranteed minimum book margin, and a post-rounding re-check, so an offered line
-    can never go bettor-positive."""
+    TWO-SIDED lines carry a guaranteed book overround with a post-rounding re-check, like goals_odds().
+    When ONE side of a line is a capped near-certainty (fair > HC_MAX_PROB — offering it at the ladder cap
+    would be a farmable bettor edge), only that side is dropped and the LONG side is priced alone at
+    fair x overround with its own post-rounding minimum-margin re-check. So a big favourite's +2.5 vanishes
+    but the underdog's -2.5 stays on the board — both teams get their +/- options wherever the price is safe."""
     lh, la = _team_lambdas(comp_home, comp_away)
     out = {}
     for L in (lines or HC_LINES):
         p_home = min(0.999, max(1e-6, _hc_home_prob(lh, la, L)))
         p_away = min(0.999, max(1e-6, 1.0 - p_home))
         if p_home > HC_MAX_PROB or p_away > HC_MAX_PROB:
-            continue                                # same rule as O/U: a capped near-certainty is a farmable edge
+            # one-sided offering: price ONLY the long side, never the capped near-certainty
+            sel, p = ("HOME", p_home) if p_home <= HC_MAX_PROB else ("AWAY", p_away)
+            implied = p * HC_OVERROUND
+            leg = None
+            for _ in range(8):                      # bump until the ROUNDED fraction still clears the margin
+                num, den = _nearest_fraction(1.0 / implied)
+                if den > 0 and (den / (num + den)) >= p * (1.0 + HC_MIN_MARGIN) - 1e-12:
+                    leg = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
+                    break
+                implied = min(0.999, implied + 0.005)
+            if leg:
+                out[_line_key(L)] = {sel: leg}
+            continue
         iH = min(HC_MAX_PROB, p_home * HC_OVERROUND)
         iA = min(HC_MAX_PROB, p_away * HC_OVERROUND)
         target = 1.0 + HC_MIN_MARGIN
@@ -871,7 +917,7 @@ def hc_odds(comp_home, comp_away, lines=None):
                 iH = min(HC_MAX_PROB, iH + 0.01)
             else:
                 iA = min(HC_MAX_PROB, iA + 0.01)
-        out[_line_key(L)] = leg                     # every OFFERED line overrounds; neither side beats the ladder
+        out[_line_key(L)] = leg                     # every OFFERED price is bettor-negative vs fair
     return out
 
 
@@ -896,6 +942,270 @@ def _hc_result(line, selection, match):
         return None
     home_covers = (hs + line) > as_
     return "won" if (home_covers if selection == "HOME" else not home_covers) else "lost"
+
+
+# ---------------------------------------------------------------- method of victory (knockouts only)
+MOV_SELECTIONS = ("HOME_REG", "HOME_ET", "HOME_PENS", "AWAY_REG", "AWAY_ET", "AWAY_PENS")
+MOV_OVERROUND = 1.22        # 6-way book, margined like the exact-score grid
+MOV_MAX_PROB = 0.857        # a 6-way outcome is never near-certain, but cap it like the result book anyway
+MOV_MIN_MARGIN = 0.04
+MOV_P_LEVEL_ET = 0.45       # P(a level-after-90 knockout is STILL level after extra time) — ET is short + cagey
+MOV_ET_EDGE = 0.60          # of ET wins, the stronger 90-minute side takes this share
+MOV_PENS_EDGE = 0.54
+MOV_VOID_GRACE_S = 12 * 3600  # FINISHED this long with the method still unknowable (bare feed) -> push the bet        # a shootout is nearly a coin flip; tiny lean to the stronger side
+
+
+def mov_odds(comp_home, comp_away):
+    """Method-of-victory prices for a KNOCKOUT game: how each side goes through.
+    {'HOME_REG': {...}, 'HOME_ET': {...}, 'HOME_PENS': {...}, 'AWAY_REG': ...} — six mutually exclusive
+    outcomes that exhaust a knockout, priced off the same margin grid as the handicap/exact-score model:
+    P(win in 90') straight from the Poisson margin; the level-after-90 mass split into ET wins and shootout
+    wins with the stronger side shaded. The set carries a 1.22 overround like the exact-score grid, and a
+    covering dutch of any subset + any other market must route through margined books (QA grids this)."""
+    lh, la = _team_lambdas(comp_home, comp_away)
+    # 90-minute outcome probabilities off the margin grid (line +0.5/-0.5 trick: m>0 / m<0)
+    p_home90 = _hc_home_prob(lh, la, -0.5)          # P(margin >= 1)
+    p_away90 = 1.0 - _hc_home_prob(lh, la, 0.5)     # P(margin <= -1)
+    p_level = max(1e-6, 1.0 - p_home90 - p_away90)
+    strong_home = p_home90 / max(1e-9, (p_home90 + p_away90))
+    p_et = p_level * (1.0 - MOV_P_LEVEL_ET)         # decided in extra time
+    p_pens = p_level * MOV_P_LEVEL_ET               # goes the distance
+    # continuous edge: exactly even at 50/50 strength, approaching the full ET/pens edge for a mismatch
+    et_home = 0.5 + (MOV_ET_EDGE - 0.5) * (2.0 * strong_home - 1.0)
+    pn_home = 0.5 + (MOV_PENS_EDGE - 0.5) * (2.0 * strong_home - 1.0)
+    fair = {
+        "HOME_REG": p_home90, "AWAY_REG": p_away90,
+        "HOME_ET": p_et * et_home, "AWAY_ET": p_et * (1.0 - et_home),
+        "HOME_PENS": p_pens * pn_home, "AWAY_PENS": p_pens * (1.0 - pn_home),
+    }
+    out = {}
+    implieds = {}
+    for sel in MOV_SELECTIONS:
+        p = min(0.999, max(1e-6, fair[sel]))
+        implieds[sel] = min(MOV_MAX_PROB, p * MOV_OVERROUND)
+    # CONSISTENCY FLOOR (anti-dutch): the three outcomes of one side decompose that side's 'to advance'
+    # price, so their implied sum must never be CHEAPER than the KO result book's price for the same side —
+    # otherwise 'favourite result at its capped price + the underdog synthesised via its MoV trio' covers
+    # every outcome below 1.0 implied. Scale a light side up (capped outcomes push onto their siblings).
+    ko_book = match_odds(comp_home, comp_away, knockout=True)
+    for side in ("HOME", "AWAY"):
+        trio = ["%s_%s" % (side, m) for m in ("REG", "ET", "PENS")]
+        target = (1.0 / ko_book[side]["decimal"]) * 1.01
+        for _ in range(6):
+            s = sum(implieds[t] for t in trio)
+            if s >= target - 1e-12:
+                break
+            room = [t for t in trio if implieds[t] < MOV_MAX_PROB - 1e-9]
+            if not room:
+                break
+            f = target / max(1e-9, sum(implieds[t] for t in room)) - (s - sum(implieds[t] for t in room)) / max(1e-9, sum(implieds[t] for t in room))
+            for t in room:
+                implieds[t] = min(MOV_MAX_PROB, implieds[t] * max(1.0, f))
+    for sel in MOV_SELECTIONS:
+        p = min(0.999, max(1e-6, fair[sel]))
+        implied = implieds[sel]
+        for _ in range(8):                          # post-rounding: the sold price must still beat fair
+            num, den = _nearest_fraction(1.0 / implied)
+            if den > 0 and (den / (num + den)) >= p * (1.0 + MOV_MIN_MARGIN) - 1e-12:
+                out[sel] = {"frac": "%d/%d" % (num, den), "num": num, "den": den,
+                            "decimal": round(_dec((num, den)), 3)}
+                break
+            implied = min(MOV_MAX_PROB, implied + 0.005)
+            if implied >= MOV_MAX_PROB:             # can't clear the margin inside the cap -> don't sell it
+                break
+    # post-rounding re-check of the floor: rounding can shave a trio back under the target — bump the
+    # longest outcome of a light side until the SOLD trio clears the result-book price again
+    for side in ("HOME", "AWAY"):
+        trio = [t for t in ("%s_REG" % side, "%s_ET" % side, "%s_PENS" % side) if t in out]
+        if len(trio) < 3:
+            continue                                # an unsold outcome only makes the trio dearer to dutch
+        target = (1.0 / ko_book[side]["decimal"]) * 1.005
+        for _ in range(12):
+            s = sum(out[t]["den"] / (out[t]["num"] + out[t]["den"]) for t in trio)
+            if s >= target - 1e-12:
+                break
+            t = max(trio, key=lambda x: out[x]["decimal"])          # shorten the longest outcome a notch
+            cur = out[t]["den"] / (out[t]["num"] + out[t]["den"])
+            num, den = _nearest_fraction(1.0 / min(MOV_MAX_PROB, cur + 0.01))
+            out[t] = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
+    return out
+
+
+def _mov_result(selection, match):
+    """'won'/'lost' for a method-of-victory bet, or None while it can't be settled. Decided from the
+    feed's duration/shootout/pens fields: REG = winner inside 90 (duration REGULAR / no aet flag),
+    ET = winner in extra time (aet without a shootout), PENS = shootout. Needs a winner to settle."""
+    if selection not in MOV_SELECTIONS:
+        return None
+    side = _winner_side(match)
+    if side not in ("HOME", "AWAY"):
+        return None                                 # a knockout can't truly end level — wait for real data
+    pens = bool(match.get("shootout")) or (match.get("penHome") is not None and match.get("penAway") is not None
+                                           and match.get("penHome") != match.get("penAway"))
+    aet = bool(match.get("aet")) or match.get("duration") in ("EXTRA_TIME", "PENALTY_SHOOTOUT") or pens
+    # DEGRADED-FEED GUARD: on a bare free-tier payload there is no duration breakdown, so a knockout win
+    # could be REG or ET and we can't tell. The normaliser marks that with durationKnown=False; records
+    # that predate the flag keep the old behaviour (a duration/aet/shootout field counts as knowledge).
+    known = pens or aet or match.get("durationKnown", ("duration" in match) or ("aet" in match) or ("shootout" in match))
+    if not known:
+        return None                                 # can't distinguish REG vs ET — never guess a settlement
+    method = "PENS" if pens else ("ET" if aet else "REG")
+    return "won" if selection == "%s_%s" % (side, method) else "lost"
+
+
+# ---------------------------------------------------------------- Over/Under cards (bookings)
+CARDS_LINES = [2.5, 3.5, 4.5, 5.5, 6.5]
+CARDS_BASE = 4.6            # expected total 90' bookings in a World Cup game — flat prior, margin does the work
+CARDS_KO_BUMP = 0.6         # knockouts are spikier (tactical fouls, stakes)
+CARDS_OVERROUND = 1.13
+CARDS_MAX_PROB = 0.93
+CARDS_MIN_MARGIN = 0.02
+CARDS_GRID_MAX = 25
+CARDS_VOID_GRACE_S = 8 * 3600   # FT + this long with no bookings in the feed -> push the bet (kickoff-anchored)
+
+
+def _cards_lambda(knockout=False):
+    return CARDS_BASE + (CARDS_KO_BUMP if knockout else 0.0)
+
+
+def cards_odds(knockout=False, lines=None):
+    """Over/Under total cards (90 minutes, every booking = 1 card): {'4.5': {'OVER': {...}, 'UNDER': {...}}}.
+    A flat Poisson prior on total bookings — we have no per-team card composites, so the 1.13 margin and the
+    O/U ladder rule carry the book. Cards are an independent axis from goals/margin, so no cross-market
+    covering combination exists at all (QA asserts it); the only 'dutch' is both sides of one line, which is
+    a guaranteed margin loss like every other two-way here."""
+    lam = _cards_lambda(knockout)
+    out = {}
+    for L in (lines or CARDS_LINES):
+        try:
+            Lf = float(L)
+        except (TypeError, ValueError):
+            continue
+        # P(total <= floor(L)) under Poisson(lam)
+        kmax = int(Lf)
+        p_under = 0.0
+        term = math.exp(-lam)
+        for k in range(0, CARDS_GRID_MAX + 1):
+            if k > 0:
+                term *= lam / k
+            if k <= kmax:
+                p_under += term
+        p_under = min(0.999, max(1e-6, p_under))
+        p_over = min(0.999, max(1e-6, 1.0 - p_under))
+        if p_under > CARDS_MAX_PROB or p_over > CARDS_MAX_PROB:
+            continue                                # ladder rule, same as goals_odds
+        iO = min(CARDS_MAX_PROB, p_over * CARDS_OVERROUND)
+        iU = min(CARDS_MAX_PROB, p_under * CARDS_OVERROUND)
+        target = 1.0 + CARDS_MIN_MARGIN
+        if iO + iU < target:
+            if iO <= iU:
+                iO = min(CARDS_MAX_PROB, target - iU)
+            else:
+                iU = min(CARDS_MAX_PROB, target - iO)
+        leg = {}
+        for _ in range(8):
+            leg = {}
+            for sel, implied in (("OVER", iO), ("UNDER", iU)):
+                num, den = _nearest_fraction(1.0 / implied)
+                leg[sel] = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
+            if (1.0 / leg["OVER"]["decimal"]) + (1.0 / leg["UNDER"]["decimal"]) > 1.0 + 1e-6:
+                break
+            if iO <= iU:
+                iO = min(CARDS_MAX_PROB, iO + 0.01)
+            else:
+                iU = min(CARDS_MAX_PROB, iU + 0.01)
+        out[_line_key(L)] = leg
+    return out
+
+
+def _match_cards(match):
+    """Total 90' cards for a match, or None when the feed hasn't supplied bookings (data-plan gap)."""
+    ch, ca = match.get("cardsHome"), match.get("cardsAway")
+    if ch is None or ca is None:
+        return None
+    try:
+        ch = float(ch); ca = float(ca)
+    except (TypeError, ValueError):
+        return None
+    if ch != ch or ca != ca or ch < 0 or ca < 0 or ch in (float("inf"), float("-inf")) or ca in (float("inf"), float("-inf")):
+        return None
+    return ch + ca
+
+
+def _cards_result(line, selection, match):
+    """'won'/'lost' for a cards O/U bet, or None while it can't be settled (half-lines -> no push)."""
+    total = _match_cards(match)
+    if total is None:
+        return None
+    try:
+        line = float(line)
+    except (TypeError, ValueError):
+        return None
+    if line != line:
+        return None
+    if selection == "OVER":
+        return "won" if total > line else "lost"
+    if selection == "UNDER":
+        return "won" if total < line else "lost"
+    return None
+
+
+# ---------------------------------------------------------------- both teams to score (works on EVERY feed tier)
+BTTS_OVERROUND = 1.13
+BTTS_MAX_PROB = 0.93
+BTTS_MIN_MARGIN = 0.02
+
+
+def btts_odds(comp_home, comp_away):
+    """Both Teams To Score: {'YES': {...}, 'NO': {...}} off the shared team-lambda split —
+    P(YES) = P(home scores) * P(away scores) under independent Poissons. 90'+ET basis like O/U.
+    Needs nothing but the final score, so it settles on the FREE feed tier too. Same ladder rule +
+    post-rounding overround re-check as every other two-way book here."""
+    lh, la = _team_lambdas(comp_home, comp_away)
+    p_yes = min(0.999, max(1e-6, (1.0 - math.exp(-lh)) * (1.0 - math.exp(-la))))
+    p_no = min(0.999, max(1e-6, 1.0 - p_yes))
+    if p_yes > BTTS_MAX_PROB or p_no > BTTS_MAX_PROB:
+        return {}                                   # a capped near-certainty is a farmable edge — don't quote it
+    iY = min(BTTS_MAX_PROB, p_yes * BTTS_OVERROUND)
+    iN = min(BTTS_MAX_PROB, p_no * BTTS_OVERROUND)
+    target = 1.0 + BTTS_MIN_MARGIN
+    if iY + iN < target:
+        if iY <= iN:
+            iY = min(BTTS_MAX_PROB, target - iN)
+        else:
+            iN = min(BTTS_MAX_PROB, target - iY)
+    leg = {}
+    for _ in range(8):
+        leg = {}
+        for sel, implied in (("YES", iY), ("NO", iN)):
+            num, den = _nearest_fraction(1.0 / implied)
+            leg[sel] = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
+        if (1.0 / leg["YES"]["decimal"]) + (1.0 / leg["NO"]["decimal"]) > 1.0 + 1e-6:
+            break
+        if iY <= iN:
+            iY = min(BTTS_MAX_PROB, iY + 0.01)
+        else:
+            iN = min(BTTS_MAX_PROB, iN + 0.01)
+    return leg
+
+
+def _btts_result(selection, match):
+    """'won'/'lost' for a BTTS bet against the final 90'+ET score, or None while unsettleable."""
+    hs, as_ = match.get("homeScore"), match.get("awayScore")
+    if hs is None or as_ is None:
+        return None
+    try:
+        hs = float(hs); as_ = float(as_)
+    except (TypeError, ValueError):
+        return None
+    if hs != hs or as_ != as_ or hs < 0 or as_ < 0 or hs in (float("inf"), float("-inf")) or as_ in (float("inf"), float("-inf")):
+        return None
+    both = hs > 0 and as_ > 0
+    if selection == "YES":
+        return "won" if both else "lost"
+    if selection == "NO":
+        return "won" if not both else "lost"
+    return None
 
 
 def _match_total(match):
@@ -941,6 +1251,28 @@ def _leg_result(leg, match):
         if status not in ("FINISHED", "AWARDED"):    #   an hc leg must NEVER fall through and be settled as a
             return None                              #   match-winner pick
         return _hc_result(leg.get("line"), leg.get("selection"), match)
+    if leg.get("market") == "btts":                  # both teams to score: settles off the final score alone
+        if status not in ("FINISHED", "AWARDED"):
+            return None
+        return _btts_result(leg.get("selection"), match)
+    if leg.get("market") == "mov":                   # method of victory: REG / ET / PENS
+        if status not in ("FINISHED", "AWARDED"):
+            return None
+        r = _mov_result(leg.get("selection"), match)
+        if r is None:
+            ko_ts = _utc_ts(match.get("utcDate") or "")
+            if ko_ts and (time.time() - ko_ts) > MOV_VOID_GRACE_S:
+                return "void"                        # method never knowable on this feed -> the leg drops out
+        return r
+    if leg.get("market") == "cards":                 # O/U cards off the bookings feed
+        if status not in ("FINISHED", "AWARDED"):
+            return None
+        r = _cards_result(leg.get("line"), leg.get("selection"), match)
+        if r is None:
+            ko_ts = _utc_ts(match.get("utcDate") or "")
+            if ko_ts and (time.time() - ko_ts) > CARDS_VOID_GRACE_S:
+                return "void"                        # no bookings data hours after FT -> the leg drops out
+        return r
     side = _winner_side(match)
     if status not in ("FINISHED", "AWARDED") or side is None:
         return None
@@ -1040,6 +1372,56 @@ def settle(wagers, match, now=None):
                 w["status"] = "lost"; w["return"] = 0
             w["result"] = r
             w["settled_at"] = ts; n += 1; continue
+        if w.get("market") == "btts":                # both teams to score: pure function of the final score
+            if status not in ("FINISHED", "AWARDED"):
+                continue
+            r = _btts_result(w.get("selection"), match)
+            if r is None:
+                continue
+            if r == "won":
+                w["status"] = "won"
+            else:
+                w["status"] = "lost"; w["return"] = 0
+            w["result"] = r
+            w["settled_at"] = ts; n += 1; continue
+        if w.get("market") == "mov":                 # method of victory: how the winner went through
+            if status not in ("FINISHED", "AWARDED"):
+                continue
+            r = _mov_result(w.get("selection"), match)
+            if r is None:
+                # a degraded feed (no duration breakdown / no pens fields) may NEVER be able to say HOW
+                # the game was won — after the grace, push the bet rather than strand it
+                ko_ts = _utc_ts(match.get("utcDate") or "")
+                if ko_ts and ts - ko_ts > MOV_VOID_GRACE_S:
+                    w["status"] = "void"; w["return"] = w.get("stake", 0)
+                    w["result"] = "void"; w["note"] = "the feed can't say how it was won — stake refunded"
+                    w["settled_at"] = ts; n += 1
+                continue
+            if r == "won":
+                w["status"] = "won"
+            else:
+                w["status"] = "lost"; w["return"] = 0
+            w["result"] = r
+            w["settled_at"] = ts; n += 1; continue
+        if w.get("market") == "cards":               # O/U cards: settle on 90' bookings from the deep-data feed
+            if status not in ("FINISHED", "AWARDED"):
+                continue
+            r = _cards_result(w.get("line"), w.get("selection"), match)
+            if r is None:
+                # bookings often land a little after FT — but if the feed still has none hours later,
+                # the data plainly isn't coming for this game: push the bet (stake back), don't strand it
+                ko_ts = _utc_ts(match.get("utcDate") or "")
+                if ko_ts and ts - ko_ts > CARDS_VOID_GRACE_S:
+                    w["status"] = "void"; w["return"] = w.get("stake", 0)
+                    w["result"] = "void"; w["note"] = "no cards data from the feed — stake refunded"
+                    w["settled_at"] = ts; n += 1
+                continue
+            if r == "won":
+                w["status"] = "won"
+            else:
+                w["status"] = "lost"; w["return"] = 0
+            w["result"] = r
+            w["settled_at"] = ts; n += 1; continue
         if status not in ("FINISHED", "AWARDED") or side is None:
             continue
         if side == "DRAW" and _norm_stage(w.get("stage")) != "GROUP_STAGE":
@@ -1129,6 +1511,49 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
             if not o:
                 return False, "Couldn't price one of those exact-score legs — try again."
             legs.append({"matchId": match_id(s["match"]), "selection": s["selection"], "market": "cs",
+                         "home": s["match"].get("home"), "away": s["match"].get("away"),
+                         "stage": s["match"].get("stage"), "num": o["num"], "den": o["den"], "frac": o["frac"]})
+        elif mk == "btts":
+            # BTTS legs: a two-way margined book that's a pure function of the score — cross-game legs are
+            # independent; the same-game dedupe above blocks any correlated combo before pricing.
+            if s.get("selection") not in ("YES", "NO"):
+                return False, "Pick Yes or No for every both-teams-to-score leg."
+            o = btts_odds(s["comp_home"], s["comp_away"]).get(s["selection"])
+            if not o:
+                return False, "Couldn't price one of those both-teams-to-score legs — try again."
+            legs.append({"matchId": match_id(s["match"]), "selection": s["selection"], "market": "btts",
+                         "home": s["match"].get("home"), "away": s["match"].get("away"),
+                         "stage": s["match"].get("stage"), "num": o["num"], "den": o["den"], "frac": o["frac"]})
+        elif mk == "mov":
+            # Method-of-victory legs across DIFFERENT games: six mutually exclusive margined outcomes,
+            # independent of every other match — nothing to cover across games. Same-game correlation
+            # (mov x result on one game) is impossible: the dedupe above already blocked it.
+            if s.get("selection") not in MOV_SELECTIONS:
+                return False, "Pick how they win it for every method-of-victory leg."
+            if not is_knockout(s["match"]):
+                return False, "Method of victory is a knockout-only market."
+            o = mov_odds(s["comp_home"], s["comp_away"]).get(s["selection"])
+            if not o:
+                return False, "Couldn't price one of those method-of-victory legs — try again."
+            legs.append({"matchId": match_id(s["match"]), "selection": s["selection"], "market": "mov",
+                         "home": s["match"].get("home"), "away": s["match"].get("away"),
+                         "stage": s["match"].get("stage"), "num": o["num"], "den": o["den"], "frac": o["frac"]})
+        elif mk == "cards":
+            # Cards legs: bookings are an independent axis from goals/margins even WITHIN one game, and
+            # across games trivially so — the 1.13 book margin is the whole story. A no-data game voids
+            # the leg (drops out) after the grace, same as a postponed leg.
+            if s.get("selection") not in ("OVER", "UNDER"):
+                return False, "Pick Over or Under for every cards leg."
+            try:
+                ln = float(s.get("line"))
+            except (TypeError, ValueError):
+                return False, "Pick a cards line for every cards leg."
+            if ln not in CARDS_LINES:
+                return False, "That cards line isn't offered."
+            o = cards_odds(knockout=is_knockout(s["match"])).get(_line_key(ln), {}).get(s["selection"])
+            if not o:
+                return False, "Couldn't price one of those cards legs — try again."
+            legs.append({"matchId": match_id(s["match"]), "selection": s["selection"], "market": "cards", "line": ln,
                          "home": s["match"].get("home"), "away": s["match"].get("away"),
                          "stage": s["match"].get("stage"), "num": o["num"], "den": o["den"], "frac": o["frac"]})
         elif mk == "hc":

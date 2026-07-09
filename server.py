@@ -1297,6 +1297,18 @@ def _pick_label(w, draw="the draw"):
             return "%s %+g (handicap)" % (team, ln if w.get("selection") == "HOME" else -ln)
         except (TypeError, ValueError):
             return "Handicap"
+    if (w.get("market") or "result") == "mov":
+        sel = w.get("selection") or ""
+        team = w.get("home") if sel.startswith("HOME") else w.get("away")
+        how = {"REG": "in 90'", "ET": "in extra time", "PENS": "on penalties"}.get(sel.split("_")[-1], "")
+        return "%s %s" % (team, how)
+    if (w.get("market") or "result") == "btts":
+        return "Both teams to score — %s" % ("Yes" if w.get("selection") == "YES" else "No")
+    if (w.get("market") or "result") == "cards":
+        try:
+            return ("Over %g cards" if w.get("selection") == "OVER" else "Under %g cards") % float(w.get("line"))
+        except (TypeError, ValueError):
+            return "Over/Under cards"
     return w["home"] if w.get("selection") == "HOME" else (w["away"] if w.get("selection") == "AWAY" else draw)
 
 
@@ -1772,6 +1784,7 @@ def notify_changes(old):
     try:
         of, nf = _fixture_status(old), _fixture_status(new)
         nmatch = {(m.get("home"), m.get("away")): m for m in (new.get("fixtures") or [])}
+        omatch = {(m.get("home"), m.get("away")): m for m in (old.get("fixtures") or [])}   # old-side fixtures (red-card diff)
         FT_STATUSES = ("FINISHED", "AWARDED")
         for key, nv in nf.items():
             h, a = key
@@ -1819,15 +1832,24 @@ def notify_changes(old):
                 ohs, oas = ov[3], ov[4]
                 if None not in (nhs, nas, ohs, oas):
                     score = "%s %d–%d %s" % (h, nhs, nas, a)
+                    def _scorer(side):
+                        """Name the NEWEST listed scorer for that side (deep-data feeds only) — '' otherwise."""
+                        try:
+                            sc = [g for g in ((nmatch.get(key) or {}).get("scorers") or []) if g.get("team") == side]
+                            return (" — %s" % sc[-1]["player"]) if sc else ""
+                        except Exception:
+                            return ""
                     if nhs > ohs and ho_ok:
-                        push_player(ho, "goal", "%s scored! ⚽" % h, score)
-                        _bot_dm_player(ho, "⚽ **%s** scored — %s" % (h, score), match_id=mid)     # personal -> DM
-                        _channel_event("⚽ **%s** (%s) scored — %s" % (h, ho, score), mid)
-                        _dm_all_games("⚽ **%s** (%s) scored — %s" % (h, ho, score), exclude_players=[ho])   # owner already got the personal DM above
+                        who_s = _scorer("HOME")
+                        push_player(ho, "goal", "%s scored! ⚽" % h, score + who_s)
+                        _bot_dm_player(ho, "⚽ **%s** scored%s — %s" % (h, who_s, score), match_id=mid)     # personal -> DM
+                        _channel_event("⚽ **%s** (%s) scored%s — %s" % (h, ho, who_s, score), mid)
+                        _dm_all_games("⚽ **%s** (%s) scored%s — %s" % (h, ho, who_s, score), exclude_players=[ho])   # owner already got the personal DM above
                     if nas > oas and ao_ok:
-                        push_player(ao, "goal", "%s scored! ⚽" % a, score)
-                        _bot_dm_player(ao, "⚽ **%s** scored — %s" % (a, score), match_id=mid)     # personal -> DM
-                        _channel_event("⚽ **%s** (%s) scored — %s" % (a, ao, score), mid)
+                        who_s = _scorer("AWAY")
+                        push_player(ao, "goal", "%s scored! ⚽" % a, score + who_s)
+                        _bot_dm_player(ao, "⚽ **%s** scored%s — %s" % (a, who_s, score), match_id=mid)     # personal -> DM
+                        _channel_event("⚽ **%s** (%s) scored%s — %s" % (a, ao, who_s, score), mid)
                         _dm_all_games("⚽ **%s** (%s) scored — %s" % (a, ao, score), exclude_players=[ao])   # owner already got the personal DM above
             # disallowed goal (VAR): a score that rose earlier DROPS back while the game is live, or on the
             # very tick it goes full-time (a chalk-off right at the whistle still lands with the FT feed).
@@ -1849,6 +1871,40 @@ def notify_changes(old):
                             " & ".join("**%s** (%s)" % (vt, own(vo)) for vt, vo, _k in chalked), vscore)
                         _channel_event(vline, mid)
                         _dm_all_games(vline, exclude_players=[vo for _t, vo, vok in chalked if vok])
+            # line-ups released (deep-data feed): the fixture gains a starting XI it didn't have — the two
+            # owners get a push, bettors on the game get a DM, once per game via the persistent guard.
+            # Only before/around kickoff (a post-FT backfill of historical line-ups isn't news).
+            if st not in FT_STATUSES:
+                _oldlu = omatch.get(key) or {}
+                _newlu = nmatch.get(key) or {}
+                if (_newlu.get("homeLineup") or _newlu.get("awayLineup")) and not (_oldlu.get("homeLineup") or _oldlu.get("awayLineup")):
+                    if _alert_first_time(mid, h, a, "lineups"):
+                        _lut = "%s vs %s" % (h, a)
+                        for _o, _okf in ((ho, ho_ok), (ao, ao_ok)):
+                            if _okf:
+                                push_player(_o, "flow", "Line-ups are in 📋", "%s — starting XIs are out. Check the tracker." % _lut)
+                        _channel_event("📋 Line-ups are in — **%s** v **%s**" % (h, a), mid)
+                        for _pl in _bettors_on_match(mid):
+                            if _pl not in (ho, ao):
+                                _bot_dm_player(_pl, "📋 Line-ups are in for a game you bet on — **%s** v **%s**." % (h, a), match_id=mid)
+            # red cards (deep-data feed): a rising red/second-yellow count on a live game — the owner
+            # gets a personal push/DM, the channel + all-games feed get the line. At-most-once per
+            # exact count via the persistent guard ("red:H:n" / "red:A:n"), so flaps stay silent.
+            if st in LIVE_STATUSES:
+                _om = omatch.get(key) or {}
+                _nm = nmatch.get(key) or {}
+                for _side, _team, _owner, _ok in (("H", h, ho, ho_ok), ("A", a, ao, ao_ok)):
+                    _oldr = _om.get("redHome" if _side == "H" else "redAway") or 0
+                    _newr = _nm.get("redHome" if _side == "H" else "redAway") or 0
+                    if isinstance(_newr, (int, float)) and _newr > (_oldr if isinstance(_oldr, (int, float)) else 0):
+                        if _alert_first_time(mid, h, a, "red:%s:%d" % (_side, int(_newr))):
+                            _sc = "%s %s–%s %s" % (h, nhs, nas, a) if None not in (nhs, nas) else "%s vs %s" % (h, a)
+                            if _ok:
+                                push_player(_owner, "flow", "Red card 🟥", "%s are down to fewer men — %s" % (_team, _sc))
+                                _bot_dm_player(_owner, "🟥 **%s** red card — %s" % (_team, _sc), match_id=mid)
+                            _rline = "🟥 Red card — **%s** (%s): %s" % (_team, own(_owner), _sc)
+                            _channel_event(_rline, mid)
+                            _dm_all_games(_rline, exclude_players=[_owner] if _ok else None)
     except Exception:
         pass
     # a player's team is knocked out
@@ -2859,7 +2915,7 @@ def update_now(cfg):
             _update_match_clocks(json.load(open("results.json")).get("matches", []))
         except Exception:
             pass
-        scoring_mod.compute(out="tracker_data.json", default_mode=(cfg.get("scoring_mode") if cfg.get("scoring_mode") in ("points", "survival") else "points"), wagers=wlist, group_mid_ts=_group_mid_ts(), composite_overrides=(_load_calibration().get("composites") or None))
+        scoring_mod.compute(out="tracker_data.json", default_mode=(cfg.get("scoring_mode") if cfg.get("scoring_mode") in ("points", "survival") else "points"), wagers=wlist, group_mid_ts=_group_mid_ts(), composite_overrides=(_load_calibration().get("composites") or None), cards_market=cfg.get("cards_market"))
         cfg["last_update"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         save_config(cfg)
         notify_changes(old_snapshot)        # personalised alerts (if any subscribers)
@@ -2923,9 +2979,34 @@ def _odds_integrity_violations(td, teams):
                 if bo is not None and bo <= 1.0:
                     out.append("%s v %s — O/U %s book %.1f%%" % (h, a, ln, bo * 100))
             for ln, leg in (wager_mod.hc_odds(ch, ca) or {}).items():
-                bh = _odds_book_overround([leg["HOME"]["decimal"], leg["AWAY"]["decimal"]])
-                if bh is not None and bh <= 1.0:
-                    out.append("%s v %s — handicap %s book %.1f%%" % (h, a, ln, bh * 100))
+                if "HOME" in leg and "AWAY" in leg:
+                    bh = _odds_book_overround([leg["HOME"]["decimal"], leg["AWAY"]["decimal"]])
+                    if bh is not None and bh <= 1.0:
+                        out.append("%s v %s — handicap %s book %.1f%%" % (h, a, ln, bh * 100))
+                else:                                   # one-sided line: the lone price must still beat fair
+                    lh_, la_ = wager_mod._team_lambdas(ch, ca)
+                    pfh = wager_mod._hc_home_prob(lh_, la_, float(ln))
+                    for sel, d in leg.items():
+                        pf = pfh if sel == "HOME" else (1.0 - pfh)
+                        if (1.0 / d["decimal"]) <= pf:
+                            out.append("%s v %s — handicap %s %s one-sided price at/below fair" % (h, a, ln, sel))
+            bt = wager_mod.btts_odds(ch, ca) or {}
+            if "YES" in bt and "NO" in bt:
+                bb = _odds_book_overround([bt["YES"]["decimal"], bt["NO"]["decimal"]])
+                if bb is not None and bb <= 1.0:
+                    out.append("%s v %s — BTTS book %.1f%%" % (h, a, bb * 100))
+            for ln, leg in (wager_mod.cards_odds(knockout=ko) or {}).items():
+                bc = _odds_book_overround([leg["OVER"]["decimal"], leg["UNDER"]["decimal"]])
+                if bc is not None and bc <= 1.0:
+                    out.append("%s v %s — cards %s book %.1f%%" % (h, a, ln, bc * 100))
+            if ko:
+                mv = wager_mod.mov_odds(ch, ca) or {}
+                if mv:
+                    bm = _odds_book_overround([v["decimal"] for v in mv.values()])
+                    # the 6-way set must overround as a SET only when complete; capped/unsellable outcomes
+                    # shrink the set, and any covering dutch then routes through the margined result book
+                    if len(mv) == 6 and bm is not None and bm <= 1.0:
+                        out.append("%s v %s — method-of-victory set %.1f%%" % (h, a, bm * 100))
     except Exception as e:
         log("odds integrity check error (non-fatal):", e)
     return out
@@ -4004,7 +4085,7 @@ class Handler(BaseHTTPRequestHandler):
                 wl = load_wagers() or None             # standing bets always count, even if NEW betting is switched off
                 try:                                 # rebuild the tracker from the restored data (no network needed)
                     scoring_mod.compute(out="tracker_data.json",
-                                        default_mode=(cfg.get("scoring_mode") if cfg.get("scoring_mode") in ("points", "survival") else "points"), wagers=wl, group_mid_ts=_group_mid_ts(), composite_overrides=(_load_calibration().get("composites") or None))
+                                        default_mode=(cfg.get("scoring_mode") if cfg.get("scoring_mode") in ("points", "survival") else "points"), wagers=wl, group_mid_ts=_group_mid_ts(), composite_overrides=(_load_calibration().get("composites") or None), cards_market=cfg.get("cards_market"))
                     ok, err = True, None
                 except Exception as e:
                     ok, err = False, str(e)

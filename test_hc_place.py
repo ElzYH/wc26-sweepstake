@@ -38,11 +38,17 @@ for bad_sel in ("DRAW", "OVER", "BRAZIL", "", None, "home"):
 for bad in (0.5, -0.5, 1.0, 3.0, 9.5, 0, "x", None, float("nan"), float("inf")):
     ok_b, msg = W.place([], "Erol", FUTURE, "HOME", 5, 100, CH, CA, now=NOW, market="hc", line=bad)
     ck("line %r is rejected" % (bad,), not ok_b, msg if ok_b else None)
-for good in sorted(W.hc_odds(CH, CA).keys(), key=float):
-    ok_g, _ = W.place([], "Erol", FUTURE, "HOME", 5, 100, CH, CA, now=NOW, market="hc", line=float(good))
-    ck("offered line %s is accepted" % good, ok_g, None)
-# a line the ladder filtered at these strengths is VALID input but prices to a clean error, not a crash
-filtered = [L for L in W.HC_LINES if W._line_key(L) not in W.hc_odds(CH, CA)]
+_book = W.hc_odds(CH, CA)
+for good in sorted(_book.keys(), key=float):
+    for sel in ("HOME", "AWAY"):
+        ok_g, msg = W.place([], "Erol", FUTURE, sel, 5, 100, CH, CA, now=NOW, market="hc", line=float(good))
+        if sel in _book[good]:
+            ck("offered side %s @ %s is accepted" % (sel, good), ok_g, msg if not ok_g else None)
+        else:
+            # one-sided line: the capped near-certainty is OFF the board -> clean price error, never a bet
+            ck("unoffered side %s @ %s -> clean 'couldn't price' error" % (sel, good), (not ok_g) and isinstance(msg, str), msg)
+# a line the ladder filtered ENTIRELY at these strengths is VALID input but prices to a clean error, not a crash
+filtered = [L for L in W.HC_LINES if W._line_key(L) not in _book]
 for L in filtered:
     ok_f, msg = W.place([], "Erol", FUTURE, "HOME", 5, 100, CH, CA, now=NOW, market="hc", line=L)
     ck("ladder-filtered line %+g -> clean 'couldn't price' error" % L, (not ok_f) and isinstance(msg, str), msg)

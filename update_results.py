@@ -10,6 +10,7 @@ import json
 import os
 import sys
 import unicodedata
+import time
 import urllib.request
 
 COMPETITION = os.environ.get("COMPETITION", "WC")
@@ -40,6 +41,38 @@ def build_name_map(teams_path="teams.json"):
     return resolve
 
 
+def _scorers(m, h, a, resolve):
+    """Deep-data goals[] -> a compact scorer list, or None when the feed carries no scorers at all.
+    Own goals are attributed to the team CREDITED with the goal (that's what the score shows)."""
+    if not isinstance(m.get("goals"), list):
+        return None
+    out = []
+    for g in m["goals"][:40]:
+        if not isinstance(g, dict):
+            continue
+        name = ((g.get("scorer") or {}).get("name")) or ""
+        team = resolve(((g.get("team") or {}).get("name")) or "")
+        side = "HOME" if team == h else ("AWAY" if team == a else None)
+        if not name or side is None:
+            continue
+        out.append({"minute": g.get("minute"), "team": side, "player": name,
+                    "type": (g.get("type") or "REGULAR")})
+    return out
+
+
+def _lineup(team_obj):
+    """Deep-data starting XI -> [{name, position, shirtNumber}], or None when the tier has no line-ups."""
+    lu = (team_obj or {}).get("lineup")
+    if not isinstance(lu, list) or not lu:
+        return None
+    out = []
+    for p in lu[:11]:
+        if isinstance(p, dict) and p.get("name"):
+            out.append({"name": p.get("name"), "position": p.get("position"),
+                        "shirtNumber": p.get("shirtNumber")})
+    return out or None
+
+
 def normalize_matches(api_matches, resolve):
     out = []
     for m in api_matches:
@@ -51,6 +84,7 @@ def normalize_matches(api_matches, resolve):
         et = score.get("extraTime", {}) or {}
         pen = score.get("penalties", {}) or {}
         duration = score.get("duration", "REGULAR")
+        duration_known = ("duration" in score) or ("regularTime" in score) or ("penalties" in score)
         winner = {"HOME_TEAM": "HOME", "AWAY_TEAM": "AWAY", "DRAW": "DRAW"}.get(score.get("winner"))
 
         # v4 quirk: score/fullTime INCLUDES extra-time AND penalty-shootout goals. For our points and
@@ -62,6 +96,30 @@ def normalize_matches(api_matches, resolve):
             if pen.get(side) is not None and ft.get(side) is not None:
                 return ft.get(side) - pen.get(side, 0)
             return ft.get(side)
+
+        # Deep-data tiers include a bookings[] array (each: {minute, team, card}). Cards basis is the
+        # bookmaker-standard 90 MINUTES: extra-time bookings (minute > 90) don't count; a missing minute
+        # counts (conservative). Every booking = 1 card regardless of colour. cardsHome/cardsAway stay
+        # None when the payload has no bookings key at all — settlement must tell "no data on this plan"
+        # (leave pending, void at FT) apart from "genuinely zero cards" (an empty list).
+        cards_h = cards_a = None
+        reds_h = reds_a = 0
+        if isinstance(m.get("bookings"), list):
+            cards_h = cards_a = 0
+            for bk in m["bookings"]:
+                if not isinstance(bk, dict):
+                    continue
+                minute = bk.get("minute")
+                if isinstance(minute, (int, float)) and minute > 90:
+                    continue
+                t = ((bk.get("team") or {}).get("name")) or ""
+                is_red = (bk.get("card") or "").upper() in ("RED", "YELLOW_RED", "RED_CARD", "SECOND_YELLOW")
+                if resolve(t) == h:
+                    cards_h += 1
+                    reds_h += 1 if is_red else 0
+                elif resolve(t) == a:
+                    cards_a += 1
+                    reds_a += 1 if is_red else 0
 
         out.append({
             "id": m["id"], "stage": m.get("stage", "GROUP_STAGE"),
@@ -75,6 +133,13 @@ def normalize_matches(api_matches, resolve):
             "aet": duration in ("EXTRA_TIME", "PENALTY_SHOOTOUT"),          # went to extra time
             "shootout": duration == "PENALTY_SHOOTOUT",
             "penHome": pen.get("home"), "penAway": pen.get("away"),         # shootout score, if any
+            "cardsHome": cards_h, "cardsAway": cards_a,                     # 90' bookings count (None = feed has none)
+            "redHome": reds_h, "redAway": reds_a,                           # red / second-yellow count within 90'
+            "durationKnown": duration_known,                                # False on bare free-tier payloads ->
+                                                                            #   method-of-victory won't guess REG vs ET
+            "scorers": _scorers(m, h, a, resolve),                          # [{minute, team: HOME/AWAY, player}] or None
+            "homeLineup": _lineup(m.get("homeTeam")),                       # [{name, position, shirtNumber}] or None
+            "awayLineup": _lineup(m.get("awayTeam")),
         })
     return out
 
@@ -139,12 +204,60 @@ def _get(path, token):
         return json.load(r)
 
 
+DETAIL_WINDOW_BEFORE_S = 80 * 60      # line-ups publish ~1h before kickoff
+DETAIL_WINDOW_AFTER_S = 4 * 3600      # bookings/scorers keep updating a while after FT
+DETAIL_BUDGET_PER_POLL = 8            # never more than this many /matches/{id} calls per poll (30/min plan cap)
+
+
+def _enrich_near_live(api_matches, token):
+    """For matches near kickoff / live / just finished, fetch the match DETAIL and merge the deep-data
+    blocks (bookings, goals/scorers, line-ups) the LIST endpoint may not carry. Every part is optional:
+    on the free tier the detail simply has none of it and the merge is a no-op; any error skips that
+    match. Mutates api_matches in place. Hard-budgeted per poll to respect the plan's rate limit."""
+    import calendar as _cal
+    now = time.time() if hasattr(time, "time") else 0
+    budget = DETAIL_BUDGET_PER_POLL
+    for m in api_matches:
+        if budget <= 0:
+            break
+        try:
+            iso = (m.get("utcDate") or "")[:19]
+            ko = _cal.timegm(time.strptime(iso, "%Y-%m-%dT%H:%M:%S")) if iso else None
+        except Exception:
+            ko = None
+        near = ko is not None and (ko - DETAIL_WINDOW_BEFORE_S) <= now <= (ko + DETAIL_WINDOW_AFTER_S)
+        live = m.get("status") in ("IN_PLAY", "PAUSED", "LIVE", "SUSPENDED")
+        if not (near or live):
+            continue
+        try:
+            detail = _get("/matches/%s" % m.get("id"), token)
+            detail = detail.get("match", detail) or {}
+            for k in ("bookings", "goals", "substitutions", "referees"):
+                if isinstance(detail.get(k), list):
+                    m[k] = detail[k]
+            for side in ("homeTeam", "awayTeam"):
+                d = detail.get(side) or {}
+                if isinstance(d.get("lineup"), list) and d.get("lineup"):
+                    m.setdefault(side, {}).update({"lineup": d.get("lineup"), "bench": d.get("bench"),
+                                                   "formation": d.get("formation"), "coach": d.get("coach")})
+            if isinstance(detail.get("score"), dict):        # detail score is at least as fresh as the list's
+                m["score"] = detail["score"]
+            budget -= 1
+        except Exception:
+            continue                                          # a detail blip never blocks the whole poll
+    return api_matches
+
+
 def fetch(out="results.json", token=None):
     token = _resolve_token(token)
     if not token:
         sys.exit("Set FOOTBALL_DATA_TOKEN (env var / GitHub Secret) first.")
     resolve = build_name_map()
     matches = _get(f"/competitions/{COMPETITION}/matches", token).get("matches", [])
+    try:
+        _enrich_near_live(matches, token)
+    except Exception:
+        pass                        # enrichment is a bonus layer — the base list always stands alone
     try:
         standings = _get(f"/competitions/{COMPETITION}/standings", token).get("standings", [])
     except Exception:

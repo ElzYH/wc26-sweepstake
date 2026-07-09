@@ -705,6 +705,62 @@ function csBtnHTML(m){      // just the price button (or hint) for the CURRENT p
   return o?('<button class="betodd'+(on?' on':'')+'" data-mid="'+m.matchId+'" data-sel="'+pick+'" data-market="cs" data-frac="'+o.frac+'">'+pick+' <b>'+o.frac+'</b></button>')
           :('<span style="font-size:11.5px;color:var(--muted)">scores 0\u20139 each</span>');
 }
+const CARDLINE={};          // per-match selected cards line
+function cardsBtnsHTML(m){
+  const keys=Object.keys(m.cardsOdds||{}); if(!keys.length) return '';
+  const ln=CARDLINE[m.matchId]&&m.cardsOdds[CARDLINE[m.matchId]]?CARDLINE[m.matchId]:(m.cardsOdds['4.5']?'4.5':keys.sort((x,y)=>parseFloat(x)-parseFloat(y))[Math.floor(keys.length/2)]);
+  const leg=m.cardsOdds[ln]; if(!leg) return '';
+  const mkC=(sel,lbl)=>{ const o=leg[sel]; if(!o) return '';
+    const on=ACCAMODE?ACCA.some(l=>samePick(l,m.matchId,sel,'cards',ln)):samePick(BETPICK,m.matchId,sel,'cards',ln);
+    return '<button class="betodd'+(on?' on':'')+'" data-mid="'+m.matchId+'" data-sel="'+sel+'" data-market="cards" data-line="'+ln+'" data-frac="'+o.frac+'">'+lbl+' <b>'+o.frac+'</b></button>'; };
+  return mkC('OVER','Over')+mkC('UNDER','Under');
+}
+function cardsRowHTML(m){
+  if(!m.cardsOdds||!Object.keys(m.cardsOdds).length) return '';
+  const keys=Object.keys(m.cardsOdds).sort((x,y)=>parseFloat(x)-parseFloat(y));
+  const ln=CARDLINE[m.matchId]&&m.cardsOdds[CARDLINE[m.matchId]]?CARDLINE[m.matchId]:(m.cardsOdds['4.5']?'4.5':keys[Math.floor(keys.length/2)]);
+  const opts=keys.map(k=>'<option value="'+k+'"'+(k===ln?' selected':'')+'>'+k+'</option>').join('');
+  return '<div class="mktrow">'
+    +'<span class="mktctl" title="Total cards, 90 minutes only (every booking counts 1) — pushes with a refund if the feed has no cards data">\ud83d\udfe8'
+    +'<select class="cardline" data-mid="'+esc(m.matchId)+'">'+opts+'</select></span>'
+    +'<div class="mktbtns cardbtns" data-mid="'+esc(m.matchId)+'">'+cardsBtnsHTML(m)+'</div>'
+    +'</div>';
+}
+function bttsBtnsHTML(m){
+  const leg=m.bttsOdds||{}; if(!leg.YES||!leg.NO) return '';
+  const mkB=(sel,lbl)=>{ const o=leg[sel]; if(!o) return '';
+    const on=ACCAMODE?ACCA.some(l=>samePick(l,m.matchId,sel,'btts',null)):samePick(BETPICK,m.matchId,sel,'btts',null);
+    return '<button class="betodd'+(on?' on':'')+'" data-mid="'+m.matchId+'" data-sel="'+sel+'" data-market="btts" data-frac="'+o.frac+'">'+lbl+' <b>'+o.frac+'</b></button>'; };
+  return mkB('YES','Yes')+mkB('NO','No');
+}
+function bttsRowHTML(m){
+  if(!m.bttsOdds||!m.bttsOdds.YES) return '';
+  return '<div class="mktrow">'
+    +'<span class="mktctl" title="Both teams to score (90&#39;+extra time)">\ud83e\udd1d<span style="font-size:10.5px">BTTS</span></span>'
+    +'<div class="mktbtns bttsbtns" data-mid="'+esc(m.matchId)+'">'+bttsBtnsHTML(m)+'</div>'
+    +'</div>';
+}
+const MOVPICK={};            // per-match selected method-of-victory outcome
+function movLabel(m,sel){ const t=sel.indexOf('HOME')===0?m.home:m.away;
+  const how={REG:"in 90'",ET:'in extra time',PENS:'on pens'}[sel.split('_')[1]]||'';
+  return esc(t)+' '+how; }
+function movBtnHTML(m){
+  const sel=MOVPICK[m.matchId]&&(m.movOdds||{})[MOVPICK[m.matchId]]?MOVPICK[m.matchId]:'HOME_REG';
+  const o=(m.movOdds||{})[sel]; if(!o) return '';
+  const on=ACCAMODE?ACCA.some(l=>samePick(l,m.matchId,sel,'mov',null)):samePick(BETPICK,m.matchId,sel,'mov',null);
+  return '<button class="betodd'+(on?' on':'')+'" data-mid="'+m.matchId+'" data-sel="'+sel+'" data-market="mov" data-frac="'+o.frac+'">'+movLabel(m,sel)+' <b>'+o.frac+'</b></button>';
+}
+function movRowHTML(m){
+  if(!m.movOdds||!Object.keys(m.movOdds).length) return '';
+  const sel=MOVPICK[m.matchId]&&m.movOdds[MOVPICK[m.matchId]]?MOVPICK[m.matchId]:'HOME_REG';
+  const order=['HOME_REG','HOME_ET','HOME_PENS','AWAY_REG','AWAY_ET','AWAY_PENS'];
+  const opts=order.filter(k=>m.movOdds[k]).map(k=>'<option value="'+k+'"'+(k===sel?' selected':'')+'>'+movLabel(m,k)+'</option>').join('');
+  return '<div class="mktrow">'
+    +'<span class="mktctl" title="Method of victory — how they go through: inside 90, in extra time, or on penalties">\ud83c\udfc1'
+    +'<select class="movpick" data-mid="'+esc(m.matchId)+'">'+opts+'</select></span>'
+    +'<span class="mktbtns movout" data-mid="'+esc(m.matchId)+'">'+movBtnHTML(m)+'</span>'
+    +'</div>';
+}
 function csRowHTML(m){
   if(!m.csOdds) return '';
   const pick=CSPICK[m.matchId]||'1-0';
@@ -796,7 +852,7 @@ function renderBets(){
   } else if(fbet.open && fbMine){
     h+='<div style="margin:0 0 12px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;color:var(--muted)">🎁 You\'ve claimed today\'s free points — they\'re in your balance above. Bet them on any game. The next drop is another day.</div>';
   }
-  h+='<div style="color:var(--muted);font-size:12px;margin:0 0 10px">Tap a game to bet · tap it again to remove'+(accasOn?' · tap a second game to build a 🎰 accumulator':'')+'. Each game also has an <b>\u26bd Over/Under goals</b> market (pick a goals line \u2014 near-certain lines pay on a deeper ladder, down to 1/14), a <b>\u00b1 Handicap</b> market (give a side a goal start or deficit \u2014 pick the line, settles on the 90&#39;+extra-time score, penalties don\u2019t count) and a <b>\ud83c\udfaf Exact score</b> market \u2014 type the final score (after extra time, 0\u20139 each way) and back it. Result = who goes through (a shootout win counts); all four settle automatically, and any of them can be an accumulator leg \u2014 one pick per game.</div>';
+  h+='<div style="color:var(--muted);font-size:12px;margin:0 0 10px">Tap a game to bet · tap it again to remove'+(accasOn?' · tap a second game to build a 🎰 accumulator':'')+'. Each game also has an <b>\u26bd Over/Under goals</b> market (pick a goals line \u2014 near-certain lines pay on a deeper ladder, down to 1/14), a <b>\ud83e\udd1d Both teams to score</b> market, a <b>\u00b1 Handicap</b> market (give a side a goal start or deficit \u2014 pick the line, settles on the 90&#39;+extra-time score, penalties don\u2019t count) a <b>\ud83d\udfe8 Cards</b> market (total bookings in 90 minutes \u2014 every card counts 1; if the feed carries no cards data the bet pushes with a full refund), on knockouts a <b>\ud83c\udfc1 Method of victory</b> market (in 90&#39;, in extra time, or on penalties) and a <b>\ud83c\udfaf Exact score</b> market \u2014 type the final score (after extra time, 0\u20139 each way) and back it. Result = who goes through (a shootout win counts); everything settles automatically, and any market can be an accumulator leg \u2014 one pick per game.</div>';
   if(ACCAMODE) h+='<div style="color:var(--muted);font-size:12.5px;margin:0 0 10px">🎰 Building an accumulator — odds multiply, but <b>every</b> leg must win. Up to '+maxLegs+' legs, and up to '+((caps.max_active_accas)||2)+' accas running at once.'+(retCap?(' Max return: <b>'+retCap+'</b>.'):'')+'</div>';
   if(!fx.length) h+='<div class="empty">No upcoming games to bet on right now — check back before kick-off.</div>';
   else h+='<div class="mdgrid">'+fx.map(m=>{
@@ -808,7 +864,7 @@ function renderBets(){
       return `<button class="betodd${on?' on':''}" data-mid="${m.matchId}" data-sel="${k}" data-market="result" data-frac="${o.frac}">${esc(lbl)} <b>${o.frac}</b></button>`; };
     const homeAway='<div style="display:flex;gap:6px">'+mk('HOME',m.home)+mk('AWAY',m.away)+'</div>';   // home left, away right
     const drawRow=(!ko && m.odds.DRAW)?('<div style="display:flex;margin-top:6px">'+mk('DRAW','Draw')+'</div>'):'';   // draw below, full width
-    const ouRow=ouRowHTML(m)+hcRowHTML(m)+csRowHTML(m);                // Over/Under + handicap + exact-score rows (all acca-able, one leg per game)
+    const ouRow=ouRowHTML(m)+bttsRowHTML(m)+hcRowHTML(m)+cardsRowHTML(m)+movRowHTML(m)+csRowHTML(m);   // all markets, all acca-able, one leg per game
     return `<div class="mdcard"><div class="mdmeta">${ko?(STAGE_LABEL[m.stage]||m.stage):'Group '+(m.group||'?')} · ${esc(when)}</div>
       <div class="mdteams" style="margin-bottom:6px"><span>${flag(m.home)}${esc(m.home)}</span><span style="color:var(--muted)">v</span><span class="mdr">${flag(m.away)}${esc(m.away)}</span></div>
       <div class="betodds" style="display:block">${homeAway}${drawRow}${ouRow}</div></div>`;
@@ -821,8 +877,11 @@ function renderBets(){
       +ACCA.map((l,i)=>{const fxp=fx.find(m=>m.matchId===l.matchId); const mk=l.market||'result';
         const who=mk==='ou'?((l.sel==='OVER'?'Over':'Under')+' '+l.line+' '+(fxp?'('+esc(fxp.home)+' v '+esc(fxp.away)+')':''))
                  :(mk==='hc'?(((l.sel==='HOME'?(fxp?esc(fxp.home):'home'):(fxp?esc(fxp.away):'away')))+' '+fmtHc(l.sel==='HOME'?parseFloat(l.line):-parseFloat(l.line))+' hcp')
+                 :(mk==='btts'?('BTTS '+(l.sel==='YES'?'Yes':'No')+' '+(fxp?'('+esc(fxp.home)+' v '+esc(fxp.away)+')':''))
+                 :(mk==='cards'?((l.sel==='OVER'?'Over':'Under')+' '+l.line+' cards '+(fxp?'('+esc(fxp.home)+' v '+esc(fxp.away)+')':''))
+                 :(mk==='mov'?(fxp?movLabel(fxp,l.sel):l.sel)
                  :(mk==='cs'?('Exact '+l.sel+' '+(fxp?'('+esc(fxp.home)+' v '+esc(fxp.away)+')':''))
-                 :(l.sel==='HOME'?(fxp?fxp.home:'home'):(l.sel==='AWAY'?(fxp?fxp.away:'away'):'Draw'))));
+                 :(l.sel==='HOME'?(fxp?fxp.home:'home'):(l.sel==='AWAY'?(fxp?fxp.away:'away'):'Draw')))))));
         return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>'+esc(who)+' <span style="color:var(--gold)">'+l.frac+'</span></span><button class="accarm" data-i="'+i+'" style="background:none;border:none;color:#ff7a7a;cursor:pointer">✕</button></div>';}).join('')
       +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;border-top:1px solid var(--line);padding-top:8px"><input id="accaStake" type="number" min="'+caps.min_stake+'" max="'+Math.min(accaCap,avail)+'" step="0.01" placeholder="stake (pts)" style="width:120px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:16px">'
       +'<span id="accaReturn" style="color:var(--muted);font-size:13px">combined ~'+(Math.round(dec*100)/100)+'×</span>'
@@ -833,7 +892,10 @@ function renderBets(){
     if(fxp){ const isOU=(BETPICK.market||'result')==='ou';
       const isCS=(BETPICK.market||'result')==='cs';
       const isHC=(BETPICK.market||'result')==='hc';
-      const who=isCS?('Exact score '+(BETPICK.sel==='OTHER'?'Any other':BETPICK.sel)+' ('+esc(fxp.home)+' v '+esc(fxp.away)+')'):(isHC?((BETPICK.sel==='HOME'?esc(fxp.home):esc(fxp.away))+' '+fmtHc(BETPICK.sel==='HOME'?parseFloat(BETPICK.line):-parseFloat(BETPICK.line))+' handicap ('+esc(fxp.home)+' v '+esc(fxp.away)+')'):(isOU?((BETPICK.sel==='OVER'?'Over':'Under')+' '+BETPICK.line+' goals ('+esc(fxp.home)+' v '+esc(fxp.away)+')'):(BETPICK.sel==='HOME'?fxp.home:(BETPICK.sel==='AWAY'?fxp.away:'Draw'))));
+      const isCARDS=(BETPICK.market||'result')==='cards';
+      const isMOV=(BETPICK.market||'result')==='mov';
+      const isBTTS=(BETPICK.market||'result')==='btts';
+      const who=isCS?('Exact score '+(BETPICK.sel==='OTHER'?'Any other':BETPICK.sel)+' ('+esc(fxp.home)+' v '+esc(fxp.away)+')'):(isBTTS?('Both teams to score \u2014 '+(BETPICK.sel==='YES'?'Yes':'No')+' ('+esc(fxp.home)+' v '+esc(fxp.away)+')'):(isCARDS?((BETPICK.sel==='OVER'?'Over':'Under')+' '+BETPICK.line+' cards ('+esc(fxp.home)+' v '+esc(fxp.away)+')'):(isMOV?(movLabel(fxp,BETPICK.sel)+' — method of victory'):(isHC?((BETPICK.sel==='HOME'?esc(fxp.home):esc(fxp.away))+' '+fmtHc(BETPICK.sel==='HOME'?parseFloat(BETPICK.line):-parseFloat(BETPICK.line))+' handicap ('+esc(fxp.home)+' v '+esc(fxp.away)+')'):(isOU?((BETPICK.sel==='OVER'?'Over':'Under')+' '+BETPICK.line+' goals ('+esc(fxp.home)+' v '+esc(fxp.away)+')'):(BETPICK.sel==='HOME'?fxp.home:(BETPICK.sel==='AWAY'?fxp.away:'Draw')))))));
       const fracDisp=BETPICK.frac; const smax=Math.min(fxp.maxStake||caps.max_stake, headroom, budgetLeft);
       h+='<div class="betcta" style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
         +'<div style="font-size:13.5px;margin-bottom:8px">Bet on <b>'+esc(who)+'</b> @ <b style="color:var(--gold)">'+fracDisp+'</b> <span style="color:var(--muted)">· max '+smax+'</span></div>'
@@ -932,6 +994,10 @@ function renderBets(){
     const m=fx.find(x=>x.matchId===s.dataset.mid); if(m) patchBtns(m.matchId,'oubtns',ouBtnsHTML(m)); });
   el.querySelectorAll('.hcline').forEach(s=>s.onchange=()=>{ HCLINE[s.dataset.mid]=s.value;
     const m=fx.find(x=>x.matchId===s.dataset.mid); if(m) patchBtns(m.matchId,'hcbtns',hcBtnsHTML(m)); });
+  el.querySelectorAll('.cardline').forEach(s=>s.onchange=()=>{ CARDLINE[s.dataset.mid]=s.value;
+    const m=fx.find(x=>x.matchId===s.dataset.mid); if(m) patchBtns(m.matchId,'cardbtns',cardsBtnsHTML(m)); });
+  el.querySelectorAll('.movpick').forEach(s=>s.onchange=()=>{ MOVPICK[s.dataset.mid]=s.value;
+    const m=fx.find(x=>x.matchId===s.dataset.mid); if(m) patchBtns(m.matchId,'movout',movBtnHTML(m)); });
   const csIn=s=>{ const mid=s.dataset.mid, hEl=el.querySelector('.csh[data-mid="'+mid+'"]'), aEl=el.querySelector('.csa[data-mid="'+mid+'"]');
     const c=v=>Math.max(0,Math.min(9,parseInt(v,10)||0)); CSPICK[mid]=c(hEl?hEl.value:1)+'-'+c(aEl?aEl.value:0);
     const m=fx.find(x=>x.matchId===mid); if(m) patchBtns(mid,'csout',csBtnHTML(m)); };
@@ -1036,6 +1102,10 @@ function pickName(o){   // human label for a bet or an acca leg, result OR over/
   if((o.market||'result')==='ou') return (o.selection==='OVER'?'Over':'Under')+' '+o.line+' goals';
   if((o.market||'result')==='hc') return (o.selection==='HOME'?o.home:o.away)+' '+fmtHc(o.selection==='HOME'?parseFloat(o.line):-parseFloat(o.line))+' (hcp)';
   if((o.market||'result')==='cs') return 'Exact score '+(o.selection==='OTHER'?'Any other':o.selection);
+  if((o.market||'result')==='cards') return (o.selection==='OVER'?'Over':'Under')+' '+o.line+' cards';
+  if((o.market||'result')==='btts') return 'Both teams to score — '+(o.selection==='YES'?'Yes':'No');
+  if((o.market||'result')==='mov'){ const t=(o.selection||'').indexOf('HOME')===0?o.home:o.away;
+    const how={REG:"in 90'",ET:'in extra time',PENS:'on pens'}[(o.selection||'').split('_')[1]]||''; return t+' '+how; }
   return o.selection==='HOME'?o.home:(o.selection==='AWAY'?o.away:'Draw');
 }
 function provResult(o, hs, as_){   // live/settled outcome of a bet or leg from the current score
@@ -1043,6 +1113,10 @@ function provResult(o, hs, as_){   // live/settled outcome of a bet or leg from 
   hs=Number(hs); as_=Number(as_); if(isNaN(hs)||isNaN(as_)) return null;
   if((o.market||'result')==='ou'){ const over=(hs+as_)>Number(o.line); return (o.selection==='OVER'?over:!over)?'win':'lose'; }  // half-line: never level
   if((o.market||'result')==='hc'){ const cov=(hs+Number(o.line))>as_; return (o.selection==='HOME'?cov:!cov)?'win':'lose'; }     // half-line: never level
+  if((o.market||'result')==='cards'||(o.market||'result')==='mov') return null;   // not derivable from the scoreline alone
+  if((o.market||'result')==='btts'){ const both=hs>0&&as_>0;
+    if(o.selection==='YES') return both?'win':'level';       // both scored = locked in; otherwise still possible
+    return both?'lose':'level'; }
   if(o.selection==='HOME') return hs>as_?'win':(hs<as_?'lose':'level');
   if(o.selection==='AWAY') return as_>hs?'win':(as_<hs?'lose':'level');
   return hs===as_?'win':'lose';   // DRAW selection
@@ -1532,6 +1606,20 @@ function liveBreakLine(m){
   });
   const un=[[m.homeOwner,m.home],[m.awayOwner,m.away]].filter(s=>!s[0]||s[0]==='—'||s[0]==='-').map(s=>esc(s[1]));
   if(un.length) html+='<div class="lbd-pool">'+un.join(' & ')+(un.length===1?' is':' are')+' unowned (pool) — scores for no one</div>';
+  // deep-data extras — render ONLY when the feed supplies them (free tier: these simply never appear)
+  if(Array.isArray(m.scorers)&&m.scorers.length){
+    const side=t=>m.scorers.filter(g=>g&&g.team===t).map(g=>esc(g.player)+(g.minute!=null?' '+esc(String(g.minute))+"'":'')).join(', ');
+    const hs=side('HOME'), as=side('AWAY');
+    html+='<div style="font-size:11.5px;color:var(--muted);margin-top:4px">⚽ '
+      +(hs?esc(m.home)+': '+hs:'')+(hs&&as?' · ':'')+(as?esc(m.away)+': '+as:'')+'</div>';
+  }
+  if((m.homeLineup&&m.homeLineup.length)||(m.awayLineup&&m.awayLineup.length)){
+    const xi=(t,lu)=>'<div style="flex:1;min-width:130px"><b style="font-size:11.5px">'+esc(t)+'</b>'
+      +(lu||[]).map(p=>'<div style="font-size:11px;color:var(--muted)">'+(p.shirtNumber!=null?esc(String(p.shirtNumber))+' ':'')+esc(p.name||'')+(p.position?' <span style="opacity:.7">'+esc(p.position)+'</span>':'')+'</div>').join('')
+      +'</div>';
+    html+='<details style="margin-top:5px"><summary style="cursor:pointer;font-size:11.5px;color:var(--muted)">📋 Starting XIs</summary>'
+      +'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">'+xi(m.home,m.homeLineup)+xi(m.away,m.awayLineup)+'</div></details>';
+  }
   // everyone's open bets on THIS game, shown like the owner rows: a "Name +N if it lands" you can expand
   const gbets=betsOnMatch(m);
   if(gbets.length){

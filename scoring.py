@@ -372,7 +372,7 @@ def _clinched_top2(standings, group_matches):
 
 def compute(teams_path="teams.json", draw_path="draw_result.json",
             results_path="results.json", out="tracker_data.json", default_mode="points", wagers=None,
-            clocks_path="match_clocks.json", group_mid_ts=None, composite_overrides=None):
+            clocks_path="match_clocks.json", group_mid_ts=None, composite_overrides=None, cards_market=None):
     teams = {t["name"]: t for t in _load(teams_path)["teams"]}
     # Overlay calibrated composites (from the server's calibration.json) so the DISPLAYED odds are priced
     # from the SAME strengths that bet PLACEMENT uses. Without this, auto-calibration moves placement odds
@@ -853,7 +853,17 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                           "minute": m.get("minute"),
                           "aet": m.get("aet"), "shootout": m.get("shootout"),
                           "penHome": m.get("penHome"), "penAway": m.get("penAway"),
+                          "cardsHome": m.get("cardsHome"), "cardsAway": m.get("cardsAway"),   # 90' bookings (deep-data feed)
+                          "redHome": m.get("redHome"), "redAway": m.get("redAway"),
+                          "aet": m.get("aet"), "shootout": m.get("shootout"),
+                          "scorers": m.get("scorers"),                                       # deep-data goal scorers
+                          "homeLineup": m.get("homeLineup"), "awayLineup": m.get("awayLineup"),   # starting XIs
                           "winner": _winner_side(m)} for m in matches]}
+    # a feed that has EVER supplied bookings can settle cards bets; a bare tier can't, so the market is
+    # hidden rather than sold-then-pushed. cards_market in config.json forces it on/off ("auto" = detect).
+    _cards_cfg = (cards_market if cards_market in (True, False) else None)
+    _feed_has_cards = _cards_cfg if _cards_cfg is not None else any(
+        isinstance(m, dict) and m.get("cardsHome") is not None for m in matches)
     # odds on still-to-play fixtures (only when wagering is active; guarded)
     if wagers is not None and wager is not None:
         try:
@@ -867,6 +877,11 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                     f["ouOdds"] = wager.goals_odds(ch, ca)        # Over/Under prices per line (ladder-rule filtered)
                     f["csOdds"] = wager.cs_odds(ch, ca)           # exact-scoreline prices (0-0..4-4 + OTHER)
                     f["hcOdds"] = wager.hc_odds(ch, ca)           # handicap (goal-margin) prices per HOME line
+                    f["bttsOdds"] = wager.btts_odds(ch, ca)       # both teams to score — settles on ANY feed tier
+                    if _feed_has_cards:                            # cards only when this feed actually carries bookings
+                        f["cardsOdds"] = wager.cards_odds(knockout=wager.is_knockout(f))
+                    if wager.is_knockout(f):
+                        f["movOdds"] = wager.mov_odds(ch, ca)     # method of victory — knockout games only
                     f["matchId"] = wager.match_id(m)
                     f["maxStake"] = wager.stage_max_stake(f.get("stage"))
             data["wager_stats"] = wager.stats(wagers)

@@ -16,9 +16,13 @@ print("== shape + fraction coherence ==")
 book = W.hc_odds(80, 60)
 ck("returns a dict of offered lines", isinstance(book, dict) and len(book) >= 1, book)
 ck("every key is a stringified member of HC_LINES", all(any(k == W._line_key(L) for L in W.HC_LINES) for k in book), sorted(book))
+ck("every offered line prices at least one side (a one-sided line drops only the capped near-certainty)",
+   all(("HOME" in leg or "AWAY" in leg) for leg in book.values()), {k: sorted(v) for k, v in book.items()})
 for k, leg in book.items():
     for sel in ("HOME", "AWAY"):
-        o = leg.get(sel) or {}
+        if sel not in leg:
+            continue                       # one-sided line: the near-certain side is deliberately off the board
+        o = leg[sel]
         ok_frac = o.get("frac") == "%d/%d" % (o.get("num", -1), o.get("den", -2))
         ok_dec = abs(o.get("decimal", 0) - round(1.0 + o["num"] / o["den"], 3)) < 1e-9 if o.get("den") else False
         ck("line %s %s: frac/num/den/decimal agree" % (k, sel), ok_frac and ok_dec, o)
@@ -37,15 +41,25 @@ for c1 in range(0, 101, 10):
         b = W.hc_odds(c1, c2)
         lam_h, lam_a = W._team_lambdas(c1, c2)
         for k, leg in b.items():
-            imp = 1.0 / leg["HOME"]["decimal"] + 1.0 / leg["AWAY"]["decimal"]
             fair = W._hc_home_prob(lam_h, lam_a, float(k))
-            if imp <= 1.0 + 1e-6:
-                grid_bad.append(("underround", c1, c2, k, imp))
-            if fair > W.HC_MAX_PROB + 1e-9 or (1 - fair) > W.HC_MAX_PROB + 1e-9:
-                grid_bad.append(("ladder", c1, c2, k, fair))
-            if max(1.0 / leg["HOME"]["decimal"], 1.0 / leg["AWAY"]["decimal"]) > 0.94:
-                grid_bad.append(("shortprice", c1, c2, k, leg))
-ck("every offered book overrounds; no side beats the ladder", not grid_bad, grid_bad[:4])
+            for sel in ("HOME", "AWAY"):
+                pf = fair if sel == "HOME" else (1 - fair)
+                if sel in leg:
+                    imp = leg[sel]["den"] / (leg[sel]["num"] + leg[sel]["den"])
+                    if pf > W.HC_MAX_PROB + 1e-9:
+                        grid_bad.append(("capped side offered", c1, c2, k, sel, pf))   # ladder rule: never sell the near-certainty
+                    if imp <= pf * (1 + 1e-9):
+                        grid_bad.append(("bettor-positive", c1, c2, k, sel, imp, pf))  # every offered price beats fair
+                    if imp > 0.94:
+                        grid_bad.append(("shortprice", c1, c2, k, leg))
+                else:
+                    if pf <= W.HC_MAX_PROB - 1e-9 and (1 - pf) <= W.HC_MAX_PROB - 1e-9:
+                        grid_bad.append(("missing safe side", c1, c2, k, sel, pf))     # a safely-priceable side must be on the board
+            if "HOME" in leg and "AWAY" in leg:
+                imp2 = 1.0 / leg["HOME"]["decimal"] + 1.0 / leg["AWAY"]["decimal"]
+                if imp2 <= 1.0 + 1e-6:
+                    grid_bad.append(("underround", c1, c2, k, imp2))                   # two-sided books still overround
+ck("every offered price is margined vs fair; two-sided books overround; capped sides never sold; safe sides never missing", not grid_bad, grid_bad[:4])
 
 print("\n== symmetry at even strengths ==")
 ev = W.hc_odds(50, 50)
@@ -74,7 +88,8 @@ for junk in (float("nan"), float("inf"), -5, None, "x", 1e18):
     try:
         b = W.hc_odds(junk, 55)
         good = isinstance(b, dict) and all(
-            1.0 / leg["HOME"]["decimal"] + 1.0 / leg["AWAY"]["decimal"] > 1.0 + 1e-6 for leg in b.values())
+            (1.0 / leg["HOME"]["decimal"] + 1.0 / leg["AWAY"]["decimal"] > 1.0 + 1e-6)
+            if ("HOME" in leg and "AWAY" in leg) else bool(leg) for leg in b.values())
         ck("junk comp %r -> sane, margined book" % (junk,), good, b)
     except Exception as e:
         ck("junk comp %r -> sane, margined book" % (junk,), False, e)

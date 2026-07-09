@@ -101,6 +101,12 @@ if python3 test_hc_settle.py >/dev/null; then echo "  ok"; else echo "  FAIL"; p
 say "Handicap exploit sweep (book overround grid, covering dutches hc x 1X2 / hc x hc / OU x hc, randomized dutch fuzz)"
 if python3 qa_hc_exploit.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_hc_exploit.py | tail -20; FAIL=1; fi
 
+say "Method of victory + O/U cards (pricing floors vs the KO book, KO-only gate, REG/ET/PENS + 90'-cards settlement, no-data void grace, feed normaliser)"
+if python3 test_mov_cards.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_mov_cards.py | tail -24; FAIL=1; fi
+
+say "BTTS + feed-tier degradation (pricing/settlement/accas, free-tier proofs: MoV push, cards auto-gate, scorers/lineups normaliser)"
+if python3 test_btts_feed.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_btts_feed.py | tail -24; FAIL=1; fi
+
 say "Disallowed-goal (VAR) alerts (score reversion fires once, flap/restart silent, FT-tick fires, post-FT correction silent)"
 if python3 qa_var_alerts.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_var_alerts.py | tail -24; FAIL=1; fi
 

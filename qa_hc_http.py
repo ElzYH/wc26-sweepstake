@@ -12,6 +12,7 @@ import urllib.request, urllib.error
 
 REPO = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, REPO)
+import wager as W
 KEY = "QA_ADMIN_KEY_1234567"
 FAILS = []
 def ck(name, cond, extra=""):
@@ -122,8 +123,9 @@ try:
     fx = next((f for f in S.tracker().get("fixtures", []) if f.get("matchId") == "g1"), {})
     hc = fx.get("hcOdds") or {}
     ck("fixture payload has hcOdds", ok_fx and isinstance(hc, dict) and hc, sorted(hc))
-    ck("every served line key is a real HC line", all(any(k == ("%g" % L) for L in (-2.5, -1.5, 1.5, 2.5)) for k in hc), sorted(hc))
-    ck("every served hc book overrounds", all((1.0 / v["HOME"]["decimal"] + 1.0 / v["AWAY"]["decimal"]) > 1.0 + 1e-6 for v in hc.values()), hc)
+    ck("every served line key is a real HC line", all(any(k == ("%g" % L) for L in W.HC_LINES) for k in hc), sorted(hc))
+    ck("every served hc book is margined (two-sided overround; one-sided lines allowed)",
+       all(((1.0 / v["HOME"]["decimal"] + 1.0 / v["AWAY"]["decimal"]) > 1.0 + 1e-6) if ("HOME" in v and "AWAY" in v) else bool(v) for v in hc.values()), hc)
     ln = "-1.5" if "-1.5" in hc else sorted(hc, key=lambda k: abs(float(k)))[0]
     served = hc[ln]["HOME"]
     st, b = S.req("POST", "/api/place_wager", {"player": "Erol", "matchId": "g1", "selection": "HOME",
@@ -216,6 +218,72 @@ try:
     lk2 = next((l for l in acc.get("legs", []) if l.get("matchId") == "k2"), {})
     ck("the pens-decided leg banked as WON (winner inferred from the shootout score)", lk1.get("result") == "won", lk1)
     ck("the future leg is untouched and the acca is still open", not lk2.get("result") and acc.get("status") == "pending", acc)
+finally:
+    S.stop()
+
+# ============================================================ 4. mov + cards over REAL HTTP: served, placed at price, settled
+print("\n== 4. method-of-victory + cards: served odds, struck price, settlement (incl. no-data cards push) ==")
+S = Server([match("k1", HOME, AWAY, "TIMED", stage="QUARTER_FINALS"),
+            match("k2", OTHERH, OTHERA, "TIMED", stage="QUARTER_FINALS"),
+            match("g1", HOME, OTHERA, "TIMED", stage="GROUP_STAGE")],
+           extra_cfg={"cards_market": True})   # force the cards market on (this harness feed has no bookings yet)
+try:
+    ok_fx = S.wait(lambda: (next((f for f in S.tracker().get("fixtures", []) if f.get("matchId") == "k1"), {}) or {}).get("movOdds"))
+    fxs = {f.get("matchId"): f for f in S.tracker().get("fixtures", [])}
+    ck("knockout fixtures carry movOdds + cardsOdds", ok_fx and fxs["k1"].get("cardsOdds"), sorted(fxs.get("k1", {}).keys()))
+    ck("the GROUP fixture has cardsOdds but NO movOdds (knockout-only market)",
+       fxs.get("g1", {}).get("cardsOdds") and not fxs.get("g1", {}).get("movOdds"), sorted(fxs.get("g1", {}).keys()))
+    mv = fxs["k1"]["movOdds"]; cd = fxs["k2"]["cardsOdds"]
+    st, b = S.req("POST", "/api/place_wager", {"player": "Erol", "matchId": "k1", "selection": "HOME_PENS",
+                                               "market": "mov", "stake": 3, "pin": "ABCD"})
+    j = json.loads(b)
+    ck("a method-of-victory bet places over HTTP at the served price", j.get("ok") and
+       (j.get("wager") or {}).get("num") == mv["HOME_PENS"]["num"], b[:140])
+    ln = "4.5" if "4.5" in cd else sorted(cd)[0]
+    st2, b2 = S.req("POST", "/api/place_wager", {"player": "Erol", "matchId": "k2", "selection": "OVER",
+                                                 "market": "cards", "line": float(ln), "stake": 3, "pin": "ABCD"})
+    j2 = json.loads(b2)
+    ck("a cards bet places over HTTP at the served price", j2.get("ok") and
+       (j2.get("wager") or {}).get("num") == cd[ln]["OVER"]["num"], b2[:140])
+    st3, b3 = S.req("POST", "/api/place_wager", {"player": "Erol", "matchId": "g1", "selection": "AWAY_REG",
+                                                 "market": "mov", "stake": 3, "pin": "ABCD"})
+    ck("a method-of-victory bet on a GROUP game is rejected over HTTP", json.loads(b3).get("ok") is not True, b3[:120])
+    # k1: 1-1, home wins the shootout -> HOME_PENS wins. k2: finished long ago with NO bookings -> cards pushes.
+    S.set_results([match("k1", HOME, AWAY, "FINISHED", hs=1, as_=1, stage="QUARTER_FINALS",
+                         penHome=5, penAway=4, shootout=True, aet=True, duration="PENALTY_SHOOTOUT"),
+                   match("k2", OTHERH, OTHERA, "FINISHED", hs=1, as_=0, winner="HOME", stage="QUARTER_FINALS",
+                         utc="2000-01-01T18:00:00Z"),
+                   match("g1", HOME, OTHERA, "TIMED", stage="GROUP_STAGE")])
+    S.req("POST", "/api/poll")
+    S.wait(lambda: all(x.get("status") != "pending" for x in S.wagers()))
+    got = {x.get("matchId"): x for x in S.wagers()}
+    ck("HOME_PENS settled WON off the shootout feed shape", got.get("k1", {}).get("status") == "won", got.get("k1"))
+    ck("the no-data cards bet PUSHED with the stake back (grace elapsed)",
+       got.get("k2", {}).get("status") == "void" and got.get("k2", {}).get("return") == 3, got.get("k2"))
+finally:
+    S.stop()
+
+# ============================================================ 5. BTTS over REAL HTTP + the cards auto-gate
+print("\n== 5. BTTS served/placed/settled; the cards market auto-hides on a feed with no bookings ==")
+S = Server([match("g1", HOME, AWAY, "TIMED", stage="GROUP_STAGE"),
+            match("g2", OTHERH, OTHERA, "TIMED", stage="GROUP_STAGE")])
+try:
+    ok_fx = S.wait(lambda: (next((f for f in S.tracker().get("fixtures", []) if f.get("matchId") == "g1"), {}) or {}).get("bttsOdds"))
+    fxs = {f.get("matchId"): f for f in S.tracker().get("fixtures", [])}
+    ck("fixtures carry bttsOdds", ok_fx and fxs["g1"].get("bttsOdds", {}).get("YES"), sorted(fxs.get("g1", {}).keys()))
+    ck("the cards market is HIDDEN when this feed has never supplied bookings (auto-gate)",
+       not fxs["g1"].get("cardsOdds"), sorted(fxs.get("g1", {}).keys()))
+    bt = fxs["g1"]["bttsOdds"]
+    st, b = S.req("POST", "/api/place_wager", {"player": "Erol", "matchId": "g1", "selection": "YES",
+                                               "market": "btts", "stake": 4, "pin": "ABCD"})
+    j = json.loads(b)
+    ck("a BTTS bet places over HTTP at the served price", j.get("ok") and (j.get("wager") or {}).get("num") == bt["YES"]["num"], b[:140])
+    S.set_results([match("g1", HOME, AWAY, "FINISHED", hs=2, as_=1, winner="HOME"),
+                   match("g2", OTHERH, OTHERA, "TIMED")])
+    S.req("POST", "/api/poll")
+    S.wait(lambda: all(x.get("status") != "pending" for x in S.wagers()))
+    got = S.wagers()[0]
+    ck("BTTS YES settled WON on 2-1 through the real pipeline", got.get("status") == "won", got)
 finally:
     S.stop()
 
