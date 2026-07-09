@@ -983,23 +983,27 @@ def mov_odds(comp_home, comp_away):
     for sel in MOV_SELECTIONS:
         p = min(0.999, max(1e-6, fair[sel]))
         implieds[sel] = min(MOV_MAX_PROB, p * MOV_OVERROUND)
-    # CONSISTENCY FLOOR (anti-dutch): the three outcomes of one side decompose that side's 'to advance'
-    # price, so their implied sum must never be CHEAPER than the KO result book's price for the same side —
-    # otherwise 'favourite result at its capped price + the underdog synthesised via its MoV trio' covers
-    # every outcome below 1.0 implied. Scale a light side up (capped outcomes push onto their siblings).
     ko_book = match_odds(comp_home, comp_away, knockout=True)
     for side in ("HOME", "AWAY"):
-        trio = ["%s_%s" % (side, m) for m in ("REG", "ET", "PENS")]
-        target = (1.0 / ko_book[side]["decimal"]) * 1.01
+        res_imp = 1.0 / ko_book[side]["decimal"]
+        # COHERENCE CAP: winning in 90' is strictly HARDER than advancing at all, so its price must be
+        # strictly LONGER than the result price — a big favourite's fair x overround otherwise slams into
+        # the ladder cap and sells 'in 90' at the same (or shorter!) odds as 'to advance'.
+        reg = "%s_REG" % side
+        implieds[reg] = min(implieds[reg], res_imp * 0.985)
+        # CONSISTENCY FLOOR (anti-dutch): the trio decomposes the side's 'to advance' price, so its implied
+        # sum must never be CHEAPER than the result book's — the deficit rides on ET/PENS (they always have
+        # cap room), never back onto REG.
+        target = res_imp * 1.01
+        others = ["%s_ET" % side, "%s_PENS" % side]
         for _ in range(6):
-            s = sum(implieds[t] for t in trio)
+            s = implieds[reg] + sum(implieds[t] for t in others)
             if s >= target - 1e-12:
                 break
-            room = [t for t in trio if implieds[t] < MOV_MAX_PROB - 1e-9]
-            if not room:
-                break
-            f = target / max(1e-9, sum(implieds[t] for t in room)) - (s - sum(implieds[t] for t in room)) / max(1e-9, sum(implieds[t] for t in room))
-            for t in room:
+            need = target - implieds[reg]
+            cur = sum(implieds[t] for t in others)
+            f = need / max(1e-9, cur)
+            for t in others:
                 implieds[t] = min(MOV_MAX_PROB, implieds[t] * max(1.0, f))
     for sel in MOV_SELECTIONS:
         p = min(0.999, max(1e-6, fair[sel]))
@@ -1013,18 +1017,37 @@ def mov_odds(comp_home, comp_away):
             implied = min(MOV_MAX_PROB, implied + 0.005)
             if implied >= MOV_MAX_PROB:             # can't clear the margin inside the cap -> don't sell it
                 break
-    # post-rounding re-check of the floor: rounding can shave a trio back under the target — bump the
-    # longest outcome of a light side until the SOLD trio clears the result-book price again
+    # post-rounding re-checks, per side: (a) REG stays strictly longer than the result price; (b) the SOLD
+    # trio still clears the result-book floor — the top-up lands on ET/PENS, never REG
     for side in ("HOME", "AWAY"):
-        trio = [t for t in ("%s_REG" % side, "%s_ET" % side, "%s_PENS" % side) if t in out]
+        res_imp = 1.0 / ko_book[side]["decimal"]
+        reg = "%s_REG" % side
+        if reg in out:
+            for _ in range(10):
+                cur = out[reg]["den"] / (out[reg]["num"] + out[reg]["den"])
+                if cur <= res_imp - 1e-9:
+                    break
+                step = 0.01                                             # walk down until the LADDER actually moves
+                nxt = out[reg]
+                while step < 0.2:
+                    num, den = _nearest_fraction(1.0 / max(0.02, cur - step))
+                    if (num, den) != (out[reg]["num"], out[reg]["den"]):
+                        nxt = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
+                        break
+                    step += 0.01
+                if nxt is out[reg]:
+                    break                                               # ladder exhausted — never loop forever
+                out[reg] = nxt
+        trio = [t for t in (reg, "%s_ET" % side, "%s_PENS" % side) if t in out]
         if len(trio) < 3:
             continue                                # an unsold outcome only makes the trio dearer to dutch
-        target = (1.0 / ko_book[side]["decimal"]) * 1.005
+        target = res_imp * 1.005
+        others = [t for t in trio if t != reg]
         for _ in range(12):
             s = sum(out[t]["den"] / (out[t]["num"] + out[t]["den"]) for t in trio)
             if s >= target - 1e-12:
                 break
-            t = max(trio, key=lambda x: out[x]["decimal"])          # shorten the longest outcome a notch
+            t = max(others, key=lambda x: out[x]["decimal"])            # shorten the longest of ET/PENS a notch
             cur = out[t]["den"] / (out[t]["num"] + out[t]["den"])
             num, den = _nearest_fraction(1.0 / min(MOV_MAX_PROB, cur + 0.01))
             out[t] = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}

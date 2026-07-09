@@ -39,6 +39,20 @@ for ch, ca in COMPS:
             bad.append(("set underround", ch, ca))
 ck("every sold MoV price beats fair; every complete set overrounds", not bad, bad[:4])
 
+print("\n== MoV coherence: 'in 90' is ALWAYS longer than 'to advance'; the trio still floors the result book ==")
+bad = []
+for ch, ca in COMPS:
+    b = W.mov_odds(ch, ca); r = W.match_odds(ch, ca, knockout=True)
+    for side in ("HOME", "AWAY"):
+        reg = "%s_REG" % side
+        ri = 1.0 / r[side]["decimal"]
+        if reg in b and (b[reg]["den"] / (b[reg]["num"] + b[reg]["den"])) >= ri - 1e-9:
+            bad.append(("REG not longer than result", ch, ca, side, b[reg]["frac"], r[side]["frac"]))
+        trio = [t for t in (reg, "%s_ET" % side, "%s_PENS" % side) if t in b]
+        if len(trio) == 3 and sum(b[t]["den"] / (b[t]["num"] + b[t]["den"]) for t in trio) <= ri:
+            bad.append(("trio dutchable vs result", ch, ca, side))
+ck("winning in 90' always pays MORE than plain advancing, and the trio never undercuts the result book", not bad, bad[:4])
+
 print("\n== MoV: symmetric at even strengths, fair probabilities exhaust a knockout ==")
 ev = W.mov_odds(50, 50)
 ck("even game mirrors: HOME_x == AWAY_x", all(ev.get("HOME_" + k, {}).get("frac") == ev.get("AWAY_" + k, {}).get("frac")

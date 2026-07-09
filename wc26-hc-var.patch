@@ -1769,10 +1769,10 @@ index 0000000..99ae3a5
 +print("ALL HANDICAP SETTLEMENT CHECKS PASSED")
 diff --git a/test_mov_cards.py b/test_mov_cards.py
 new file mode 100644
-index 0000000..1126f21
+index 0000000..c3c3fc9
 --- /dev/null
 +++ b/test_mov_cards.py
-@@ -0,0 +1,220 @@
+@@ -0,0 +1,234 @@
 +#!/usr/bin/env python3
 +"""Method-of-victory + O/U cards QA. MoV: 6-way set margin, per-outcome fair floor, symmetry at even
 +strengths, KO-only placement, settlement across REG/ET/PENS shapes (incl. winner-less pens feeds).
@@ -1813,6 +1813,20 @@ index 0000000..1126f21
 +        if sum(1.0 / v["decimal"] for v in b.values()) <= 1.0 + 1e-6:
 +            bad.append(("set underround", ch, ca))
 +ck("every sold MoV price beats fair; every complete set overrounds", not bad, bad[:4])
++
++print("\n== MoV coherence: 'in 90' is ALWAYS longer than 'to advance'; the trio still floors the result book ==")
++bad = []
++for ch, ca in COMPS:
++    b = W.mov_odds(ch, ca); r = W.match_odds(ch, ca, knockout=True)
++    for side in ("HOME", "AWAY"):
++        reg = "%s_REG" % side
++        ri = 1.0 / r[side]["decimal"]
++        if reg in b and (b[reg]["den"] / (b[reg]["num"] + b[reg]["den"])) >= ri - 1e-9:
++            bad.append(("REG not longer than result", ch, ca, side, b[reg]["frac"], r[side]["frac"]))
++        trio = [t for t in (reg, "%s_ET" % side, "%s_PENS" % side) if t in b]
++        if len(trio) == 3 and sum(b[t]["den"] / (b[t]["num"] + b[t]["den"]) for t in trio) <= ri:
++            bad.append(("trio dutchable vs result", ch, ca, side))
++ck("winning in 90' always pays MORE than plain advancing, and the trio never undercuts the result book", not bad, bad[:4])
 +
 +print("\n== MoV: symmetric at even strengths, fair probabilities exhaust a knockout ==")
 +ev = W.mov_odds(50, 50)
@@ -2049,7 +2063,7 @@ index 4d46912..078b83b 100644
  print("\n== settlement: partial, then a losing O/U leg sinks the acca ==")
  # acca: OVER 2.5 on Brazil-Serbia, HOME on Spain-Japan
 diff --git a/tracker.html b/tracker.html
-index 4335b2f..eaddd3b 100644
+index 4335b2f..0d5a225 100644
 --- a/tracker.html
 +++ b/tracker.html
 @@ -275,6 +275,17 @@
@@ -2422,6 +2436,15 @@ index 4335b2f..eaddd3b 100644
    // everyone's open bets on THIS game, shown like the owner rows: a "Name +N if it lands" you can expand
    const gbets=betsOnMatch(m);
    if(gbets.length){
+@@ -1546,7 +1726,7 @@ function renderLive(d){
+       const stg=m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):(m.group?'Group '+m.group:'');
+       return `<div class="lccard">
+         <div class="lchead"><span class="lcdot"></span>${liveClock(m)}${stg?' · '+stg:''}</div>
+-        <div class="lcrow"><span class="lcteam">${flag(m.home)}${esc(m.home)}${own(m.homeOwner)}</span><span class="lcscore">${m.homeScore??0}</span></div>
++        <div class="lcrow msopen" data-mid="${esc(m.matchId||'')}"><span class="lcteam">${flag(m.home)}${esc(m.home)}${own(m.homeOwner)}</span><span class="lcscore">${m.homeScore??0}</span></div>
+         <div class="lcrow"><span class="lcteam">${flag(m.away)}${esc(m.away)}${own(m.awayOwner)}</span><span class="lcscore">${m.awayScore??0}</span></div>
+         ${(m.shootout||m.penHome!=null||m.penAway!=null)?`<div class="lcpens">🥅 Penalties <b>${m.penHome??0}–${m.penAway??0}</b></div>`:wpBar3(m,true)}
+       </div>`;}).join('')+'</div>';
 @@ -1728,9 +1908,13 @@ function renderBracket(d){
    rounds.innerHTML='<button data-v="round" class="'+(BRACKETVIEW==='round'?'on':'')+'">By round</button><button data-v="full" class="'+(BRACKETVIEW==='full'?'on':'')+'">Full bracket</button>';
    rounds.querySelectorAll('button').forEach(b=>b.onclick=()=>{BRACKETVIEW=b.dataset.v;renderBracket(d);});
@@ -2436,6 +2459,42 @@ index 4335b2f..eaddd3b 100644
      return;
    }
    if(!KO_USER_SET || !present.includes(KOROUND)) KOROUND=liveOrCurrentRound(ko,present);
+@@ -1746,7 +1930,7 @@ function fbMatch(m){
+   const sc=h=>show?((h?m.homeScore:m.awayScore)??0):'';
+   const row=(team,owner,score,wc,lc)=>'<div class="fbR '+wc+' '+lc+'"><span class="fbT">'+flag(team)+'<span class="fbNW"><span class="fbNm">'+esc(team||'TBD')+'</span>'+(owner?'<small>'+esc(owner)+'</small>':'')+'</span></span><span class="fbSc">'+score+'</span></div>';
+   const foot=isLive?'<div class="fbFoot live">\u25cf '+liveClock(m)+'</div>':(done?(koNote(m)?'<div class="fbFoot">'+koNote(m)+'</div>':''):'<div class="fbFoot">'+fmtTime(m.utcDate)+'</div>');
+-  return '<div class="fbM '+(isLive?'islive':'')+'">'+row(m.home,m.homeOwner,sc(true),hw?'win':'',done&&aw?'lose':'')+row(m.away,m.awayOwner,sc(false),aw?'win':'',done&&hw?'lose':'')+foot+'</div>';
++  return '<div class="fbM '+(isLive?'islive':'')+(m.matchId?' msopen':'')+'"'+(m.matchId?' data-mid="'+esc(m.matchId)+'"':'')+'>'+row(m.home,m.homeOwner,sc(true),hw?'win':'',done&&aw?'lose':'')+row(m.away,m.awayOwner,sc(false),aw?'win':'',done&&hw?'lose':'')+foot+'</div>';
+ }
+ function fullBracketHTML(ko,present){
+   const TREE=["LAST_32","LAST_16","QUARTER_FINALS","SEMI_FINALS","FINAL"].filter(s=>present.includes(s));
+@@ -1825,7 +2009,7 @@ function fbMatch2(m,mn){ // bracket card that shows a structural label when a te
+   const labelCell=side=>'<span class="fbNW"><span class="fbNm fbTBDlbl">'+esc(koSlotLabel(mn,side))+'</span></span>';
+   const cell=(team,owner,side,score,wc,lc)=>'<div class="fbR '+wc+' '+lc+'"><span class="fbT">'+(team?teamCell(team,owner):labelCell(side))+'</span><span class="fbSc">'+score+'</span></div>';
+   const foot=isLive?'<div class="fbFoot live">\u25cf '+liveClock(m)+'</div>':(done?(koNote(m)?'<div class="fbFoot">'+koNote(m)+'</div>':''):'<div class="fbFoot">'+fmtTime(m.utcDate)+'</div>');
+-  return '<div class="fbM '+(isLive?'islive':'')+'" data-mn="'+mn+'">'+cell(m.home,m.homeOwner,0,sc(true),hw?'win':'',done&&aw?'lose':'')+cell(m.away,m.awayOwner,1,sc(false),aw?'win':'',done&&hw?'lose':'')+foot+'</div>';
++  return '<div class="fbM '+(isLive?'islive':'')+(m.matchId?' msopen':'')+'" data-mn="'+mn+'"'+(m.matchId?' data-mid="'+esc(m.matchId)+'"':'')+'>'+cell(m.home,m.homeOwner,0,sc(true),hw?'win':'',done&&aw?'lose':'')+cell(m.away,m.awayOwner,1,sc(false),aw?'win':'',done&&hw?'lose':'')+foot+'</div>';
+ }
+ function fullBracketTree(ko,present,map){ // full skeleton R32->Final with placeholders + line overlay
+   const get=mn=>map[mn]||synthMatch(mn);
+@@ -1874,7 +2058,7 @@ function bracketCard(m){
+   const sc=home=>show?((home?m.homeScore:m.awayScore)??0):'';
+   const foot=isLive?`<div class="blive"><span class="pd"></span>${liveClock(m)}</div>`:(done?'':`<div class="btime">${fmtTime(m.utcDate)}</div>`);
+   const konote=koNote(m)?`<div class="bnote">${koNote(m)}</div>`:'';
+-  return `<div class="bcard">
++  return `<div class="bcard msopen" data-mid="${esc(m.matchId||'')}" title="Tap for the full match sheet">
+     <div class="brow ${hw?'win':''} ${done&&aw?'lose':''}"><span class="bteam">${flag(m.home)}${esc(m.home)}<small>${esc(m.homeOwner)}</small></span><span class="bsc">${sc(true)}</span></div>
+     <div class="brow ${aw?'win':''} ${done&&hw?'lose':''}"><span class="bteam">${flag(m.away)}${esc(m.away)}<small>${esc(m.awayOwner)}</small></span><span class="bsc">${sc(false)}</span></div>
+     ${konote}
+@@ -1910,7 +2094,7 @@ function matchRow(m){
+   const mid=live?`<span class="live">● ${liveClock(m)}</span>`:(done?`<div class="sc">${score}</div>${knEl}`:`<div class="time">${fmtTime(m.utcDate)}</div>`);
+   const grp=(m.group||'').replace('GROUP_','').trim();
+   const left=m.stage!=='GROUP_STAGE'?`${STAGE_LABEL[m.stage]||m.stage}`:(grp?`Group ${grp}`:'');
+-  return `<div>${left?`<div class="mstage">${left}</div>`:''}<div class="match">
++  return `<div>${left?`<div class="mstage">${left}</div>`:''}<div class="match msopen" data-mid="${esc(m.matchId||'')}" title="Tap for the full match sheet">
+     <div class="t home">${flag(m.home)}${esc(m.home||'TBD')}<span class="o">${esc(m.homeOwner||'')}</span></div>
+     <div class="mmid">${live?`<div class="sc">${score}</div>`+mid:mid}</div>
+     <div class="t away">${flag(m.away)}${esc(m.away||'TBD')}<span class="o">${esc(m.awayOwner||'')}</span></div>
 @@ -2049,7 +2233,7 @@ function renderOverview(d){
          const where=m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):('Group '+(m.group||'?'));
          const kn=koNote(m);
@@ -2574,7 +2633,7 @@ index 4335b2f..eaddd3b 100644
  </body>
  </html>
 diff --git a/update_results.py b/update_results.py
-index 223d105..d36c29b 100644
+index 223d105..aa8f4e7 100644
 --- a/update_results.py
 +++ b/update_results.py
 @@ -10,6 +10,7 @@ import json
@@ -2677,13 +2736,14 @@ index 223d105..d36c29b 100644
          })
      return out
  
-@@ -139,12 +204,60 @@ def _get(path, token):
+@@ -139,18 +204,127 @@ def _get(path, token):
          return json.load(r)
  
  
 +DETAIL_WINDOW_BEFORE_S = 80 * 60      # line-ups publish ~1h before kickoff
 +DETAIL_WINDOW_AFTER_S = 4 * 3600      # bookings/scorers keep updating a while after FT
 +DETAIL_BUDGET_PER_POLL = 8            # never more than this many /matches/{id} calls per poll (30/min plan cap)
++BACKFILL_BUDGET_PER_POLL = 3          # old FINISHED games get their scorers/cards backfilled a few per poll
 +
 +
 +def _enrich_near_live(api_matches, token):
@@ -2725,6 +2785,56 @@ index 223d105..d36c29b 100644
 +    return api_matches
 +
 +
++def _carry_deep_fields(new_matches, prev_path):
++    """Detail-fetched extras (scorers, line-ups, cards) don't come back on the LIST endpoint, so a fresh
++    poll would wipe them — carry any field the new payload LACKS over from the previous results.json.
++    Fresh data always wins; this only fills Nones. Never raises."""
++    try:
++        prev = {str(m.get("id")): m for m in (json.load(open(prev_path)).get("matches") or []) if isinstance(m, dict)}
++    except Exception:
++        return
++    for m in new_matches:
++        old = prev.get(str(m.get("id")))
++        if not old:
++            continue
++        for k in ("scorers", "homeLineup", "awayLineup", "cardsHome", "cardsAway", "redHome", "redAway"):
++            if m.get(k) is None and old.get(k) is not None:
++                m[k] = old[k]
++        if not m.get("durationKnown") and old.get("durationKnown"):
++            m["durationKnown"] = True
++            for k in ("duration", "aet", "shootout"):
++                if old.get(k) is not None:
++                    m[k] = old[k]
++
++
++def _backfill_finished(api_matches, norm_prev, token):
++    """A few FINISHED games per poll that still lack a scorer timeline get their detail fetched — over the
++    polls the whole tournament's timelines fill in. norm_prev: previous normalised matches by id (so games
++    already backfilled aren't re-fetched)."""
++    budget = BACKFILL_BUDGET_PER_POLL
++    for m in api_matches:
++        if budget <= 0:
++            break
++        if m.get("status") not in ("FINISHED", "AWARDED"):
++            continue
++        if isinstance(m.get("goals"), list):
++            continue                                # the list payload already carries it
++        pv = norm_prev.get(str(m.get("id"))) or {}
++        if pv.get("scorers") is not None:
++            continue                                # already backfilled on an earlier poll
++        try:
++            detail = _get("/matches/%s" % m.get("id"), token)
++            detail = detail.get("match", detail) or {}
++            for k in ("bookings", "goals"):
++                if isinstance(detail.get(k), list):
++                    m[k] = detail[k]
++            if isinstance(detail.get("score"), dict):
++                m["score"] = detail["score"]
++            budget -= 1
++        except Exception:
++            continue
++
++
  def fetch(out="results.json", token=None):
      token = _resolve_token(token)
      if not token:
@@ -2735,11 +2845,28 @@ index 223d105..d36c29b 100644
 +        _enrich_near_live(matches, token)
 +    except Exception:
 +        pass                        # enrichment is a bonus layer — the base list always stands alone
++    _prev_path = "results.json" if os.path.exists("results.json") else out   # update_now writes to a tmp file
++    try:
++        _prev_norm = {}
++        if os.path.exists(_prev_path):
++            _prev_norm = {str(x.get("id")): x for x in (json.load(open(_prev_path)).get("matches") or []) if isinstance(x, dict)}
++        _backfill_finished(matches, _prev_norm, token)
++    except Exception:
++        pass
      try:
          standings = _get(f"/competitions/{COMPETITION}/standings", token).get("standings", [])
      except Exception:
+         standings = []          # standings 404 before group stage starts — fine
++    _norm = normalize_matches(matches, resolve)
++    _carry_deep_fields(_norm, _prev_path)           # keep earlier detail merges alive across polls
+     data = {"competition": COMPETITION,
+-            "matches": normalize_matches(matches, resolve),
++            "matches": _norm,
+             "standings": normalize_standings(standings, resolve)}
+     with open(out, "w") as f:
+         json.dump(data, f, indent=2)
 diff --git a/wager.py b/wager.py
-index aca4590..5623e40 100644
+index aca4590..cbc8370 100644
 --- a/wager.py
 +++ b/wager.py
 @@ -333,6 +333,12 @@ def _winner_side(m):
@@ -2854,7 +2981,7 @@ index aca4590..5623e40 100644
      out = {}
      for h in range(CS_GRID_MAX + 1):
          for a in range(CS_GRID_MAX + 1):
-@@ -770,6 +822,494 @@ def _cs_result(selection, match):
+@@ -770,6 +822,517 @@ def _cs_result(selection, match):
      return "won" if selection == ("%d-%d" % (int(hs), int(as_))) else "lost"
  
  
@@ -3019,23 +3146,27 @@ index aca4590..5623e40 100644
 +    for sel in MOV_SELECTIONS:
 +        p = min(0.999, max(1e-6, fair[sel]))
 +        implieds[sel] = min(MOV_MAX_PROB, p * MOV_OVERROUND)
-+    # CONSISTENCY FLOOR (anti-dutch): the three outcomes of one side decompose that side's 'to advance'
-+    # price, so their implied sum must never be CHEAPER than the KO result book's price for the same side —
-+    # otherwise 'favourite result at its capped price + the underdog synthesised via its MoV trio' covers
-+    # every outcome below 1.0 implied. Scale a light side up (capped outcomes push onto their siblings).
 +    ko_book = match_odds(comp_home, comp_away, knockout=True)
 +    for side in ("HOME", "AWAY"):
-+        trio = ["%s_%s" % (side, m) for m in ("REG", "ET", "PENS")]
-+        target = (1.0 / ko_book[side]["decimal"]) * 1.01
++        res_imp = 1.0 / ko_book[side]["decimal"]
++        # COHERENCE CAP: winning in 90' is strictly HARDER than advancing at all, so its price must be
++        # strictly LONGER than the result price — a big favourite's fair x overround otherwise slams into
++        # the ladder cap and sells 'in 90' at the same (or shorter!) odds as 'to advance'.
++        reg = "%s_REG" % side
++        implieds[reg] = min(implieds[reg], res_imp * 0.985)
++        # CONSISTENCY FLOOR (anti-dutch): the trio decomposes the side's 'to advance' price, so its implied
++        # sum must never be CHEAPER than the result book's — the deficit rides on ET/PENS (they always have
++        # cap room), never back onto REG.
++        target = res_imp * 1.01
++        others = ["%s_ET" % side, "%s_PENS" % side]
 +        for _ in range(6):
-+            s = sum(implieds[t] for t in trio)
++            s = implieds[reg] + sum(implieds[t] for t in others)
 +            if s >= target - 1e-12:
 +                break
-+            room = [t for t in trio if implieds[t] < MOV_MAX_PROB - 1e-9]
-+            if not room:
-+                break
-+            f = target / max(1e-9, sum(implieds[t] for t in room)) - (s - sum(implieds[t] for t in room)) / max(1e-9, sum(implieds[t] for t in room))
-+            for t in room:
++            need = target - implieds[reg]
++            cur = sum(implieds[t] for t in others)
++            f = need / max(1e-9, cur)
++            for t in others:
 +                implieds[t] = min(MOV_MAX_PROB, implieds[t] * max(1.0, f))
 +    for sel in MOV_SELECTIONS:
 +        p = min(0.999, max(1e-6, fair[sel]))
@@ -3049,18 +3180,37 @@ index aca4590..5623e40 100644
 +            implied = min(MOV_MAX_PROB, implied + 0.005)
 +            if implied >= MOV_MAX_PROB:             # can't clear the margin inside the cap -> don't sell it
 +                break
-+    # post-rounding re-check of the floor: rounding can shave a trio back under the target — bump the
-+    # longest outcome of a light side until the SOLD trio clears the result-book price again
++    # post-rounding re-checks, per side: (a) REG stays strictly longer than the result price; (b) the SOLD
++    # trio still clears the result-book floor — the top-up lands on ET/PENS, never REG
 +    for side in ("HOME", "AWAY"):
-+        trio = [t for t in ("%s_REG" % side, "%s_ET" % side, "%s_PENS" % side) if t in out]
++        res_imp = 1.0 / ko_book[side]["decimal"]
++        reg = "%s_REG" % side
++        if reg in out:
++            for _ in range(10):
++                cur = out[reg]["den"] / (out[reg]["num"] + out[reg]["den"])
++                if cur <= res_imp - 1e-9:
++                    break
++                step = 0.01                                             # walk down until the LADDER actually moves
++                nxt = out[reg]
++                while step < 0.2:
++                    num, den = _nearest_fraction(1.0 / max(0.02, cur - step))
++                    if (num, den) != (out[reg]["num"], out[reg]["den"]):
++                        nxt = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
++                        break
++                    step += 0.01
++                if nxt is out[reg]:
++                    break                                               # ladder exhausted — never loop forever
++                out[reg] = nxt
++        trio = [t for t in (reg, "%s_ET" % side, "%s_PENS" % side) if t in out]
 +        if len(trio) < 3:
 +            continue                                # an unsold outcome only makes the trio dearer to dutch
-+        target = (1.0 / ko_book[side]["decimal"]) * 1.005
++        target = res_imp * 1.005
++        others = [t for t in trio if t != reg]
 +        for _ in range(12):
 +            s = sum(out[t]["den"] / (out[t]["num"] + out[t]["den"]) for t in trio)
 +            if s >= target - 1e-12:
 +                break
-+            t = max(trio, key=lambda x: out[x]["decimal"])          # shorten the longest outcome a notch
++            t = max(others, key=lambda x: out[x]["decimal"])            # shorten the longest of ET/PENS a notch
 +            cur = out[t]["den"] / (out[t]["num"] + out[t]["den"])
 +            num, den = _nearest_fraction(1.0 / min(MOV_MAX_PROB, cur + 0.01))
 +            out[t] = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
@@ -3349,7 +3499,7 @@ index aca4590..5623e40 100644
  def _match_total(match):
      """Final total goals for a finished match, or None if no valid score. Penalties never count
      (a shootout isn't goals); a knockout's score is its 90+ET total, which is what the tracker shows."""
-@@ -809,6 +1349,32 @@ def _leg_result(leg, match):
+@@ -809,6 +1372,32 @@ def _leg_result(leg, match):
          if status not in ("FINISHED", "AWARDED"):
              return None
          return _cs_result(leg.get("selection"), match)
@@ -3382,7 +3532,7 @@ index aca4590..5623e40 100644
      side = _winner_side(match)
      if status not in ("FINISHED", "AWARDED") or side is None:
          return None
-@@ -819,7 +1385,11 @@ def _leg_result(leg, match):
+@@ -819,7 +1408,11 @@ def _leg_result(leg, match):
  
  def settle(wagers, match, now=None):
      """Settle every pending wager affected by this match. Singles settle outright; accumulators settle
@@ -3395,7 +3545,7 @@ index aca4590..5623e40 100644
      if not isinstance(match, dict):
          return 0
      mid = match_id(match)
-@@ -847,6 +1417,20 @@ def settle(wagers, match, now=None):
+@@ -847,6 +1440,20 @@ def settle(wagers, match, now=None):
              if "lost" in results:                  # any leg down -> the whole acca is down
                  w["status"] = "lost"; w["return"] = 0; w["settled_at"] = ts; n += 1
              elif None not in results:              # every leg decided, none lost
@@ -3416,7 +3566,7 @@ index aca4590..5623e40 100644
                  won_legs = [leg for leg in legs if leg.get("result") == "won"]
                  dec = 1.0
                  for leg in won_legs:               # void legs drop out (odds treated as 1.0)
-@@ -858,6 +1442,9 @@ def settle(wagers, match, now=None):
+@@ -858,6 +1465,9 @@ def settle(wagers, match, now=None):
                  w["return"] = min(MAX_RETURN, rv) if MAX_RETURN is not None else rv
                  w["status"] = "void" if not won_legs else "won"   # every leg void = a push (stake back)
                  w["settled_at"] = ts; n += 1
@@ -3426,7 +3576,7 @@ index aca4590..5623e40 100644
              continue
          # ---- single ----
          if w.get("matchId") != mid:
-@@ -889,6 +1476,68 @@ def settle(wagers, match, now=None):
+@@ -889,6 +1499,68 @@ def settle(wagers, match, now=None):
                  w["status"] = "lost"; w["return"] = 0
              w["result"] = r
              w["settled_at"] = ts; n += 1; continue
@@ -3495,7 +3645,7 @@ index aca4590..5623e40 100644
          if status not in ("FINISHED", "AWARDED") or side is None:
              continue
          if side == "DRAW" and _norm_stage(w.get("stage")) != "GROUP_STAGE":
-@@ -923,9 +1572,24 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
+@@ -923,9 +1595,24 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
                       market=s.get("market", "result"), line=s.get("line"))
      keys = [match_id(s["match"]) for s in selections]
      if len(set(keys)) != len(keys):
@@ -3523,7 +3673,7 @@ index aca4590..5623e40 100644
      try:
          stake = round(float(stake), 2)
      except (TypeError, ValueError):
-@@ -968,8 +1632,79 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
+@@ -968,8 +1655,79 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
              return False, "One of those games has kicked off or finished — accas must be all upcoming."
          mk = (str(s.get("market") or "result")).lower()
          if mk == "cs":
@@ -3605,7 +3755,7 @@ index aca4590..5623e40 100644
              if s.get("selection") not in ("OVER", "UNDER"):
                  return False, "Pick Over or Under for every goals leg."
              try:
-@@ -996,6 +1731,33 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
+@@ -996,6 +1754,33 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
                           "home": s["match"].get("home"), "away": s["match"].get("away"),
                           "stage": s["match"].get("stage"), "num": o["num"], "den": o["den"], "frac": o["frac"]})
          dec *= o["decimal"]
@@ -3639,7 +3789,7 @@ index aca4590..5623e40 100644
      ret = round(stake * dec, 2)
      if MAX_RETURN is not None and ret > MAX_RETURN + 1e-9:
          return False, "That acca would return %g — the cap is %g per bet. Lower your stake." % (ret, MAX_RETURN)
-@@ -1003,6 +1765,8 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
+@@ -1003,6 +1788,8 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
           "home": legs[0]["home"], "away": legs[0]["away"], "selection": "ACCA",
           "stake": stake, "decimal": round(dec, 3), "frac": "%d-fold" % len(legs),
           "return": ret, "status": "pending", "placed_at": int(now if now is not None else time.time())}

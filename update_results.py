@@ -207,6 +207,7 @@ def _get(path, token):
 DETAIL_WINDOW_BEFORE_S = 80 * 60      # line-ups publish ~1h before kickoff
 DETAIL_WINDOW_AFTER_S = 4 * 3600      # bookings/scorers keep updating a while after FT
 DETAIL_BUDGET_PER_POLL = 8            # never more than this many /matches/{id} calls per poll (30/min plan cap)
+BACKFILL_BUDGET_PER_POLL = 3          # old FINISHED games get their scorers/cards backfilled a few per poll
 
 
 def _enrich_near_live(api_matches, token):
@@ -248,6 +249,56 @@ def _enrich_near_live(api_matches, token):
     return api_matches
 
 
+def _carry_deep_fields(new_matches, prev_path):
+    """Detail-fetched extras (scorers, line-ups, cards) don't come back on the LIST endpoint, so a fresh
+    poll would wipe them — carry any field the new payload LACKS over from the previous results.json.
+    Fresh data always wins; this only fills Nones. Never raises."""
+    try:
+        prev = {str(m.get("id")): m for m in (json.load(open(prev_path)).get("matches") or []) if isinstance(m, dict)}
+    except Exception:
+        return
+    for m in new_matches:
+        old = prev.get(str(m.get("id")))
+        if not old:
+            continue
+        for k in ("scorers", "homeLineup", "awayLineup", "cardsHome", "cardsAway", "redHome", "redAway"):
+            if m.get(k) is None and old.get(k) is not None:
+                m[k] = old[k]
+        if not m.get("durationKnown") and old.get("durationKnown"):
+            m["durationKnown"] = True
+            for k in ("duration", "aet", "shootout"):
+                if old.get(k) is not None:
+                    m[k] = old[k]
+
+
+def _backfill_finished(api_matches, norm_prev, token):
+    """A few FINISHED games per poll that still lack a scorer timeline get their detail fetched — over the
+    polls the whole tournament's timelines fill in. norm_prev: previous normalised matches by id (so games
+    already backfilled aren't re-fetched)."""
+    budget = BACKFILL_BUDGET_PER_POLL
+    for m in api_matches:
+        if budget <= 0:
+            break
+        if m.get("status") not in ("FINISHED", "AWARDED"):
+            continue
+        if isinstance(m.get("goals"), list):
+            continue                                # the list payload already carries it
+        pv = norm_prev.get(str(m.get("id"))) or {}
+        if pv.get("scorers") is not None:
+            continue                                # already backfilled on an earlier poll
+        try:
+            detail = _get("/matches/%s" % m.get("id"), token)
+            detail = detail.get("match", detail) or {}
+            for k in ("bookings", "goals"):
+                if isinstance(detail.get(k), list):
+                    m[k] = detail[k]
+            if isinstance(detail.get("score"), dict):
+                m["score"] = detail["score"]
+            budget -= 1
+        except Exception:
+            continue
+
+
 def fetch(out="results.json", token=None):
     token = _resolve_token(token)
     if not token:
@@ -258,12 +309,22 @@ def fetch(out="results.json", token=None):
         _enrich_near_live(matches, token)
     except Exception:
         pass                        # enrichment is a bonus layer — the base list always stands alone
+    _prev_path = "results.json" if os.path.exists("results.json") else out   # update_now writes to a tmp file
+    try:
+        _prev_norm = {}
+        if os.path.exists(_prev_path):
+            _prev_norm = {str(x.get("id")): x for x in (json.load(open(_prev_path)).get("matches") or []) if isinstance(x, dict)}
+        _backfill_finished(matches, _prev_norm, token)
+    except Exception:
+        pass
     try:
         standings = _get(f"/competitions/{COMPETITION}/standings", token).get("standings", [])
     except Exception:
         standings = []          # standings 404 before group stage starts — fine
+    _norm = normalize_matches(matches, resolve)
+    _carry_deep_fields(_norm, _prev_path)           # keep earlier detail merges alive across polls
     data = {"competition": COMPETITION,
-            "matches": normalize_matches(matches, resolve),
+            "matches": _norm,
             "standings": normalize_standings(standings, resolve)}
     with open(out, "w") as f:
         json.dump(data, f, indent=2)

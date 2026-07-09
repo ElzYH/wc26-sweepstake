@@ -1726,7 +1726,7 @@ function renderLive(d){
       const stg=m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):(m.group?'Group '+m.group:'');
       return `<div class="lccard">
         <div class="lchead"><span class="lcdot"></span>${liveClock(m)}${stg?' · '+stg:''}</div>
-        <div class="lcrow"><span class="lcteam">${flag(m.home)}${esc(m.home)}${own(m.homeOwner)}</span><span class="lcscore">${m.homeScore??0}</span></div>
+        <div class="lcrow msopen" data-mid="${esc(m.matchId||'')}"><span class="lcteam">${flag(m.home)}${esc(m.home)}${own(m.homeOwner)}</span><span class="lcscore">${m.homeScore??0}</span></div>
         <div class="lcrow"><span class="lcteam">${flag(m.away)}${esc(m.away)}${own(m.awayOwner)}</span><span class="lcscore">${m.awayScore??0}</span></div>
         ${(m.shootout||m.penHome!=null||m.penAway!=null)?`<div class="lcpens">🥅 Penalties <b>${m.penHome??0}–${m.penAway??0}</b></div>`:wpBar3(m,true)}
       </div>`;}).join('')+'</div>';
@@ -1930,7 +1930,7 @@ function fbMatch(m){
   const sc=h=>show?((h?m.homeScore:m.awayScore)??0):'';
   const row=(team,owner,score,wc,lc)=>'<div class="fbR '+wc+' '+lc+'"><span class="fbT">'+flag(team)+'<span class="fbNW"><span class="fbNm">'+esc(team||'TBD')+'</span>'+(owner?'<small>'+esc(owner)+'</small>':'')+'</span></span><span class="fbSc">'+score+'</span></div>';
   const foot=isLive?'<div class="fbFoot live">\u25cf '+liveClock(m)+'</div>':(done?(koNote(m)?'<div class="fbFoot">'+koNote(m)+'</div>':''):'<div class="fbFoot">'+fmtTime(m.utcDate)+'</div>');
-  return '<div class="fbM '+(isLive?'islive':'')+'">'+row(m.home,m.homeOwner,sc(true),hw?'win':'',done&&aw?'lose':'')+row(m.away,m.awayOwner,sc(false),aw?'win':'',done&&hw?'lose':'')+foot+'</div>';
+  return '<div class="fbM '+(isLive?'islive':'')+(m.matchId?' msopen':'')+'"'+(m.matchId?' data-mid="'+esc(m.matchId)+'"':'')+'>'+row(m.home,m.homeOwner,sc(true),hw?'win':'',done&&aw?'lose':'')+row(m.away,m.awayOwner,sc(false),aw?'win':'',done&&hw?'lose':'')+foot+'</div>';
 }
 function fullBracketHTML(ko,present){
   const TREE=["LAST_32","LAST_16","QUARTER_FINALS","SEMI_FINALS","FINAL"].filter(s=>present.includes(s));
@@ -2009,7 +2009,7 @@ function fbMatch2(m,mn){ // bracket card that shows a structural label when a te
   const labelCell=side=>'<span class="fbNW"><span class="fbNm fbTBDlbl">'+esc(koSlotLabel(mn,side))+'</span></span>';
   const cell=(team,owner,side,score,wc,lc)=>'<div class="fbR '+wc+' '+lc+'"><span class="fbT">'+(team?teamCell(team,owner):labelCell(side))+'</span><span class="fbSc">'+score+'</span></div>';
   const foot=isLive?'<div class="fbFoot live">\u25cf '+liveClock(m)+'</div>':(done?(koNote(m)?'<div class="fbFoot">'+koNote(m)+'</div>':''):'<div class="fbFoot">'+fmtTime(m.utcDate)+'</div>');
-  return '<div class="fbM '+(isLive?'islive':'')+'" data-mn="'+mn+'">'+cell(m.home,m.homeOwner,0,sc(true),hw?'win':'',done&&aw?'lose':'')+cell(m.away,m.awayOwner,1,sc(false),aw?'win':'',done&&hw?'lose':'')+foot+'</div>';
+  return '<div class="fbM '+(isLive?'islive':'')+(m.matchId?' msopen':'')+'" data-mn="'+mn+'"'+(m.matchId?' data-mid="'+esc(m.matchId)+'"':'')+'>'+cell(m.home,m.homeOwner,0,sc(true),hw?'win':'',done&&aw?'lose':'')+cell(m.away,m.awayOwner,1,sc(false),aw?'win':'',done&&hw?'lose':'')+foot+'</div>';
 }
 function fullBracketTree(ko,present,map){ // full skeleton R32->Final with placeholders + line overlay
   const get=mn=>map[mn]||synthMatch(mn);
@@ -2058,7 +2058,7 @@ function bracketCard(m){
   const sc=home=>show?((home?m.homeScore:m.awayScore)??0):'';
   const foot=isLive?`<div class="blive"><span class="pd"></span>${liveClock(m)}</div>`:(done?'':`<div class="btime">${fmtTime(m.utcDate)}</div>`);
   const konote=koNote(m)?`<div class="bnote">${koNote(m)}</div>`:'';
-  return `<div class="bcard">
+  return `<div class="bcard msopen" data-mid="${esc(m.matchId||'')}" title="Tap for the full match sheet">
     <div class="brow ${hw?'win':''} ${done&&aw?'lose':''}"><span class="bteam">${flag(m.home)}${esc(m.home)}<small>${esc(m.homeOwner)}</small></span><span class="bsc">${sc(true)}</span></div>
     <div class="brow ${aw?'win':''} ${done&&hw?'lose':''}"><span class="bteam">${flag(m.away)}${esc(m.away)}<small>${esc(m.awayOwner)}</small></span><span class="bsc">${sc(false)}</span></div>
     ${konote}
@@ -2094,7 +2094,7 @@ function matchRow(m){
   const mid=live?`<span class="live">● ${liveClock(m)}</span>`:(done?`<div class="sc">${score}</div>${knEl}`:`<div class="time">${fmtTime(m.utcDate)}</div>`);
   const grp=(m.group||'').replace('GROUP_','').trim();
   const left=m.stage!=='GROUP_STAGE'?`${STAGE_LABEL[m.stage]||m.stage}`:(grp?`Group ${grp}`:'');
-  return `<div>${left?`<div class="mstage">${left}</div>`:''}<div class="match">
+  return `<div>${left?`<div class="mstage">${left}</div>`:''}<div class="match msopen" data-mid="${esc(m.matchId||'')}" title="Tap for the full match sheet">
     <div class="t home">${flag(m.home)}${esc(m.home||'TBD')}<span class="o">${esc(m.homeOwner||'')}</span></div>
     <div class="mmid">${live?`<div class="sc">${score}</div>`+mid:mid}</div>
     <div class="t away">${flag(m.away)}${esc(m.away||'TBD')}<span class="o">${esc(m.awayOwner||'')}</span></div>
