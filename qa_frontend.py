@@ -80,8 +80,10 @@ ck("the old 'other market on this game -> auto-accumulator' path is gone", "the 
 ck("placeAcca sends per-leg market + line", "market:l.market||'result',line:l.line" in HTML, None)
 # overflow fix: the O/U row must be allowed to wrap, and the two buttons must sit in ONE min-width group
 # so on a narrow (multi-column desktop) card the button group drops to a second line instead of spilling out.
-ck("the O/U row can wrap (flex-wrap) so it never overflows a narrow card", "margin-top:5px;flex-wrap:wrap" in HTML, None)
-ck("the Over/Under buttons are wrapped in a min-width flex group (wrap together, not spill)", "flex:1 1 150px;min-width:150px" in HTML, None)
+ck("market rows are a fixed-column grid (control col + buttons) so nothing overflows or drops to a lone line",
+   ".mktrow{display:grid;grid-template-columns:96px minmax(0,1fr)" in HTML, None)
+ck("market buttons split the remaining width equally and wrap text INSIDE the button",
+   ".mktbtns .betodd{flex:1;min-width:0" in HTML and "white-space:normal" in HTML, None)
 ck("the server attaches O/U prices to fixtures", "f[\"ouOdds\"] = wager.goals_odds(ch, ca)" in open(os.path.join(REPO, "scoring.py")).read(), None)
 try:
     import subprocess as _sp6

@@ -951,7 +951,11 @@ def _leg_result(leg, match):
 
 def settle(wagers, match, now=None):
     """Settle every pending wager affected by this match. Singles settle outright; accumulators settle
-    leg-by-leg and only resolve once every leg has a result. Mutates `wagers`. Returns the number fully settled."""
+    leg-by-leg and only resolve once every leg has a result. Mutates `wagers`. Returns the number of
+    wagers CHANGED — fully settled bets AND accas that merely banked a leg. Counting banked legs matters:
+    update_now() only writes wagers.json when this returns non-zero, so an acca whose leg won while the
+    rest were still upcoming used to bank the ✅ in memory only and lose it (no save, no leg tick on the
+    site) until the whole acca resolved."""
     if not isinstance(match, dict):
         return 0
     mid = match_id(match)
@@ -990,6 +994,9 @@ def settle(wagers, match, now=None):
                 w["return"] = min(MAX_RETURN, rv) if MAX_RETURN is not None else rv
                 w["status"] = "void" if not won_legs else "won"   # every leg void = a push (stake back)
                 w["settled_at"] = ts; n += 1
+            else:
+                n += 1                             # a leg banked but the acca is still open — that's a real
+                                                   #   change and MUST count, or update_now() won't save it
             continue
         # ---- single ----
         if w.get("matchId") != mid:

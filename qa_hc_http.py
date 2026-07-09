@@ -195,6 +195,30 @@ try:
 finally:
     S.stop()
 
+# ============================================================ 3. acca LEG on a pens game BANKS while the acca stays open
+print("\n== 3. a result acca leg decided on penalties banks ✅ while the other leg is still upcoming ==")
+S = Server([match("k1", HOME, AWAY, "TIMED", stage="QUARTER_FINALS"),
+            match("k2", OTHERH, OTHERA, "TIMED", stage="QUARTER_FINALS")])
+try:
+    st, b = S.req("POST", "/api/place_acca", {"player": "Erol", "stake": 5, "pin": "ABCD",
+                                              "legs": [{"matchId": "k1", "selection": "HOME"},
+                                                       {"matchId": "k2", "selection": "HOME"}]})
+    ck("a 2-leg result acca places", json.loads(b).get("ok") is True, b[:140])
+    # k1 finishes level and HOME wins the shootout — the WORST-case feed shape: no `winner` field at all,
+    # only penHome/penAway (exactly what the live Switzerland–Colombia card looked like)
+    S.set_results([match("k1", HOME, AWAY, "FINISHED", hs=0, as_=0, stage="QUARTER_FINALS",
+                         penHome=4, penAway=3, shootout=True),
+                   match("k2", OTHERH, OTHERA, "TIMED")])
+    S.req("POST", "/api/poll")
+    S.wait(lambda: any((l.get("result") for w in S.wagers() for l in (w.get("legs") or []))))
+    acc = next((x for x in S.wagers() if x.get("legs")), {})
+    lk1 = next((l for l in acc.get("legs", []) if l.get("matchId") == "k1"), {})
+    lk2 = next((l for l in acc.get("legs", []) if l.get("matchId") == "k2"), {})
+    ck("the pens-decided leg banked as WON (winner inferred from the shootout score)", lk1.get("result") == "won", lk1)
+    ck("the future leg is untouched and the acca is still open", not lk2.get("result") and acc.get("status") == "pending", acc)
+finally:
+    S.stop()
+
 print()
 if FAILS:
     print("FAILED: %d -> %s" % (len(FAILS), FAILS))

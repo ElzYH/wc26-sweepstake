@@ -46,10 +46,23 @@ index 7298126..8c0888c 100644
  if python3 qa_betting.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_betting.py | tail -20; FAIL=1; fi
  
 diff --git a/qa_frontend.py b/qa_frontend.py
-index d64369a..5b61305 100644
+index d64369a..182f653 100644
 --- a/qa_frontend.py
 +++ b/qa_frontend.py
-@@ -92,7 +92,7 @@ try:
+@@ -80,8 +80,10 @@ ck("the old 'other market on this game -> auto-accumulator' path is gone", "the
+ ck("placeAcca sends per-leg market + line", "market:l.market||'result',line:l.line" in HTML, None)
+ # overflow fix: the O/U row must be allowed to wrap, and the two buttons must sit in ONE min-width group
+ # so on a narrow (multi-column desktop) card the button group drops to a second line instead of spilling out.
+-ck("the O/U row can wrap (flex-wrap) so it never overflows a narrow card", "margin-top:5px;flex-wrap:wrap" in HTML, None)
+-ck("the Over/Under buttons are wrapped in a min-width flex group (wrap together, not spill)", "flex:1 1 150px;min-width:150px" in HTML, None)
++ck("market rows are a fixed-column grid (control col + buttons) so nothing overflows or drops to a lone line",
++   ".mktrow{display:grid;grid-template-columns:96px minmax(0,1fr)" in HTML, None)
++ck("market buttons split the remaining width equally and wrap text INSIDE the button",
++   ".mktbtns .betodd{flex:1;min-width:0" in HTML and "white-space:normal" in HTML, None)
+ ck("the server attaches O/U prices to fixtures", "f[\"ouOdds\"] = wager.goals_odds(ch, ca)" in open(os.path.join(REPO, "scoring.py")).read(), None)
+ try:
+     import subprocess as _sp6
+@@ -92,7 +94,7 @@ try:
              elif HTML[j] == "}":
                  depth -= 1
                  if depth == 0: return HTML[s:j + 1]
@@ -58,7 +71,7 @@ index d64369a..5b61305 100644
      _js = ("const esc=s=>String(s);const OULINE={};let ACCAMODE=false,ACCA=[],BETPICK=null;\n" + _fns + """
      const m={matchId:'M1',home:'Brazil',away:'Serbia',ouOdds:{'2.5':{OVER:{frac:'5/6'},UNDER:{frac:'8/11'}},'3.5':{OVER:{frac:'9/4'},UNDER:{frac:'1/5'}}}};
      const r=ouRowHTML(m);
-@@ -106,6 +106,55 @@ try:
+@@ -106,6 +108,55 @@ try:
  except Exception as _e:
      ck("O/U UI cross-check ran", False, str(_e)[:140])
  
@@ -114,7 +127,7 @@ index d64369a..5b61305 100644
  print("\n== bet cards show the score (live + frozen at FT) ==")
  ck("acca legs show the score (live + frozen FT), not just a dot", "FT '+sc+'</span>" in HTML and "🔴 '+sc+'</span>" in HTML, None)
  ck("single bets freeze the final score at FT", "🔴 LIVE '+sc+'</span>" in HTML, None)
-@@ -327,8 +376,8 @@ except Exception as _e:
+@@ -327,8 +378,8 @@ except Exception as _e:
  
  # ---- bet-slip selection model: tap=select, re-tap=remove, 2nd game=auto-acca, down-to-1=single ----
  print("\n== bet-slip selection model (.betodd click) ==")
@@ -248,10 +261,10 @@ index 0000000..8841c4c
 +print("ALL HANDICAP EXPLOIT CHECKS PASSED")
 diff --git a/qa_hc_http.py b/qa_hc_http.py
 new file mode 100644
-index 0000000..5532a49
+index 0000000..a69c01e
 --- /dev/null
 +++ b/qa_hc_http.py
-@@ -0,0 +1,202 @@
+@@ -0,0 +1,226 @@
 +#!/usr/bin/env python3
 +"""Handicap over the wire — boot the REAL server, bet real HTTP, settle through the real poll.
 +Locks in: the tracker payload carries margined hcOdds for a bettable fixture; a bet struck via
@@ -446,6 +459,30 @@ index 0000000..5532a49
 +    ck("both bets settled", done and hc_bet and res_bet, ws)
 +    ck("HOME -1.5 on 1-1 (4-2 pens) LOST — pens never count for the margin", hc_bet.get("status") == "lost", hc_bet)
 +    ck("the result bet WON off the shootout", res_bet.get("status") == "won", res_bet)
++finally:
++    S.stop()
++
++# ============================================================ 3. acca LEG on a pens game BANKS while the acca stays open
++print("\n== 3. a result acca leg decided on penalties banks ✅ while the other leg is still upcoming ==")
++S = Server([match("k1", HOME, AWAY, "TIMED", stage="QUARTER_FINALS"),
++            match("k2", OTHERH, OTHERA, "TIMED", stage="QUARTER_FINALS")])
++try:
++    st, b = S.req("POST", "/api/place_acca", {"player": "Erol", "stake": 5, "pin": "ABCD",
++                                              "legs": [{"matchId": "k1", "selection": "HOME"},
++                                                       {"matchId": "k2", "selection": "HOME"}]})
++    ck("a 2-leg result acca places", json.loads(b).get("ok") is True, b[:140])
++    # k1 finishes level and HOME wins the shootout — the WORST-case feed shape: no `winner` field at all,
++    # only penHome/penAway (exactly what the live Switzerland–Colombia card looked like)
++    S.set_results([match("k1", HOME, AWAY, "FINISHED", hs=0, as_=0, stage="QUARTER_FINALS",
++                         penHome=4, penAway=3, shootout=True),
++                   match("k2", OTHERH, OTHERA, "TIMED")])
++    S.req("POST", "/api/poll")
++    S.wait(lambda: any((l.get("result") for w in S.wagers() for l in (w.get("legs") or []))))
++    acc = next((x for x in S.wagers() if x.get("legs")), {})
++    lk1 = next((l for l in acc.get("legs", []) if l.get("matchId") == "k1"), {})
++    lk2 = next((l for l in acc.get("legs", []) if l.get("matchId") == "k2"), {})
++    ck("the pens-decided leg banked as WON (winner inferred from the shootout score)", lk1.get("result") == "won", lk1)
++    ck("the future leg is untouched and the acca is still open", not lk2.get("result") and acc.get("status") == "pending", acc)
 +finally:
 +    S.stop()
 +
@@ -978,25 +1015,28 @@ index 0000000..99ae3a5
 +    raise SystemExit(1)
 +print("ALL HANDICAP SETTLEMENT CHECKS PASSED")
 diff --git a/tracker.html b/tracker.html
-index 4335b2f..f004384 100644
+index 4335b2f..c09f4bd 100644
 --- a/tracker.html
 +++ b/tracker.html
-@@ -275,6 +275,14 @@
+@@ -275,6 +275,17 @@
    .mdr{text-align:right}
    .betodds{display:flex;gap:6px;flex-wrap:wrap}
    .betodd{flex:1;min-width:80px;background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:7px 8px;font-size:12.5px;cursor:pointer;font-family:'Sora',sans-serif}
-+  /* market rows (O/U, handicap, exact score): one aligned layout — a fixed-ish control column on the
-+     left (emoji + line picker / score inputs), then the price buttons splitting the rest equally */
-+  .mktrow{display:flex;gap:5px;margin-top:5px;flex-wrap:wrap;align-items:stretch}
-+  .mktctl{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);white-space:nowrap;flex:0 0 auto}
-+  .mktctl select{width:66px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 4px;font-size:12px;font-family:'Sora',sans-serif}
-+  .mktctl input{width:30px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 2px;font-size:13px;text-align:center;font-family:'Sora',sans-serif}
-+  .mktbtns{display:flex;gap:5px;flex:1 1 150px;min-width:150px;align-items:stretch}
-+  .mktbtns .betodd{flex:1;min-width:0;padding:6px 4px;font-size:12px}
++  /* market rows (O/U, handicap, exact score): a two-column grid — a FIXED control column on the left
++     (emoji + line picker / score inputs) so the three rows line up, and the price buttons splitting the
++     remaining width equally. grid (not flex-wrap) so the buttons can never drop to a ragged second line;
++     long labels wrap INSIDE their button instead. */
++  .mktrow{display:grid;grid-template-columns:96px minmax(0,1fr);gap:5px;margin-top:5px;align-items:stretch}
++  .mktctl{display:flex;align-items:center;gap:3px;font-size:12px;color:var(--muted);white-space:nowrap;min-width:0}
++  .mktctl select{flex:1;min-width:0;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 2px;font-size:12px;font-family:'Sora',sans-serif}
++  .mktctl input{width:27px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 1px;font-size:13px;text-align:center;font-family:'Sora',sans-serif;-moz-appearance:textfield}
++  .mktctl input::-webkit-outer-spin-button,.mktctl input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
++  .mktbtns{display:flex;gap:5px;min-width:0;align-items:stretch}
++  .mktbtns .betodd{flex:1;min-width:0;padding:5px 4px;font-size:11.5px;line-height:1.3;white-space:normal}
    .betodd b{color:var(--gold)}
    .betodd.on{border-color:var(--gold);background:#13301c}
    /* Bet confirmation bar: floats pinned just above the bottom of the screen while its real slot is below the
-@@ -640,36 +648,70 @@ function samePick(p, mid, sel, market, line){   // are two picks the exact same
+@@ -640,36 +651,70 @@ function samePick(p, mid, sel, market, line){   // are two picks the exact same
  function ouLineFor(mid,odds){ let ln=OULINE[mid]||'2.5';   // default to the most common line
    if(odds&&!odds[ln]){ const ks=Object.keys(odds).sort((a,b)=>Math.abs(parseFloat(a)-2.5)-Math.abs(parseFloat(b)-2.5)); ln=ks[0]||ln; }  // picked line no longer offered -> nearest available
    return ln; }
@@ -1083,7 +1123,7 @@ index 4335b2f..f004384 100644
      +'</div>';
  }
  function renderBets(){
-@@ -751,7 +793,7 @@ function renderBets(){
+@@ -751,7 +796,7 @@ function renderBets(){
    } else if(fbet.open && fbMine){
      h+='<div style="margin:0 0 12px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;color:var(--muted)">🎁 You\'ve claimed today\'s free points — they\'re in your balance above. Bet them on any game. The next drop is another day.</div>';
    }
@@ -1092,7 +1132,7 @@ index 4335b2f..f004384 100644
    if(ACCAMODE) h+='<div style="color:var(--muted);font-size:12.5px;margin:0 0 10px">🎰 Building an accumulator — odds multiply, but <b>every</b> leg must win. Up to '+maxLegs+' legs, and up to '+((caps.max_active_accas)||2)+' accas running at once.'+(retCap?(' Max return: <b>'+retCap+'</b>.'):'')+'</div>';
    if(!fx.length) h+='<div class="empty">No upcoming games to bet on right now — check back before kick-off.</div>';
    else h+='<div class="mdgrid">'+fx.map(m=>{
-@@ -763,7 +805,7 @@ function renderBets(){
+@@ -763,7 +808,7 @@ function renderBets(){
        return `<button class="betodd${on?' on':''}" data-mid="${m.matchId}" data-sel="${k}" data-market="result" data-frac="${o.frac}">${esc(lbl)} <b>${o.frac}</b></button>`; };
      const homeAway='<div style="display:flex;gap:6px">'+mk('HOME',m.home)+mk('AWAY',m.away)+'</div>';   // home left, away right
      const drawRow=(!ko && m.odds.DRAW)?('<div style="display:flex;margin-top:6px">'+mk('DRAW','Draw')+'</div>'):'';   // draw below, full width
@@ -1101,7 +1141,7 @@ index 4335b2f..f004384 100644
      return `<div class="mdcard"><div class="mdmeta">${ko?(STAGE_LABEL[m.stage]||m.stage):'Group '+(m.group||'?')} · ${esc(when)}</div>
        <div class="mdteams" style="margin-bottom:6px"><span>${flag(m.home)}${esc(m.home)}</span><span style="color:var(--muted)">v</span><span class="mdr">${flag(m.away)}${esc(m.away)}</span></div>
        <div class="betodds" style="display:block">${homeAway}${drawRow}${ouRow}</div></div>`;
-@@ -773,7 +815,11 @@ function renderBets(){
+@@ -773,7 +818,11 @@ function renderBets(){
      const accaCap=Math.min(headroom, budgetLeft, Math.min.apply(null,ACCA.map(l=>{const f=fx.find(m=>m.matchId===l.matchId); return f&&f.maxStake?f.maxStake:caps.max_stake;})));
      h+='<div class="betcta" style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
        +'<div style="font-weight:600;margin-bottom:8px">🎰 '+ACCA.length+'-fold accumulator <span style="color:var(--muted);font-weight:400">· max stake '+accaCap+'</span></div>'
@@ -1114,7 +1154,7 @@ index 4335b2f..f004384 100644
          return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>'+esc(who)+' <span style="color:var(--gold)">'+l.frac+'</span></span><button class="accarm" data-i="'+i+'" style="background:none;border:none;color:#ff7a7a;cursor:pointer">✕</button></div>';}).join('')
        +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;border-top:1px solid var(--line);padding-top:8px"><input id="accaStake" type="number" min="'+caps.min_stake+'" max="'+Math.min(accaCap,avail)+'" step="0.01" placeholder="stake (pts)" style="width:120px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:16px">'
        +'<span id="accaReturn" style="color:var(--muted);font-size:13px">combined ~'+(Math.round(dec*100)/100)+'×</span>'
-@@ -783,7 +829,8 @@ function renderBets(){
+@@ -783,7 +832,8 @@ function renderBets(){
      const fxp=fx.find(m=>m.matchId===BETPICK.matchId);
      if(fxp){ const isOU=(BETPICK.market||'result')==='ou';
        const isCS=(BETPICK.market||'result')==='cs';
@@ -1124,7 +1164,7 @@ index 4335b2f..f004384 100644
        const fracDisp=BETPICK.frac; const smax=Math.min(fxp.maxStake||caps.max_stake, headroom, budgetLeft);
        h+='<div class="betcta" style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
          +'<div style="font-size:13.5px;margin-bottom:8px">Bet on <b>'+esc(who)+'</b> @ <b style="color:var(--gold)">'+fracDisp+'</b> <span style="color:var(--muted)">· max '+smax+'</span></div>'
-@@ -873,11 +920,20 @@ function renderBets(){
+@@ -873,11 +923,20 @@ function renderBets(){
        else box.textContent=j.error||'Could not unlink.';
      }catch(e){ box.textContent='Could not reach the server.'; }
    };
@@ -1150,7 +1190,7 @@ index 4335b2f..f004384 100644
      const mid=b.dataset.mid, sel=b.dataset.sel, frac=b.dataset.frac;
      const market=b.dataset.market||'result', line=(b.dataset.line!=null && b.dataset.line!=='')?parseFloat(b.dataset.line):null;
      const pick=()=>({matchId:mid,sel:sel,frac:frac,market:market,line:line});
-@@ -906,7 +962,8 @@ function renderBets(){
+@@ -906,7 +965,8 @@ function renderBets(){
        }
        BETMSG=''; renderBets();
      }
@@ -1160,7 +1200,7 @@ index 4335b2f..f004384 100644
    const cfb=document.getElementById('claimFreeBtn'); if(cfb) cfb.onclick=claimFreePoints;
    el.querySelectorAll('.accarm').forEach(b=>b.onclick=()=>{ ACCA.splice(+b.dataset.i,1); if(ACCA.length===1){ BETPICK=ACCA[0]; ACCA=[]; ACCAMODE=false; } else if(ACCA.length===0){ ACCAMODE=false; } renderBets(); });
    const ap=document.getElementById('accaPlace'); if(ap) ap.onclick=placeAcca;
-@@ -974,6 +1031,7 @@ function refreshBetsLive(){
+@@ -974,6 +1034,7 @@ function refreshBetsLive(){
  // ---- "is this bet currently winning?" — provisional result from the live score (display only; never settles anything) ----
  function pickName(o){   // human label for a bet or an acca leg, result OR over/under
    if((o.market||'result')==='ou') return (o.selection==='OVER'?'Over':'Under')+' '+o.line+' goals';
@@ -1168,7 +1208,7 @@ index 4335b2f..f004384 100644
    if((o.market||'result')==='cs') return 'Exact score '+(o.selection==='OTHER'?'Any other':o.selection);
    return o.selection==='HOME'?o.home:(o.selection==='AWAY'?o.away:'Draw');
  }
-@@ -981,6 +1039,7 @@ function provResult(o, hs, as_){   // live/settled outcome of a bet or leg from
+@@ -981,6 +1042,7 @@ function provResult(o, hs, as_){   // live/settled outcome of a bet or leg from
    if(hs==null||as_==null) return null;           // no score yet -> unknown (don't coerce null to 0)
    hs=Number(hs); as_=Number(as_); if(isNaN(hs)||isNaN(as_)) return null;
    if((o.market||'result')==='ou'){ const over=(hs+as_)>Number(o.line); return (o.selection==='OVER'?over:!over)?'win':'lose'; }  // half-line: never level
@@ -1176,7 +1216,7 @@ index 4335b2f..f004384 100644
    if(o.selection==='HOME') return hs>as_?'win':(hs<as_?'lose':'level');
    if(o.selection==='AWAY') return as_>hs?'win':(as_<hs?'lose':'level');
    return hs===as_?'win':'lose';   // DRAW selection
-@@ -1728,9 +1787,13 @@ function renderBracket(d){
+@@ -1728,9 +1790,13 @@ function renderBracket(d){
    rounds.innerHTML='<button data-v="round" class="'+(BRACKETVIEW==='round'?'on':'')+'">By round</button><button data-v="full" class="'+(BRACKETVIEW==='full'?'on':'')+'">Full bracket</button>';
    rounds.querySelectorAll('button').forEach(b=>b.onclick=()=>{BRACKETVIEW=b.dataset.v;renderBracket(d);});
    if(BRACKETVIEW==='full'){
@@ -1190,7 +1230,7 @@ index 4335b2f..f004384 100644
      return;
    }
    if(!KO_USER_SET || !present.includes(KOROUND)) KOROUND=liveOrCurrentRound(ko,present);
-@@ -2286,7 +2349,10 @@ function buildLedger(d, wagers){
+@@ -2286,7 +2352,10 @@ function buildLedger(d, wagers){
      const note=lower.length?(' \u00b7 replaces the earlier +'+lower[lower.length-1]+' \u2014 furthest round only'):'';
      ev.push({when:fins.length?Math.max.apply(null,fins):Date.now(),kind:'bonus',player:p.name,team:tm.name,stage:st,label:SL[st]||st,pts:SB[st],note:note});
    });});
@@ -1202,7 +1242,7 @@ index 4335b2f..f004384 100644
    (wagers||[]).forEach(function(w){
      if(w.credit){ ev.push({when:(w.placed_at?w.placed_at*1000:0), kind:'free', player:w.player, amount:+(w.amount||0)}); return; }
      if(w.status!=='won'&&w.status!=='lost') return;
-@@ -2294,7 +2360,8 @@ function buildLedger(d, wagers){
+@@ -2294,7 +2363,8 @@ function buildLedger(d, wagers){
      if(w.legs&&w.legs.length){ w.legs.forEach(function(l){ const fm=fx.find(function(m){return m.matchId===l.matchId;}); if(fm) ds.push(T(fm)); }); }
      else { const fm=fx.find(function(m){return m.matchId===w.matchId;}); if(fm) ds.push(T(fm)); }
      const net=w.status==='won'?Math.round(((w.return||0)-(w.stake||0))*100)/100:-(w.stake||0);
@@ -1213,7 +1253,7 @@ index 4335b2f..f004384 100644
    ev.sort(function(a,b){return b.when-a.when;});
    return ev;
 diff --git a/wager.py b/wager.py
-index aca4590..6f5df92 100644
+index aca4590..8cf80f9 100644
 --- a/wager.py
 +++ b/wager.py
 @@ -333,6 +333,12 @@ def _winner_side(m):
@@ -1422,7 +1462,30 @@ index aca4590..6f5df92 100644
      side = _winner_side(match)
      if status not in ("FINISHED", "AWARDED") or side is None:
          return None
-@@ -889,6 +1021,18 @@ def settle(wagers, match, now=None):
+@@ -819,7 +951,11 @@ def _leg_result(leg, match):
+ 
+ def settle(wagers, match, now=None):
+     """Settle every pending wager affected by this match. Singles settle outright; accumulators settle
+-    leg-by-leg and only resolve once every leg has a result. Mutates `wagers`. Returns the number fully settled."""
++    leg-by-leg and only resolve once every leg has a result. Mutates `wagers`. Returns the number of
++    wagers CHANGED — fully settled bets AND accas that merely banked a leg. Counting banked legs matters:
++    update_now() only writes wagers.json when this returns non-zero, so an acca whose leg won while the
++    rest were still upcoming used to bank the ✅ in memory only and lose it (no save, no leg tick on the
++    site) until the whole acca resolved."""
+     if not isinstance(match, dict):
+         return 0
+     mid = match_id(match)
+@@ -858,6 +994,9 @@ def settle(wagers, match, now=None):
+                 w["return"] = min(MAX_RETURN, rv) if MAX_RETURN is not None else rv
+                 w["status"] = "void" if not won_legs else "won"   # every leg void = a push (stake back)
+                 w["settled_at"] = ts; n += 1
++            else:
++                n += 1                             # a leg banked but the acca is still open — that's a real
++                                                   #   change and MUST count, or update_now() won't save it
+             continue
+         # ---- single ----
+         if w.get("matchId") != mid:
+@@ -889,6 +1028,18 @@ def settle(wagers, match, now=None):
                  w["status"] = "lost"; w["return"] = 0
              w["result"] = r
              w["settled_at"] = ts; n += 1; continue
@@ -1441,7 +1504,7 @@ index aca4590..6f5df92 100644
          if status not in ("FINISHED", "AWARDED") or side is None:
              continue
          if side == "DRAW" and _norm_stage(w.get("stage")) != "GROUP_STAGE":
-@@ -968,8 +1112,36 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
+@@ -968,8 +1119,36 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
              return False, "One of those games has kicked off or finished — accas must be all upcoming."
          mk = (str(s.get("market") or "result")).lower()
          if mk == "cs":

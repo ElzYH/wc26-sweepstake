@@ -275,14 +275,17 @@
   .mdr{text-align:right}
   .betodds{display:flex;gap:6px;flex-wrap:wrap}
   .betodd{flex:1;min-width:80px;background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:7px 8px;font-size:12.5px;cursor:pointer;font-family:'Sora',sans-serif}
-  /* market rows (O/U, handicap, exact score): one aligned layout — a fixed-ish control column on the
-     left (emoji + line picker / score inputs), then the price buttons splitting the rest equally */
-  .mktrow{display:flex;gap:5px;margin-top:5px;flex-wrap:wrap;align-items:stretch}
-  .mktctl{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);white-space:nowrap;flex:0 0 auto}
-  .mktctl select{width:66px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 4px;font-size:12px;font-family:'Sora',sans-serif}
-  .mktctl input{width:30px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 2px;font-size:13px;text-align:center;font-family:'Sora',sans-serif}
-  .mktbtns{display:flex;gap:5px;flex:1 1 150px;min-width:150px;align-items:stretch}
-  .mktbtns .betodd{flex:1;min-width:0;padding:6px 4px;font-size:12px}
+  /* market rows (O/U, handicap, exact score): a two-column grid — a FIXED control column on the left
+     (emoji + line picker / score inputs) so the three rows line up, and the price buttons splitting the
+     remaining width equally. grid (not flex-wrap) so the buttons can never drop to a ragged second line;
+     long labels wrap INSIDE their button instead. */
+  .mktrow{display:grid;grid-template-columns:96px minmax(0,1fr);gap:5px;margin-top:5px;align-items:stretch}
+  .mktctl{display:flex;align-items:center;gap:3px;font-size:12px;color:var(--muted);white-space:nowrap;min-width:0}
+  .mktctl select{flex:1;min-width:0;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 2px;font-size:12px;font-family:'Sora',sans-serif}
+  .mktctl input{width:27px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 1px;font-size:13px;text-align:center;font-family:'Sora',sans-serif;-moz-appearance:textfield}
+  .mktctl input::-webkit-outer-spin-button,.mktctl input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .mktbtns{display:flex;gap:5px;min-width:0;align-items:stretch}
+  .mktbtns .betodd{flex:1;min-width:0;padding:5px 4px;font-size:11.5px;line-height:1.3;white-space:normal}
   .betodd b{color:var(--gold)}
   .betodd.on{border-color:var(--gold);background:#13301c}
   /* Bet confirmation bar: floats pinned just above the bottom of the screen while its real slot is below the
