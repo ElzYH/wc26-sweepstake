@@ -78,11 +78,17 @@ ck("the hc leg is struck at the live hc_odds price with its line stored",
 sel_cs = {"match": dict(FUTURE, home="Japan", away="Chile"), "selection": "2-1", "market": "cs", "comp_home": 60, "comp_away": 60}
 ok_cs, w_cs = W.place_acca([], "Erol", [sel_cs, sel_res], 5, 100, now=NOW)
 ck("a cs leg on a different game places too", ok_cs and any(l.get("market") == "cs" for l in (w_cs.get("legs") or [])), w_cs)
-ok_sg, msg_sg = W.place_acca([], "Erol",
-                             [sel_hc, {"match": FUTURE, "selection": "OVER", "market": "ou", "line": 2.5,
-                                       "comp_home": CH, "comp_away": CA}], 5, 100, now=NOW)
-ck("two legs on the SAME game are still rejected (the exploit gate)", not ok_sg, msg_sg if ok_sg else None)
-ck("the rejection explains correlated same-game combos", (not ok_sg) and "once" in str(msg_sg).lower(), msg_sg)
+ok_sg, w_sg = W.place_acca([], "Erol",
+                           [sel_hc, {"match": FUTURE, "selection": "OVER", "market": "ou", "line": 2.5,
+                                     "comp_home": CH, "comp_away": CA}], 5, 100, now=NOW)
+ck("two legs on the SAME game now place as a JOINT-priced group", ok_sg and w_sg.get("groups")
+   and any(g.get("sgm") for g in w_sg["groups"]), w_sg)
+if ok_sg:
+    _naive = 1.0
+    for _l in w_sg["legs"]:
+        _naive *= 1 + _l["num"] / _l["den"]
+    ck("the correlated pair pays LESS than the naive product (hc -1.5 and Over 2.5 overlap)",
+       w_sg["decimal"] < _naive - 1e-9, (w_sg["decimal"], _naive))
 ok_bl, msg_bl = W.place_acca([], "Erol", [dict(sel_hc, line=0.5), sel_res], 5, 100, now=NOW)
 ck("an off-ladder hc line in a leg is rejected", not ok_bl, msg_bl if ok_bl else None)
 ok_dr, msg_dr = W.place_acca([], "Erol", [dict(sel_hc, selection="DRAW"), sel_res], 5, 100, now=NOW)

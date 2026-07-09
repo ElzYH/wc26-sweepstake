@@ -209,7 +209,7 @@ ck("1-leg 'acca' falls back to a normal single", ok and not res.get("legs"), res
 (ok, res), w = acca([])
 ck("empty acca rejected", not ok, res)
 (ok, res), w = acca([("m1", "HOME", STRONG, WEAK, "GROUP_STAGE"), ("m1", "AWAY", WEAK, STRONG, "GROUP_STAGE")])
-ck("same game twice in one acca rejected (one leg per game — result+goals are correlated)", not ok and "accumulator once" in res, res)
+ck("HOME + AWAY on one game in an acca is refused (the joint is impossible)", not ok and "can't all win" in res, res)
 big = [("m%d" % i, "HOME", STRONG, WEAK, "GROUP_STAGE") for i in range(W.MAX_ACCA_LEGS + 1)]
 (ok, res), w = acca(big)
 ck("over max legs rejected", not ok, res)

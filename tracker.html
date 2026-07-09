@@ -346,7 +346,21 @@
     .wcard .sc{font-size:11px}
     .lmatch{font-size:13px}
   }
-</style>
+
+  .msopen{cursor:pointer}
+  #matchSheet{position:fixed;inset:0;z-index:120;display:none;background:rgba(4,14,9,.72);backdrop-filter:blur(3px)}
+  #matchSheet.on{display:block}
+  .mshWrap{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:18px 10px calc(30px + env(safe-area-inset-bottom,0px))}
+  .mshCard{max-width:720px;margin:0 auto;background:var(--bg,#07130c);border:1px solid var(--line);border-radius:16px;padding:16px 14px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+  .mshHead{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;text-align:center;margin:8px 0 4px}
+  .mshHead .t{font-family:'Sora',sans-serif;font-weight:700;font-size:16px}
+  .mshHead .sc{font-family:'Sora',sans-serif;font-weight:800;font-size:26px;color:var(--gold)}
+  .mshSec{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
+  .mshSec>b{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .mshRow{display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:3px 0}
+  .mshClose{position:sticky;top:0;float:right;background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:6px 12px;cursor:pointer;font-family:'Sora',sans-serif}
+
+  </style>
 </head>
 <body>
 <div class="wrap">
@@ -673,9 +687,20 @@ function ouRowHTML(m){
 }
 const HCLINE={};            // per-match selected handicap HOME line (matchId -> '-1.5'); the dropdown sets it
 function fmtHc(v){ v=Number(v); return (v>0?'+':'')+v; }   // signed half-line label: -1.5 / +1.5
-function hcLineFor(mid,odds){ let ln=HCLINE[mid]||'-1.5';   // default to the classic favourite line
-  if(odds&&!odds[ln]){ const ks=Object.keys(odds).sort((a,b)=>Math.abs(parseFloat(a))-Math.abs(parseFloat(b))||parseFloat(a)-parseFloat(b)); ln=ks[0]||ln; }  // picked line not offered -> tightest available
-  return ln; }
+function hcLineFor(mid,odds){
+  const pick=HCLINE[mid];
+  if(pick&&odds&&odds[pick]) return pick;                       // the user's own choice always wins
+  if(!odds) return '-1.5';
+  // default: the TWO-SIDED line with the most balanced prices — for a home favourite that's -1.5, for an
+  // away favourite it's +1.5, never a lone 300/1 long shot (the old fixed '-1.5' default did exactly that)
+  const two=Object.keys(odds).filter(k=>odds[k].HOME&&odds[k].AWAY);
+  if(two.length){
+    const bal=k=>Math.abs((1/(odds[k].HOME.num/odds[k].HOME.den+1))-(1/(odds[k].AWAY.num/odds[k].AWAY.den+1)));
+    return two.sort((a,b)=>bal(a)-bal(b)||Math.abs(parseFloat(a))-Math.abs(parseFloat(b)))[0];
+  }
+  const ks=Object.keys(odds).sort((a,b)=>Math.abs(parseFloat(a))-Math.abs(parseFloat(b))||parseFloat(a)-parseFloat(b));
+  return ks[0]||'-1.5';
+}
 function hcBtnsHTML(m){   // the two handicap price buttons for the CURRENT line — rebuilt in place on a line change
   const ln=hcLineFor(m.matchId,m.hcOdds), leg=(m.hcOdds||{})[ln];
   if(!leg) return '';
@@ -744,15 +769,17 @@ const MOVPICK={};            // per-match selected method-of-victory outcome
 function movLabel(m,sel){ const t=sel.indexOf('HOME')===0?m.home:m.away;
   const how={REG:"in 90'",ET:'in extra time',PENS:'on pens'}[sel.split('_')[1]]||'';
   return esc(t)+' '+how; }
+function movDefault(m){ const b=m.movOdds||{}; let best=null;      // default to the FAVOURITE in 90'
+  Object.keys(b).forEach(k=>{ if(!best||b[k].decimal<b[best].decimal) best=k; }); return best||'HOME_REG'; }
 function movBtnHTML(m){
-  const sel=MOVPICK[m.matchId]&&(m.movOdds||{})[MOVPICK[m.matchId]]?MOVPICK[m.matchId]:'HOME_REG';
+  const sel=MOVPICK[m.matchId]&&(m.movOdds||{})[MOVPICK[m.matchId]]?MOVPICK[m.matchId]:movDefault(m);
   const o=(m.movOdds||{})[sel]; if(!o) return '';
   const on=ACCAMODE?ACCA.some(l=>samePick(l,m.matchId,sel,'mov',null)):samePick(BETPICK,m.matchId,sel,'mov',null);
   return '<button class="betodd'+(on?' on':'')+'" data-mid="'+m.matchId+'" data-sel="'+sel+'" data-market="mov" data-frac="'+o.frac+'">'+movLabel(m,sel)+' <b>'+o.frac+'</b></button>';
 }
 function movRowHTML(m){
   if(!m.movOdds||!Object.keys(m.movOdds).length) return '';
-  const sel=MOVPICK[m.matchId]&&m.movOdds[MOVPICK[m.matchId]]?MOVPICK[m.matchId]:'HOME_REG';
+  const sel=MOVPICK[m.matchId]&&m.movOdds[MOVPICK[m.matchId]]?MOVPICK[m.matchId]:movDefault(m);
   const order=['HOME_REG','HOME_ET','HOME_PENS','AWAY_REG','AWAY_ET','AWAY_PENS'];
   const opts=order.filter(k=>m.movOdds[k]).map(k=>'<option value="'+k+'"'+(k===sel?' selected':'')+'>'+movLabel(m,k)+'</option>').join('');
   return '<div class="mktrow">'
@@ -865,13 +892,14 @@ function renderBets(){
     const homeAway='<div style="display:flex;gap:6px">'+mk('HOME',m.home)+mk('AWAY',m.away)+'</div>';   // home left, away right
     const drawRow=(!ko && m.odds.DRAW)?('<div style="display:flex;margin-top:6px">'+mk('DRAW','Draw')+'</div>'):'';   // draw below, full width
     const ouRow=ouRowHTML(m)+bttsRowHTML(m)+hcRowHTML(m)+cardsRowHTML(m)+movRowHTML(m)+csRowHTML(m);   // all markets, all acca-able, one leg per game
-    return `<div class="mdcard"><div class="mdmeta">${ko?(STAGE_LABEL[m.stage]||m.stage):'Group '+(m.group||'?')} · ${esc(when)}</div>
+    return `<div class="mdcard"><div class="mdmeta msopen" data-mid="${esc(m.matchId)}" style="cursor:pointer" title="Tap for the full match sheet">${ko?(STAGE_LABEL[m.stage]||m.stage):'Group '+(m.group||'?')} · ${esc(when)} <span style="float:right;opacity:.7">ⓘ</span></div>
       <div class="mdteams" style="margin-bottom:6px"><span>${flag(m.home)}${esc(m.home)}</span><span style="color:var(--muted)">v</span><span class="mdr">${flag(m.away)}${esc(m.away)}</span></div>
       <div class="betodds" style="display:block">${homeAway}${drawRow}${ouRow}</div></div>`;
   }).join('')+'</div>';
   if(ACCAMODE && ACCA.length){
     let dec=1; ACCA.forEach(l=>{const [n,d2]=l.frac.split('/').map(Number); dec*=(1+n/d2);});
     const accaCap=Math.min(headroom, budgetLeft, Math.min.apply(null,ACCA.map(l=>{const f=fx.find(m=>m.matchId===l.matchId); return f&&f.maxStake?f.maxStake:caps.max_stake;})));
+    const SGMIX=new Set(ACCA.map(l=>l.matchId)).size<ACCA.length;      // any same-game group in the slip?
     h+='<div class="betcta" style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
       +'<div style="font-weight:600;margin-bottom:8px">🎰 '+ACCA.length+'-fold accumulator <span style="color:var(--muted);font-weight:400">· max stake '+accaCap+'</span></div>'
       +ACCA.map((l,i)=>{const fxp=fx.find(m=>m.matchId===l.matchId); const mk=l.market||'result';
@@ -884,8 +912,10 @@ function renderBets(){
                  :(l.sel==='HOME'?(fxp?fxp.home:'home'):(l.sel==='AWAY'?(fxp?fxp.away:'away'):'Draw')))))));
         return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>'+esc(who)+' <span style="color:var(--gold)">'+l.frac+'</span></span><button class="accarm" data-i="'+i+'" style="background:none;border:none;color:#ff7a7a;cursor:pointer">✕</button></div>';}).join('')
       +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;border-top:1px solid var(--line);padding-top:8px"><input id="accaStake" type="number" min="'+caps.min_stake+'" max="'+Math.min(accaCap,avail)+'" step="0.01" placeholder="stake (pts)" style="width:120px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:16px">'
-      +'<span id="accaReturn" style="color:var(--muted);font-size:13px">combined ~'+(Math.round(dec*100)/100)+'×</span>'
-      +'<button id="accaPlace" class="mini cta">Place acca</button></div><div style="color:var(--muted);font-size:11.5px;margin-top:6px">Once placed, this acca is final — it can\'t be cancelled.</div></div>';
+      +'<span id="accaReturn" style="color:var(--muted);font-size:13px">'+(SGMIX?'≈ up to ':'combined ~')+(Math.round(dec*100)/100)+'×</span>'
+      +'<button id="accaPlace" class="mini cta">Place acca</button></div>'
+      +(SGMIX?'<div style="color:var(--gold);font-size:11.5px;margin-top:6px">🔗 Same-game picks are priced <b>together</b> when you place — correlated combos pay less than the straight multiply (the exact odds show on your bet card).</div>':'')
+      +'<div style="color:var(--muted);font-size:11.5px;margin-top:6px">Once placed, this acca is final — it can\'t be cancelled.</div></div>';
   }
   if(!ACCAMODE && BETPICK){
     const fxp=fx.find(m=>m.matchId===BETPICK.matchId);
@@ -1007,13 +1037,13 @@ function renderBets(){
     const market=b.dataset.market||'result', line=(b.dataset.line!=null && b.dataset.line!=='')?parseFloat(b.dataset.line):null;
     const pick=()=>({matchId:mid,sel:sel,frac:frac,market:market,line:line});
     if(ACCAMODE){
-      const ix=ACCA.findIndex(l=>l.matchId===mid);                     // ONE leg per game (any market) — never two correlated picks on a match
-      if(ix>=0){
-        if(samePick(ACCA[ix],mid,sel,market,line)) ACCA.splice(ix,1);   // re-tap the exact leg -> remove it
-        else ACCA[ix]=pick();                                           // same game, different pick/market -> switch that game's leg
-      } else {
+      const exact=ACCA.findIndex(l=>samePick(l,mid,sel,market,line));
+      const sameMkt=ACCA.findIndex(l=>l.matchId===mid&&(l.market||'result')===market);
+      if(exact>=0){ ACCA.splice(exact,1); }                             // re-tap the exact leg -> remove it
+      else if(sameMkt>=0){ ACCA[sameMkt]=pick(); }                      // same game+market -> switch that pick
+      else {
         if(ACCA.length>=maxLegs){ BETMSG='An accumulator can have at most '+maxLegs+' legs.'; renderBets(); return; }
-        ACCA.push(pick());                                              // a new game -> add a leg
+        ACCA.push(pick());                                              // new game OR a new market on the same game (priced jointly)
       }
       if(ACCA.length===1){ BETPICK=ACCA[0]; ACCA=[]; ACCAMODE=false; }   // down to one -> it's just a single again
       else if(ACCA.length===0){ ACCAMODE=false; }                       // emptied -> nothing selected
@@ -1021,11 +1051,11 @@ function renderBets(){
     } else {
       if(samePick(BETPICK,mid,sel,market,line)){
         BETPICK=null;                                                   // re-tap the single -> remove it
-      } else if(BETPICK && BETPICK.matchId===mid){
-        BETPICK=pick();                                                 // same game (any market/outcome) -> switch the single (no same-game combos)
+      } else if(BETPICK && BETPICK.matchId===mid && (BETPICK.market||'result')===market){
+        BETPICK=pick();                                                 // same game + same market -> switch the pick
       } else if(BETPICK && accasOn){
-        ACCA=[BETPICK,pick()];                                          // a DIFFERENT game -> auto-accumulator
-        ACCAMODE=true; BETPICK=null;
+        ACCA=[BETPICK,pick()];                                          // another market (same OR different game) -> accumulator
+        ACCAMODE=true; BETPICK=null;                                    //   same-game combos are priced JOINTLY on Place
       } else {
         BETPICK=pick();                                                 // first pick (or accas off -> just switch)
       }
@@ -2203,7 +2233,7 @@ function renderOverview(d){
         const where=m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):('Group '+(m.group||'?'));
         const kn=koNote(m);
         return `<div class="mdcard${liveN?' mdlive':''}${fin?' mdfin':''}"><div class="mdmeta">${where} · ${tag}${kn?' · '+kn:''}</div>
-          <div class="mdteams"><span>${flag(m.home)}${esc(m.home)}${own(m.homeOwner)}</span><span class="mdsc">${sc}</span><span class="mdr">${flag(m.away)}${esc(m.away)}${own(m.awayOwner)}</span></div></div>`;
+          <div class="mdteams msopen" data-mid="${esc(m.matchId||'')}" title="Tap for the full match sheet"><span>${flag(m.home)}${esc(m.home)}${own(m.homeOwner)}</span><span class="mdsc">${sc}</span><span class="mdr">${flag(m.away)}${esc(m.away)}${own(m.awayOwner)}</span></div></div>`;
       }).join('')+'</div></div>';
     }
   }
@@ -3502,6 +3532,105 @@ _scheduleRefresh();
 document.getElementById('auto').innerHTML='<span class="dot-live"></span>auto-refresh on';
 
 window.addEventListener('pageshow',function(e){ if(e.persisted) location.reload(); });
+
+// ===================== MATCH SHEET: the full story of one game =====================
+function teamGames(team){ return (DATA.fixtures||[]).filter(f=>(f.home===team||f.away===team)); }
+function teamForm(team){   // last 5 finished: W/D/L from THIS team's perspective (shootout counts as W/L)
+  return teamGames(team).filter(f=>f.status==='FINISHED'||f.status==='AWARDED')
+    .sort((x,y)=>new Date(x.utcDate)-new Date(y.utcDate)).slice(-5).map(f=>{
+      const home=f.home===team, w=f.winner;
+      if(w==='DRAW'||(!w&&f.homeScore===f.awayScore)) return 'D';
+      return (w==='HOME')===home?'W':'L'; });
+}
+function teamStats(team){
+  const gs=teamGames(team).filter(f=>f.status==='FINISHED'||f.status==='AWARDED');
+  let w=0,d=0,l=0,gf=0,ga=0,cs=0,cards=0,hasCards=false;
+  gs.forEach(f=>{ const home=f.home===team;
+    const f_=home?f.homeScore:f.awayScore, a_=home?f.awayScore:f.homeScore;
+    if(f_!=null&&a_!=null){ gf+=f_; ga+=a_; if(a_===0)cs++; }
+    const wn=f.winner; if(wn==='DRAW')d++; else if(wn){ (wn==='HOME')===home?w++:l++; }
+    const c=home?f.cardsHome:f.cardsAway; if(c!=null){ cards+=c; hasCards=true; } });
+  return {p:gs.length,w,d,l,gf,ga,cs,cards:hasCards?cards:null};
+}
+function formHTML(fm){ return fm.map(r=>'<span style="display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;border-radius:5px;font-size:11px;font-weight:700;margin-left:3px;background:'+(r==='W'?'#1d5c33':(r==='L'?'#5c1d1d':'#4a4a22'))+'">'+r+'</span>').join(''); }
+function bestOddsLine(m){
+  const rows=[];
+  if(m.odds){ const o=m.odds; rows.push(['Result', [esc(m.home)+' '+o.HOME.frac, o.DRAW?('Draw '+o.DRAW.frac):null, esc(m.away)+' '+o.AWAY.frac].filter(Boolean).join(' · ')]); }
+  if(m.ouOdds){ const ln=ouLineFor(m.matchId,m.ouOdds), g=m.ouOdds[ln]; if(g) rows.push(['Goals '+ln, 'Over '+g.OVER.frac+' · Under '+g.UNDER.frac]); }
+  if(m.bttsOdds&&m.bttsOdds.YES) rows.push(['BTTS', 'Yes '+m.bttsOdds.YES.frac+' · No '+m.bttsOdds.NO.frac]);
+  if(m.hcOdds){ const ln=hcLineFor(m.matchId,m.hcOdds), g=m.hcOdds[ln]; if(g) rows.push(['Handicap '+fmtHc(ln),
+    [(g.HOME?esc(m.home)+' '+fmtHc(ln)+' '+g.HOME.frac:null),(g.AWAY?esc(m.away)+' '+fmtHc(-parseFloat(ln))+' '+g.AWAY.frac:null)].filter(Boolean).join(' · ')]); }
+  if(m.cardsOdds&&m.cardsOdds['4.5']) rows.push(['Cards 4.5', 'Over '+m.cardsOdds['4.5'].OVER.frac+' · Under '+m.cardsOdds['4.5'].UNDER.frac]);
+  if(m.movOdds){ const k=movDefault(m); if(k&&m.movOdds[k]) rows.push(['Method', movLabel(m,k)+' '+m.movOdds[k].frac]); }
+  return rows;
+}
+function openMatchSheet(mid){
+  const m=(DATA.fixtures||[]).find(f=>f.matchId===mid); if(!m) return;
+  const live=m.status==='IN_PLAY'||m.status==='PAUSED';
+  const done=m.status==='FINISHED'||m.status==='AWARDED';
+  const sc=(m.homeScore!=null&&m.awayScore!=null)?(m.homeScore+'–'+m.awayScore):'v';
+  let h='<button class="mshClose" id="mshClose">✕ close</button>';
+  h+='<div style="font-size:12px;color:var(--muted)">'+esc(m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):('Group '+(m.group||'?')))+' · '+(live?('<span class="livedot"></span>'+liveClock(m)):(done?'Full-time':fmtTime(m.utcDate)))+'</div>';
+  h+='<div class="mshHead"><span class="t">'+flag(m.home)+esc(m.home)+'<div style="font-size:11px;color:var(--muted)">'+esc(m.homeOwner||'pool')+'</div></span><span class="sc">'+sc+'</span><span class="t">'+flag(m.away)+esc(m.away)+'<div style="font-size:11px;color:var(--muted)">'+esc(m.awayOwner||'pool')+'</div></span></div>';
+  const kn=koNote(m); if(kn) h+='<div style="text-align:center;font-size:12px;color:var(--gold)">'+esc(kn)+'</div>';
+  if(done&&m.winner&&m.winner!=='DRAW') h+='<div style="text-align:center;font-size:13px;margin-top:2px">🏆 <b>'+esc(m.winner==='HOME'?m.home:m.away)+'</b> '+(m.shootout?'win on penalties':(m.aet?'win after extra time':'win'))+'</div>';
+  // timeline (scorers) + cards
+  if(Array.isArray(m.scorers)&&m.scorers.length){
+    h+='<div class="mshSec"><b>Timeline</b>'+m.scorers.slice().sort((x,y)=>(x.minute||0)-(y.minute||0)).map(g=>
+      '<div class="mshRow"><span>'+(g.minute!=null?esc(String(g.minute))+"'":'')+' ⚽ '+esc(g.player)+(g.type==='PENALTY'?' (pen)':(g.type==='OWN'?' (og)':''))+'</span><span style="color:var(--muted)">'+esc(g.team==='HOME'?m.home:m.away)+'</span></div>').join('')+'</div>';
+  }
+  if(m.cardsHome!=null||m.cardsAway!=null){
+    h+='<div class="mshSec"><b>Cards (90\')</b><div class="mshRow"><span>'+esc(m.home)+' '+(m.cardsHome??0)+(m.redHome?' ('+m.redHome+'🟥)':'')+'</span><span>'+esc(m.away)+' '+(m.cardsAway??0)+(m.redAway?' ('+m.redAway+'🟥)':'')+'</span></div></div>';
+  }
+  // lineups
+  if((m.homeLineup&&m.homeLineup.length)||(m.awayLineup&&m.awayLineup.length)){
+    const xi=(t,lu)=>'<div style="flex:1;min-width:140px"><b style="font-size:12px">'+esc(t)+'</b>'+(lu||[]).map(p=>'<div style="font-size:11.5px;color:var(--muted)">'+(p.shirtNumber!=null?esc(String(p.shirtNumber))+' ':'')+esc(p.name||'')+'</div>').join('')+'</div>';
+    h+='<div class="mshSec"><b>Starting XIs 📋</b><div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px">'+xi(m.home,m.homeLineup)+xi(m.away,m.awayLineup)+'</div></div>';
+  }
+  // odds (upcoming/live) or a pointer to bet
+  const bettable=!done&&(m.odds||m.ouOdds);
+  if(bettable){
+    h+='<div class="mshSec"><b>Odds</b>'+bestOddsLine(m).map(r=>'<div class="mshRow"><span style="color:var(--muted)">'+esc(r[0])+'</span><span>'+r[1]+'</span></div>').join('')
+      +'<div style="margin-top:6px"><button class="mini cta" id="mshBet">Bet on this game →</button></div></div>';
+  }
+  // points won from this game (live or final)
+  if(m.homeScore!=null&&m.awayScore!=null&&(live||done)){
+    const rows=[];
+    [[m.homeOwner,m.homeScore,m.awayScore,m.home],[m.awayOwner,m.awayScore,m.homeScore,m.away]].forEach(([ow,f_,a_,tm])=>{
+      if(!ow||ow==='—'||ow==='-') return; const b=liveParts(f_,a_);
+      rows.push('<div class="mshRow"><span><b>'+esc(ow)+'</b> · '+esc(tm)+'</span><span>'+(b.parts.length?b.parts.map(p=>esc(p[0])+' +'+p[1]).join(' · '):'nothing yet')+' = <b>+'+b.pts+'</b></span></div>');
+    });
+    if(rows.length) h+='<div class="mshSec"><b>Points '+(done?'won':'as it stands')+'</b>'+rows.join('')+'</div>';
+  }
+  // bets on this game: open + settled ("bet winners")
+  const gb=betsOnMatch(m);
+  const open_=gb.filter(w=>w.status==='pending'), settled=gb.filter(w=>w.status==='won'||w.status==='lost'||w.status==='void');
+  if(open_.length) h+='<div class="mshSec"><b>Open bets on this game</b>'+open_.map(w=>'<div class="mshRow"><span>'+esc(w.player)+' · '+esc(w.legs?betLabel(w).split(' → ')[0]:(w.stake+' on '+pickName(w)+' @ '+w.frac))+'</span><span style="color:var(--muted)">'+(w.legs?'acca':'open')+'</span></div>').join('')+'</div>';
+  if(settled.length) h+='<div class="mshSec"><b>Bet winners &amp; losers here</b>'+settled.map(w=>{
+      const em=w.status==='won'?'✅':(w.status==='void'?'➖':'❌');
+      const amt=w.status==='won'?('+'+(Math.round(((w.return||0)-(w.stake||0))*100)/100)):(w.status==='void'?'stake back':('−'+w.stake));
+      return '<div class="mshRow"><span>'+em+' '+esc(w.player)+' · '+esc(w.legs?betLabel(w).split(' → ')[0]:(w.stake+' on '+pickName(w)+' @ '+w.frac))+'</span><span>'+amt+'</span></div>';}).join('')+'</div>';
+  // form + tournament stats
+  const stH=teamStats(m.home), stA=teamStats(m.away);
+  h+='<div class="mshSec"><b>World Cup so far</b>'
+    +'<div class="mshRow"><span>'+esc(m.home)+' '+formHTML(teamForm(m.home))+'</span><span>'+esc(m.away)+' '+formHTML(teamForm(m.away))+'</span></div>'
+    +'<div class="mshRow"><span style="color:var(--muted)">P'+stH.p+' · '+stH.w+'-'+stH.d+'-'+stH.l+' · GF '+stH.gf+' GA '+stH.ga+' · CS '+stH.cs+(stH.cards!=null?' · 🟨 '+stH.cards:'')+'</span>'
+    +'<span style="color:var(--muted)">P'+stA.p+' · '+stA.w+'-'+stA.d+'-'+stA.l+' · GF '+stA.gf+' GA '+stA.ga+' · CS '+stA.cs+(stA.cards!=null?' · 🟨 '+stA.cards:'')+'</span></div></div>';
+  document.getElementById('mshCard').innerHTML=h;
+  const sheet=document.getElementById('matchSheet'); sheet.classList.add('on');
+  document.getElementById('mshClose').onclick=closeMatchSheet;
+  const bb=document.getElementById('mshBet'); if(bb) bb.onclick=()=>{ closeMatchSheet(); const tb=document.querySelector('.tab[data-s="bets"]'); if(tb) tb.click(); };
+}
+function closeMatchSheet(){ document.getElementById('matchSheet').classList.remove('on'); }
+document.addEventListener('click', e=>{
+  const sheet=document.getElementById('matchSheet');
+  if(sheet&&sheet.classList.contains('on')&&e.target===sheet.querySelector('.mshWrap')) return closeMatchSheet();
+  const t=e.target.closest&&e.target.closest('.msopen');
+  if(t&&t.dataset.mid){ openMatchSheet(t.dataset.mid); }
+});
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeMatchSheet(); });
+
 </script>
+<div id="matchSheet"><div class="mshWrap"><div class="mshCard" id="mshCard"></div></div></div>
 </body>
 </html>

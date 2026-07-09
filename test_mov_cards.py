@@ -163,7 +163,8 @@ okx, msgx = W.place_acca([], "Erol",
                          [{"match": KO, "selection": "HOME_REG", "comp_home": 70, "comp_away": 40, "market": "mov"},
                           {"match": KO, "selection": "OVER", "comp_home": 70, "comp_away": 40, "market": "cards", "line": 4.5}],
                          5, 100, now=NOW)
-ck("same-game mov+cards combo still blocked", not okx, msgx if okx else None)
+ck("a MoV leg in a same-game group is still blocked (the grid can't split 90 vs ET)",
+   not okx and "method" in str(msgx).lower(), msgx)
 okg, msgg = W.place_acca([], "Erol",
                          [{"match": GRP, "selection": "HOME_REG", "comp_home": 70, "comp_away": 40, "market": "mov"},
                           {"match": KO2, "selection": "HOME", "comp_home": 70, "comp_away": 40}],

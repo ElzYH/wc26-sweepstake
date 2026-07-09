@@ -1,12 +1,12 @@
 diff --git a/BETTING_SETUP.md b/BETTING_SETUP.md
-index a4db098..aabf28a 100644
+index a4db098..fd9d172 100644
 --- a/BETTING_SETUP.md
 +++ b/BETTING_SETUP.md
 @@ -202,9 +202,19 @@ You link your Discord account once, then you never type your code in chat:
  - **Open-stake limit:** the total you have on open bets at once can't beat the current max — it frees up as bets settle.
  - Up to **8** open bets. **No cap on winnings by default** — the organiser can optionally set a max return per bet.
  - **Accumulator:** up to **3 legs by default** (the organiser can change this); all must win, and **if one leg loses the whole acca pays nothing**; a postponed leg drops out and it pays on the rest.
-+- **Handicap bets:** back a team with a goal start or deficit (−1.5, +1.5, −2.5, +2.5 where offered). Settles on the **90'+extra-time score — penalties don't count** (same basis as Over/Under and exact score, *not* the "to advance" market: a 1–1 game decided on pens means −1.5 **loses** and +1.5 **wins** regardless of the shootout). Half-lines only, so a handicap bet can never push. Handicap and exact-score picks can now go in **accumulators** too — any mix of markets, but only **one pick per game** (same-game combos are correlated and stay blocked). Web only for now (not on Discord `/bet`).
++- **Handicap bets:** back a team with a goal start or deficit (−1.5, +1.5, −2.5, +2.5 where offered). Settles on the **90'+extra-time score — penalties don't count** (same basis as Over/Under and exact score, *not* the "to advance" market: a 1–1 game decided on pens means −1.5 **loses** and +1.5 **wins** regardless of the shootout). Half-lines only, so a handicap bet can never push. Handicap and exact-score picks can go in **accumulators** too — any mix of markets. **Same-game combos are allowed** and priced off the **joint probability** of all your picks landing together, never the straight multiply (correlated picks — say a team −1.5 *and* Over 2.5 — overlap, so the honest combined price pays less than multiplying the two; the slip flags it and your bet card shows the exact odds). Impossible combos are refused, the exact same pick can't go in twice, and method-of-victory only combines across games. Web only for now (not on Discord `/bet`).
 +- **Both teams to score:** Yes/No on both sides finding the net (90'+extra time). Settles on the plain score, so it works on **every feed tier**.
 +- **Method of victory (knockouts):** back a side to go through **in 90'**, **in extra time**, or **on penalties** — six prices, settled from the official match data. Acca-able across games like everything else.
 +- **Cards (Over/Under):** total bookings in **90 minutes only** (every card counts 1 — a straight red, a yellow, a second yellow each count once; extra-time bookings don't). Needs the deep-data feed: if a game's cards data never arrives, the bet **pushes and your stake comes back** automatically. On a feed plan with no bookings at all the cards market simply doesn't appear (auto-detected; `cards_market` in config.json forces it on/off).
@@ -23,10 +23,10 @@ index a4db098..aabf28a 100644
  
  ## 4) When something goes wrong (client side)
 diff --git a/check.sh b/check.sh
-index 7298126..e97d523 100644
+index 7298126..f9ec83c 100644
 --- a/check.sh
 +++ b/check.sh
-@@ -89,6 +89,30 @@ if python3 test_ou_settle.py >/dev/null; then echo "  ok"; else echo "  FAIL"; p
+@@ -89,6 +89,33 @@ if python3 test_ou_settle.py >/dev/null; then echo "  ok"; else echo "  FAIL"; p
  say "Over/Under accumulators (O/U legs, mixed with 1X2, combined odds, partial/void/losing-leg settle; 1X2 accas unchanged)"
  if python3 test_ou_acca.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_ou_acca.py | tail -24; FAIL=1; fi
  
@@ -45,6 +45,9 @@ index 7298126..e97d523 100644
 +say "Method of victory + O/U cards (pricing floors vs the KO book, KO-only gate, REG/ET/PENS + 90'-cards settlement, no-data void grace, feed normaliser)"
 +if python3 test_mov_cards.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_mov_cards.py | tail -24; FAIL=1; fi
 +
++say "Same-game multis (joint pricing vs an independent reference, 1500-combo fuzz, correlation farms killed, group settlement/void semantics)"
++if python3 qa_sgm.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_sgm.py | tail -24; FAIL=1; fi
++
 +say "BTTS + feed-tier degradation (pricing/settlement/accas, free-tier proofs: MoV push, cards auto-gate, scorers/lineups normaliser)"
 +if python3 test_btts_feed.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_btts_feed.py | tail -24; FAIL=1; fi
 +
@@ -57,11 +60,37 @@ index 7298126..e97d523 100644
  say "Betting QA (void lifecycle, mid-game/last-min void, accas, sequencing, free-points)"
  if python3 qa_betting.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_betting.py | tail -20; FAIL=1; fi
  
+diff --git a/qa_betting_deep.py b/qa_betting_deep.py
+index 853f22b..41237ca 100644
+--- a/qa_betting_deep.py
++++ b/qa_betting_deep.py
+@@ -209,7 +209,7 @@ ck("1-leg 'acca' falls back to a normal single", ok and not res.get("legs"), res
+ (ok, res), w = acca([])
+ ck("empty acca rejected", not ok, res)
+ (ok, res), w = acca([("m1", "HOME", STRONG, WEAK, "GROUP_STAGE"), ("m1", "AWAY", WEAK, STRONG, "GROUP_STAGE")])
+-ck("same game twice in one acca rejected (one leg per game — result+goals are correlated)", not ok and "accumulator once" in res, res)
++ck("HOME + AWAY on one game in an acca is refused (the joint is impossible)", not ok and "can't all win" in res, res)
+ big = [("m%d" % i, "HOME", STRONG, WEAK, "GROUP_STAGE") for i in range(W.MAX_ACCA_LEGS + 1)]
+ (ok, res), w = acca(big)
+ ck("over max legs rejected", not ok, res)
 diff --git a/qa_frontend.py b/qa_frontend.py
-index d64369a..182f653 100644
+index d64369a..1f47045 100644
 --- a/qa_frontend.py
 +++ b/qa_frontend.py
-@@ -80,8 +80,10 @@ ck("the old 'other market on this game -> auto-accumulator' path is gone", "the
+@@ -73,15 +73,20 @@ ck("O/U buttons carry market + line data attributes", 'data-market="ou"' in HTML
+ ck("the line dropdown defaults to 2.5 (nearest offered as fallback)", "OULINE[mid]||'2.5'" in HTML, None)
+ ck("picks compare on matchId+market+sel+line (samePick)", "function samePick(p, mid, sel, market, line)" in HTML, None)
+ ck("placeBet sends market + line", "market:BETPICK.market||'result',line:BETPICK.line" in HTML, None)
+-# one leg per game: a result + a goals bet on the SAME match are correlated, so the builder must never combine them
+-ck("acca builder keys legs by matchId only (one leg per game)", "ACCA.findIndex(l=>l.matchId===mid)" in HTML and "ACCA.findIndex(l=>l.matchId===mid && (l.market" not in HTML, None)
+-ck("tapping another market on the same game switches the single (no same-game combo)", "BETPICK && BETPICK.matchId===mid)" in HTML or "BETPICK.matchId===mid){" in HTML, None)
++# same-game combos are now allowed and priced JOINTLY server-side; within one market a tap still switches
++ck("acca builder allows same-game legs but switches within one market (SGM semantics)",
++   "ACCA.findIndex(l=>l.matchId===mid&&(l.market||'result')===market)" in HTML, None)
++ck("tapping another market on the same game builds a same-game acca, flagged as jointly priced",
++   "BETPICK && BETPICK.matchId===mid && (BETPICK.market||'result')===market" in HTML and "priced JOINTLY on Place" in HTML, None)
++ck("the slip warns that same-game picks are priced together", "priced <b>together</b>" in HTML and "≈ up to " in HTML, None)
+ ck("the old 'other market on this game -> auto-accumulator' path is gone", "the other market on this game -> auto-accumulator" not in HTML, None)
  ck("placeAcca sends per-leg market + line", "market:l.market||'result',line:l.line" in HTML, None)
  # overflow fix: the O/U row must be allowed to wrap, and the two buttons must sit in ONE min-width group
  # so on a narrow (multi-column desktop) card the button group drops to a second line instead of spilling out.
@@ -74,7 +103,7 @@ index d64369a..182f653 100644
  ck("the server attaches O/U prices to fixtures", "f[\"ouOdds\"] = wager.goals_odds(ch, ca)" in open(os.path.join(REPO, "scoring.py")).read(), None)
  try:
      import subprocess as _sp6
-@@ -92,7 +94,7 @@ try:
+@@ -92,7 +97,7 @@ try:
              elif HTML[j] == "}":
                  depth -= 1
                  if depth == 0: return HTML[s:j + 1]
@@ -83,7 +112,7 @@ index d64369a..182f653 100644
      _js = ("const esc=s=>String(s);const OULINE={};let ACCAMODE=false,ACCA=[],BETPICK=null;\n" + _fns + """
      const m={matchId:'M1',home:'Brazil',away:'Serbia',ouOdds:{'2.5':{OVER:{frac:'5/6'},UNDER:{frac:'8/11'}},'3.5':{OVER:{frac:'9/4'},UNDER:{frac:'1/5'}}}};
      const r=ouRowHTML(m);
-@@ -106,6 +108,55 @@ try:
+@@ -106,6 +111,55 @@ try:
  except Exception as _e:
      ck("O/U UI cross-check ran", False, str(_e)[:140])
  
@@ -139,7 +168,7 @@ index d64369a..182f653 100644
  print("\n== bet cards show the score (live + frozen at FT) ==")
  ck("acca legs show the score (live + frozen FT), not just a dot", "FT '+sc+'</span>" in HTML and "🔴 '+sc+'</span>" in HTML, None)
  ck("single bets freeze the final score at FT", "🔴 LIVE '+sc+'</span>" in HTML, None)
-@@ -327,8 +378,8 @@ except Exception as _e:
+@@ -327,8 +381,8 @@ except Exception as _e:
  
  # ---- bet-slip selection model: tap=select, re-tap=remove, 2nd game=auto-acca, down-to-1=single ----
  print("\n== bet-slip selection model (.betodd click) ==")
@@ -283,10 +312,10 @@ index 0000000..cfd7a68
 +print("ALL HANDICAP EXPLOIT CHECKS PASSED")
 diff --git a/qa_hc_http.py b/qa_hc_http.py
 new file mode 100644
-index 0000000..cd08496
+index 0000000..3648f50
 --- /dev/null
 +++ b/qa_hc_http.py
-@@ -0,0 +1,294 @@
+@@ -0,0 +1,304 @@
 +#!/usr/bin/env python3
 +"""Handicap over the wire — boot the REAL server, bet real HTTP, settle through the real poll.
 +Locks in: the tracker payload carries margined hcOdds for a bettable fixture; a bet struck via
@@ -439,11 +468,21 @@ index 0000000..cd08496
 +    ck("the acca's hc leg is struck at the served price",
 +       j4.get("ok") and any(l.get("market") == "hc" and l.get("num") == served["num"] and l.get("den") == served["den"]
 +                            for l in (j4.get("wager") or {}).get("legs", [])), j4.get("wager"))
-+    st5, b5 = S.req("POST", "/api/place_acca", {"player": "James", "stake": 3, "pin": "WXYZ",
++    st5, b5 = S.req("POST", "/api/place_acca", {"player": "Erol", "stake": 1, "pin": "ABCD", "nonce": "sgm1",
 +                                                "legs": [{"matchId": "g1", "selection": "HOME", "market": "hc", "line": float(ln)},
 +                                                         {"matchId": "g1", "selection": "OVER", "market": "ou", "line": 2.5}]})
-+    ck("two acca legs on the SAME game are still rejected over HTTP (the exploit gate)",
-+       json.loads(b5).get("ok") is not True and "once" in json.loads(b5).get("error", "").lower(), b5[:160])
++    j5 = json.loads(b5)
++    _wsg = j5.get("wager") or {}
++    _n = 1.0
++    for _l in _wsg.get("legs", []):
++        _n *= 1 + _l["num"] / _l["den"]
++    ck("a SAME-game hc+OU acca now places over HTTP at a JOINT group price under the naive product",
++       j5.get("ok") and _wsg.get("groups") and _wsg.get("decimal", 99) < _n - 1e-9, b5[:200])
++    st5b, b5b = S.req("POST", "/api/place_acca", {"player": "James", "stake": 1, "pin": "WXYZ", "nonce": "sgm2",
++                                                  "legs": [{"matchId": "g1", "selection": "OVER", "market": "ou", "line": 2.5},
++                                                           {"matchId": "g1", "selection": "UNDER", "market": "ou", "line": 2.5}]})
++    ck("a contradictory same-game combo is rejected over HTTP with the can't-all-win message",
++       json.loads(b5b).get("ok") is not True and "can't all win" in json.loads(b5b).get("error", ""), b5b[:160])
 +
 +    # -------- settle through the real poll --------
 +    S.set_results([match("g1", HOME, AWAY, "FINISHED", hs=3, as_=1), match("g2", OTHERH, OTHERA, "FINISHED", hs=1, as_=0)])
@@ -582,10 +621,10 @@ index 0000000..cd08496
 +    raise SystemExit(1)
 +print("ALL HANDICAP HTTP CHECKS PASSED")
 diff --git a/qa_hedge_arb.py b/qa_hedge_arb.py
-index 2b7500f..e4f443f 100644
+index 2b7500f..71422da 100644
 --- a/qa_hedge_arb.py
 +++ b/qa_hedge_arb.py
-@@ -156,9 +156,12 @@ ok, w = W.place(wl, "Erol", g1cs, "2-1", 5, 1000, 95, 55, now=NOW, market="cs")
+@@ -156,9 +156,16 @@ ok, w = W.place(wl, "Erol", g1cs, "2-1", 5, 1000, 95, 55, now=NOW, market="cs")
  ck("a scoreline places as a single with locked odds", ok and w.get("market") == "cs" and w.get("frac"), w if not ok else None)
  ck("garbage scorelines are rejected", not W.place([], "Erol", g1cs, "12-0", 5, 1000, 95, 55, now=NOW, market="cs")[0]
     and not W.place([], "Erol", g1cs, "2:1", 5, 1000, 95, 55, now=NOW, market="cs")[0], None)
@@ -593,12 +632,233 @@ index 2b7500f..e4f443f 100644
 +ck("a cs leg rides in a CROSS-game accumulator (independent margined events — nothing to dutch)", W.place_acca([], "Erol",
     [{"match": g1cs, "selection": "2-1", "market": "cs", "comp_home": 95, "comp_away": 55},
      {"match": g2, "selection": "HOME", "comp_home": 95, "comp_away": 55}], 5, 1000, now=NOW)[0], None)
-+ck("a cs leg NEVER combines with another pick on the SAME game (the correlated-combo exploit gate)", not W.place_acca([], "Erol",
++_oksg, _wsg = W.place_acca([], "Erol",
 +   [{"match": g1cs, "selection": "2-1", "market": "cs", "comp_home": 95, "comp_away": 55},
-+    {"match": g1cs, "selection": "HOME", "comp_home": 95, "comp_away": 55}], 5, 1000, now=NOW)[0], None)
++    {"match": g1cs, "selection": "HOME", "comp_home": 95, "comp_away": 55}], 5, 1000, now=NOW)
++_n = (1 + _wsg["legs"][0]["num"]/_wsg["legs"][0]["den"]) * (1 + _wsg["legs"][1]["num"]/_wsg["legs"][1]["den"]) if _oksg else 0
++ck("a cs + result pick on the SAME game prices at the JOINT (2-1 implies a home win — a total subset: "
++   "the joint equals the 2-1 cell and pays LESS than the naive product)",
++   _oksg and _wsg.get("groups") and _wsg["decimal"] < _n - 1e-9, (_wsg.get("decimal") if _oksg else _wsg, _n))
  ck("cs alongside a result bet is allowed (mutually-exclusive cells, margin-protected — not a hedge)",
     W.place(wl, "Erol", g1cs, "HOME", 5, 1000, 95, 55, now=NOW)[0], None)
  import copy as _cp
+diff --git a/qa_sgm.py b/qa_sgm.py
+new file mode 100644
+index 0000000..e061ea5
+--- /dev/null
++++ b/qa_sgm.py
+@@ -0,0 +1,211 @@
++#!/usr/bin/env python3
++"""Same-game multi (SGM) exploit QA. The sold price of EVERY same-game combo must beat the TRUE joint
++probability — computed here by an INDEPENDENT brute-force reference (its own Poisson grid, its own leg
++predicates) so a shared bug can't self-certify. Fuzzes 1500 random 2-3 pick same-game combos across the
++strength grid and all combinable markets; proves the classic correlation farms (hc+Over, win+BTTS,
++win+Under) are priced above fair; contradictions rejected; degenerate subsets never punter-positive;
++placement/settlement pay by the group price with void-group semantics; legacy accas untouched."""
++import math, random
++import wager as W
++
++fails = []
++def ck(name, cond, extra=""):
++    print(("  PASS " if cond else "  FAIL ") + name + ("" if cond or extra == "" else "  -> %r" % (extra,)))
++    if not cond:
++        fails.append(name)
++
++NOW = 1_700_000_000
++GMAX = 20   # deliberately BIGGER than the engine's grid — truncation must be conservative, not generous
++
++def ref_joint(group, ch, ca, knockout=False):
++    """Independent reference joint probability (own grid, own predicates, own pens edge)."""
++    lh, la = W._team_lambdas(ch, ca)
++    p_h90 = W._hc_home_prob(lh, la, -0.5); p_a90 = 1.0 - W._hc_home_prob(lh, la, 0.5)
++    strong = p_h90 / max(1e-9, p_h90 + p_a90)
++    pn_home = 0.5 + (W.MOV_PENS_EDGE - 0.5) * (2 * strong - 1)
++    def pays(mk, sel, ln, h, a):
++        if mk == "ou":   return (h + a) > ln if sel == "OVER" else (h + a) < ln
++        if mk == "hc":   return ((h + ln) > a) == (sel == "HOME")
++        if mk == "cs":   return sel == "%d-%d" % (h, a)
++        if mk == "btts": return ((h > 0 and a > 0)) == (sel == "YES")
++        return None
++    score = [(g["market"], g["selection"], g.get("line")) for g in group if g["market"] in ("ou", "hc", "cs", "btts")]
++    winners = [g["selection"] for g in group if g["market"] == "result" and g["selection"] in ("HOME", "AWAY")]
++    draws = [g for g in group if g["market"] == "result" and g["selection"] == "DRAW"]
++    cards = [(float(g["line"]), g["selection"]) for g in group if g["market"] == "cards"]
++    if len(set(winners)) > 1:
++        return 0.0
++    side = winners[0] if winners else None
++    ph = [math.exp(-lh)]; pa = [math.exp(-la)]
++    for k in range(1, GMAX + 1):
++        ph.append(ph[-1] * lh / k); pa.append(pa[-1] * la / k)
++    p = 0.0
++    for h in range(GMAX + 1):
++        for a in range(GMAX + 1):
++            if any(pays(mk, sel, ln, h, a) is not True for mk, sel, ln in score):
++                continue
++            if draws and h != a:
++                continue
++            w = 1.0
++            if side is not None:
++                if draws:
++                    return 0.0                      # a draw AND a winner: impossible
++                if h == a:
++                    if not knockout:
++                        continue
++                    w = pn_home if side == "HOME" else 1 - pn_home
++                elif (h > a) != (side == "HOME"):
++                    continue
++            p += ph[h] * pa[a] * w
++    if cards:
++        lam = W._cards_lambda(knockout)
++        pc, term = 0.0, math.exp(-lam)
++        for k in range(0, 40):
++            if k > 0:
++                term *= lam / k
++            if all(((k > ln) if sel == "OVER" else (k < ln)) for ln, sel in cards):
++                pc += term
++        p *= pc
++    return p
++
++def implied(d):
++    return d["den"] / (d["num"] + d["den"])
++
++COMPS = [(c1, c2) for c1 in range(0, 101, 20) for c2 in range(0, 101, 20)] + [(80, 60), (60, 80), (50, 50)]
++
++print("== the classic correlation farms are priced ABOVE fair (the exact exploits SGM must kill) ==")
++for name, group, ch, ca, ko in [
++    ("favourite -1.5 + Over 2.5",   [{"market": "hc", "selection": "HOME", "line": -1.5}, {"market": "ou", "selection": "OVER", "line": 2.5}], 80, 20, False),
++    ("favourite win + BTTS No",     [{"market": "result", "selection": "HOME"}, {"market": "btts", "selection": "NO"}], 80, 20, False),
++    ("favourite win + Under 2.5",   [{"market": "result", "selection": "HOME"}, {"market": "ou", "selection": "UNDER", "line": 2.5}], 80, 20, False),
++    ("underdog +1.5 + Under 2.5",   [{"market": "hc", "selection": "AWAY", "line": -1.5}, {"market": "ou", "selection": "UNDER", "line": 2.5}], 80, 20, False),
++    ("KO advance + fails to cover", [{"market": "result", "selection": "HOME"}, {"market": "hc", "selection": "AWAY", "line": -1.5}], 60, 40, True),
++    ("win + BTTS Yes + Over 2.5",   [{"market": "result", "selection": "HOME"}, {"market": "btts", "selection": "YES"}, {"market": "ou", "selection": "OVER", "line": 2.5}], 60, 40, False),
++]:
++    d, err = W.sgm_group_price(group, ch, ca, knockout=ko)
++    fair = ref_joint(group, ch, ca, knockout=ko)
++    if d is None:
++        ck("%s: refused only because it's unsellable, never mispriced" % name, fair <= 1e-9 or fair > W.SGM_MAX_PROB, (err, fair))
++    else:
++        ck("%s: sold %.4f implied > %.4f fair (edge %.1f%%)" % (name, implied(d), fair, (implied(d) / max(fair, 1e-9) - 1) * 100),
++           implied(d) >= fair * (1 + W.SGM_MIN_MARGIN) - 1e-9, (d["frac"], fair))
++
++print("\n== fuzz: 1500 random same-game combos — sold implied ALWAYS beats the independent fair joint ==")
++rng = random.Random(2026)
++bad = 0; priced = 0; refused = 0
++def rand_pick():
++    mk = rng.choice(("result", "ou", "hc", "cs", "btts", "cards"))
++    if mk == "result": return {"market": mk, "selection": rng.choice(("HOME", "DRAW", "AWAY"))}
++    if mk == "ou":     return {"market": mk, "selection": rng.choice(("OVER", "UNDER")), "line": rng.choice(W.OU_LINES)}
++    if mk == "hc":     return {"market": mk, "selection": rng.choice(("HOME", "AWAY")), "line": rng.choice(W.HC_LINES)}
++    if mk == "cs":     return {"market": mk, "selection": "%d-%d" % (rng.randint(0, 4), rng.randint(0, 4))}
++    if mk == "btts":   return {"market": mk, "selection": rng.choice(("YES", "NO"))}
++    return {"market": "cards", "selection": rng.choice(("OVER", "UNDER")), "line": rng.choice(W.CARDS_LINES)}
++for _ in range(1500):
++    ch, ca = rng.choice(COMPS); ko = rng.random() < 0.5
++    group = [rand_pick() for _ in range(rng.randint(2, 3))]
++    if ko:
++        group = [g for g in group if not (g["market"] == "result" and g["selection"] == "DRAW")] or [rand_pick()]
++    d, err = W.sgm_group_price(group, ch, ca, knockout=ko)
++    fair = ref_joint(group, ch, ca, knockout=ko)
++    if d is None:
++        refused += 1
++        if fair > 1e-6 and fair <= W.SGM_MAX_PROB and err and "Couldn't price" not in err and "can't all win" in err:
++            bad += 1; print("    wrongly refused as impossible:", group, ch, ca, fair)
++        continue
++    priced += 1
++    if implied(d) < fair * (1 + W.SGM_MIN_MARGIN) - 1e-9:
++        bad += 1
++        print("    UNDERPRICED (%g,%g)%s %r sold %.4f fair %.4f" % (ch, ca, " KO" if ko else "", group, implied(d), fair))
++ck("no sold combo under fair x margin, no possible combo refused as impossible (%d priced, %d refused)" % (priced, refused),
++   bad == 0 and priced > 300, bad)
++
++print("\n== degenerate subsets: a redundant leg can't beat the tight single's price ==")
++d, _ = W.sgm_group_price([{"market": "ou", "selection": "OVER", "line": 2.5}, {"market": "ou", "selection": "OVER", "line": 1.5}], 50, 50)
++single = W.goals_odds(50, 50)["2.5"]["OVER"]
++ck("Over 2.5 + Over 1.5 (joint == Over 2.5) never pays more than the Over 2.5 single",
++   d is None or d["decimal"] <= single["decimal"] + 1e-9, (d, single))
++
++print("\n== contradictions + impossibles are refused with the right message ==")
++for group in ([{"market": "ou", "selection": "OVER", "line": 2.5}, {"market": "ou", "selection": "UNDER", "line": 2.5}],
++              [{"market": "result", "selection": "HOME"}, {"market": "result", "selection": "AWAY"}],
++              [{"market": "result", "selection": "HOME"}, {"market": "cs", "selection": "0-2"}],
++              [{"market": "btts", "selection": "YES"}, {"market": "ou", "selection": "UNDER", "line": 1.5}]):
++    d, err = W.sgm_group_price(group, 60, 40)
++    ck("refused: %s" % ("; ".join("%s %s" % (g["market"], g["selection"]) for g in group)),
++       d is None and "can't all win" in (err or ""), (d, err))
++
++print("\n== placement: SGM acca stores the group price; duplicates + mov-in-group rejected; legacy intact ==")
++FUT = lambda mid, st="GROUP_STAGE": {"id": mid, "home": "A" + mid, "away": "B" + mid, "stage": st,
++                                     "utcDate": "2099-01-01T00:00:00Z", "status": "TIMED"}
++ws = []
++ok, w = W.place_acca(ws, "Erol",
++                     [{"match": FUT("g1"), "selection": "HOME", "comp_home": 80, "comp_away": 20},
++                      {"match": FUT("g1"), "selection": "OVER", "comp_home": 80, "comp_away": 20, "market": "ou", "line": 2.5},
++                      {"match": FUT("g2"), "selection": "AWAY", "comp_home": 30, "comp_away": 70}],
++                     5, 100, now=NOW)
++ck("a same-game pair + a cross-game leg places", ok and w.get("groups") and len(w["groups"]) == 2, w.get("groups"))
++g1 = next(g for g in w["groups"] if len(g["legs"]) == 2)
++ref = ref_joint([{"market": "result", "selection": "HOME"}, {"market": "ou", "selection": "OVER", "line": 2.5}], 80, 20)
++ck("the same-game group's stored price beats the reference fair joint",
++   (g1["den"] / (g1["num"] + g1["den"])) >= ref * (1 + W.SGM_MIN_MARGIN) - 1e-9, (g1["frac"], ref))
++naive = 1.0
++for l in w["legs"][:2]:
++    naive *= 1 + l["num"] / l["den"]
++ck("the group pays LESS than the naive per-leg product (correlation captured)",
++   g1["decimal"] < naive - 1e-9, (g1["decimal"], naive))
++okd, msgd = W.place_acca([], "Erol",
++                         [{"match": FUT("g1"), "selection": "HOME", "comp_home": 80, "comp_away": 20},
++                          {"match": FUT("g1"), "selection": "HOME", "comp_home": 80, "comp_away": 20}],
++                         5, 100, now=NOW)
++ck("the exact same pick twice is rejected", not okd, msgd if okd else None)
++okm, msgm = W.place_acca([], "Erol",
++                         [{"match": FUT("k1", "QUARTER_FINALS"), "selection": "HOME_REG", "comp_home": 70, "comp_away": 40, "market": "mov"},
++                          {"match": FUT("k1", "QUARTER_FINALS"), "selection": "OVER", "comp_home": 70, "comp_away": 40, "market": "ou", "line": 2.5}],
++                         5, 100, now=NOW)
++ck("a MoV leg in a SAME-game group is rejected (the grid can't split 90 vs ET)", not okm and "method" in str(msgm).lower(), msgm)
++okc, msgc = W.place_acca([], "Erol",
++                         [{"match": FUT("g1"), "selection": "OVER", "comp_home": 60, "comp_away": 60, "market": "ou", "line": 2.5},
++                          {"match": FUT("g1"), "selection": "UNDER", "comp_home": 60, "comp_away": 60, "market": "ou", "line": 2.5}],
++                         5, 100, now=NOW)
++ck("a contradictory same-game combo is rejected at placement", not okc and "can't all win" in str(msgc), msgc)
++wl = []
++okL, wL = W.place_acca(wl, "Erol",
++                       [{"match": FUT("g1"), "selection": "HOME", "comp_home": 70, "comp_away": 40},
++                        {"match": FUT("g2"), "selection": "AWAY", "comp_home": 30, "comp_away": 70}],
++                       5, 100, now=NOW)
++ck("a plain cross-game acca has NO groups field (legacy records unchanged)", okL and "groups" not in wL, sorted(wL))
++
++print("\n== settlement: group pays its joint price only when EVERY leg wins; a void leg voids the GROUP ==")
++def fin(mid, h, a, **kw):
++    m = {"id": mid, "home": "A" + mid, "away": "B" + mid, "stage": "GROUP_STAGE", "status": "FINISHED",
++         "utcDate": "2099-01-01T00:00:00Z", "homeScore": h, "awayScore": a}
++    m.update(kw); return m
++W.settle(ws, fin("g1", 3, 1, winner="HOME"))        # home win + over 2.5: both legs won
++W.settle(ws, fin("g2", 0, 2, winner="AWAY"))
++exp = round(5 * w["decimal"], 2)
++ck("full win pays stake x (group price x other legs) exactly", ws[0]["status"] == "won" and abs(ws[0]["return"] - exp) < 0.01, (ws[0]["return"], exp))
++ws2 = []
++ok2, w2 = W.place_acca(ws2, "Erol",
++                       [{"match": FUT("g1"), "selection": "HOME", "comp_home": 80, "comp_away": 20},
++                        {"match": FUT("g1"), "selection": "OVER", "comp_home": 80, "comp_away": 20, "market": "ou", "line": 2.5},
++                        {"match": FUT("g2"), "selection": "AWAY", "comp_home": 30, "comp_away": 70}],
++                       5, 100, now=NOW)
++W.settle(ws2, fin("g1", 2, 1, winner="HOME"))       # home won but only 3 goals > 2.5 ✓... 2-1 IS over 2.5 -> both won
++W.settle(ws2, fin("g2", 1, 0, winner="HOME"))       # the cross-game leg LOSES -> acca lost
++ck("a losing leg anywhere still kills the whole acca", ws2[0]["status"] == "lost" and ws2[0]["return"] == 0, ws2[0])
++ws3 = []
++ok3, w3 = W.place_acca(ws3, "Erol",
++                       [{"match": FUT("g1"), "selection": "HOME", "comp_home": 80, "comp_away": 20},
++                        {"match": FUT("g1"), "selection": "OVER", "comp_home": 80, "comp_away": 20, "market": "ou", "line": 2.5},
++                        {"match": FUT("g2"), "selection": "AWAY", "comp_home": 30, "comp_away": 70}],
++                       5, 100, now=NOW)
++W.settle(ws3, fin("g1", None, None, status="CANCELLED"))    # the same-game group's match is cancelled -> group void
++W.settle(ws3, fin("g2", 0, 2, winner="AWAY"))
++g2leg = next(l for l in w3["legs"] if l["matchId"] == "g2")
++exp3 = round(5 * (1 + g2leg["num"] / g2leg["den"]), 2)
++ck("a void GROUP drops to 1x and the acca pays on the remaining leg", ws3[0]["status"] == "won" and abs(ws3[0]["return"] - exp3) < 0.01, (ws3[0]["return"], exp3))
++
++print("\n" + ("All SGM QA passed." if not fails else "SGM QA FAILED (%d): %s" % (len(fails), ", ".join(fails))))
++import sys
++sys.exit(1 if fails else 0)
 diff --git a/qa_var_alerts.py b/qa_var_alerts.py
 new file mode 100644
 index 0000000..664cd91
@@ -985,10 +1245,10 @@ index 034f9b0..d2fa9a7 100644
                      ok, err = False, str(e)
 diff --git a/test_btts_feed.py b/test_btts_feed.py
 new file mode 100644
-index 0000000..d158371
+index 0000000..052b7d1
 --- /dev/null
 +++ b/test_btts_feed.py
-@@ -0,0 +1,168 @@
+@@ -0,0 +1,170 @@
 +#!/usr/bin/env python3
 +"""BTTS + feed-tier degradation QA. BTTS: pricing integrity off the shared lambdas, ladder rule,
 +placement, settlement on the final score only (so it works on the FREE tier), accas, hostile input.
@@ -1067,11 +1327,13 @@ index 0000000..d158371
 +                        {"match": GRP2, "selection": "HOME", "comp_home": 70, "comp_away": 40}],
 +                       5, 100, now=NOW)
 +ck("a BTTS leg + a result leg across games places", ok and any(l.get("market") == "btts" for l in acc.get("legs", [])), acc)
-+okx, msgx = W.place_acca([], "Erol",
-+                         [{"match": GRP, "selection": "YES", "comp_home": 60, "comp_away": 60, "market": "btts"},
-+                          {"match": GRP, "selection": "OVER", "comp_home": 60, "comp_away": 60, "market": "ou", "line": 2.5}],
-+                         5, 100, now=NOW)
-+ck("same-game BTTS+OU (heavily correlated) is blocked", not okx, msgx if okx else None)
++okx, wx = W.place_acca([], "Erol",
++                       [{"match": GRP, "selection": "YES", "comp_home": 60, "comp_away": 60, "market": "btts"},
++                        {"match": GRP, "selection": "OVER", "comp_home": 60, "comp_away": 60, "market": "ou", "line": 2.5}],
++                       5, 100, now=NOW)
++_naive = (1 + wx["legs"][0]["num"]/wx["legs"][0]["den"]) * (1 + wx["legs"][1]["num"]/wx["legs"][1]["den"]) if okx else 0
++ck("same-game BTTS+OU (heavily POSITIVELY correlated) prices jointly, paying under the naive product",
++   okx and wx.get("groups") and wx["decimal"] < _naive - 1e-9, (wx.get("decimal") if okx else wx, _naive))
 +
 +print("\n== BTTS exploit: covering dutches with OU are margin-negative (YES ∪ Under 1.5 covers everything) ==")
 +# BTTS NO pays unless both score; Over 0.5/1.5 relationships — enumerate covers over the score grid
@@ -1272,10 +1534,10 @@ index 0000000..dd0787c
 +print("ALL HANDICAP ODDS CHECKS PASSED")
 diff --git a/test_hc_place.py b/test_hc_place.py
 new file mode 100644
-index 0000000..0f73ff5
+index 0000000..26ba446
 --- /dev/null
 +++ b/test_hc_place.py
-@@ -0,0 +1,119 @@
+@@ -0,0 +1,125 @@
 +#!/usr/bin/env python3
 +"""Handicap placement QA — wager.place(market='hc'). Mirrors the O/U placement suite: valid placement
 +with locked server-side odds, selection + line validation (only offered HC_LINES; a ladder-filtered
@@ -1356,11 +1618,17 @@ index 0000000..0f73ff5
 +sel_cs = {"match": dict(FUTURE, home="Japan", away="Chile"), "selection": "2-1", "market": "cs", "comp_home": 60, "comp_away": 60}
 +ok_cs, w_cs = W.place_acca([], "Erol", [sel_cs, sel_res], 5, 100, now=NOW)
 +ck("a cs leg on a different game places too", ok_cs and any(l.get("market") == "cs" for l in (w_cs.get("legs") or [])), w_cs)
-+ok_sg, msg_sg = W.place_acca([], "Erol",
-+                             [sel_hc, {"match": FUTURE, "selection": "OVER", "market": "ou", "line": 2.5,
-+                                       "comp_home": CH, "comp_away": CA}], 5, 100, now=NOW)
-+ck("two legs on the SAME game are still rejected (the exploit gate)", not ok_sg, msg_sg if ok_sg else None)
-+ck("the rejection explains correlated same-game combos", (not ok_sg) and "once" in str(msg_sg).lower(), msg_sg)
++ok_sg, w_sg = W.place_acca([], "Erol",
++                           [sel_hc, {"match": FUTURE, "selection": "OVER", "market": "ou", "line": 2.5,
++                                     "comp_home": CH, "comp_away": CA}], 5, 100, now=NOW)
++ck("two legs on the SAME game now place as a JOINT-priced group", ok_sg and w_sg.get("groups")
++   and any(g.get("sgm") for g in w_sg["groups"]), w_sg)
++if ok_sg:
++    _naive = 1.0
++    for _l in w_sg["legs"]:
++        _naive *= 1 + _l["num"] / _l["den"]
++    ck("the correlated pair pays LESS than the naive product (hc -1.5 and Over 2.5 overlap)",
++       w_sg["decimal"] < _naive - 1e-9, (w_sg["decimal"], _naive))
 +ok_bl, msg_bl = W.place_acca([], "Erol", [dict(sel_hc, line=0.5), sel_res], 5, 100, now=NOW)
 +ck("an off-ladder hc line in a leg is rejected", not ok_bl, msg_bl if ok_bl else None)
 +ok_dr, msg_dr = W.place_acca([], "Erol", [dict(sel_hc, selection="DRAW"), sel_res], 5, 100, now=NOW)
@@ -1501,10 +1769,10 @@ index 0000000..99ae3a5
 +print("ALL HANDICAP SETTLEMENT CHECKS PASSED")
 diff --git a/test_mov_cards.py b/test_mov_cards.py
 new file mode 100644
-index 0000000..def9906
+index 0000000..1126f21
 --- /dev/null
 +++ b/test_mov_cards.py
-@@ -0,0 +1,219 @@
+@@ -0,0 +1,220 @@
 +#!/usr/bin/env python3
 +"""Method-of-victory + O/U cards QA. MoV: 6-way set margin, per-outcome fair floor, symmetry at even
 +strengths, KO-only placement, settlement across REG/ET/PENS shapes (incl. winner-less pens feeds).
@@ -1670,7 +1938,8 @@ index 0000000..def9906
 +                         [{"match": KO, "selection": "HOME_REG", "comp_home": 70, "comp_away": 40, "market": "mov"},
 +                          {"match": KO, "selection": "OVER", "comp_home": 70, "comp_away": 40, "market": "cards", "line": 4.5}],
 +                         5, 100, now=NOW)
-+ck("same-game mov+cards combo still blocked", not okx, msgx if okx else None)
++ck("a MoV leg in a same-game group is still blocked (the grid can't split 90 vs ET)",
++   not okx and "method" in str(msgx).lower(), msgx)
 +okg, msgg = W.place_acca([], "Erol",
 +                         [{"match": GRP, "selection": "HOME_REG", "comp_home": 70, "comp_away": 40, "market": "mov"},
 +                          {"match": KO2, "selection": "HOME", "comp_home": 70, "comp_away": 40}],
@@ -1724,8 +1993,63 @@ index 0000000..def9906
 +print("\n" + ("All MoV + cards QA passed." if not fails else "MOV/CARDS QA FAILED (%d): %s" % (len(fails), ", ".join(fails))))
 +import sys
 +sys.exit(1 if fails else 0)
+diff --git a/test_ou_acca.py b/test_ou_acca.py
+index 4d46912..078b83b 100644
+--- a/test_ou_acca.py
++++ b/test_ou_acca.py
+@@ -59,16 +59,36 @@ badsel = [{"match": fx("A", "B"), "selection": "HOME", "market": "ou", "line": 2
+ oks, msg = W.place_acca([], "Erol", badsel, 3, 100, now=NOW)
+ ck("a 1X2 selection on an O/U-market leg rejects", not oks, msg if oks else None)
+ 
+-print("\n== same game: a result + goals combo is correlated, so it's blocked (back them as singles) ==")
++print("\n== same game: a result + goals combo is PRICED JOINTLY (correlation captured, never given away) ==")
+ same_corr = [{"match": mA, "selection": "OVER", "market": "ou", "line": 2.5, "comp_home": CH, "comp_away": CA},
+              {"match": mA, "selection": "HOME", "comp_home": CH, "comp_away": CA}]
+ ok_same, w_same = W.place_acca([], "Erol", same_corr, 3, 100, now=NOW)
+-ck("O/U + match-winner on the SAME game is REJECTED (correlated — was mispriced)", not ok_same, w_same)
+-# the egregious case: Under 0.5 IS a draw -> combining them paid ~3x too much
++ck("O/U + match-winner on the SAME game places as a joint-priced group (paying under the naive product)",
++   ok_same and w_same.get("groups") and w_same["decimal"] < (1 + w_same["legs"][0]["num"]/w_same["legs"][0]["den"]) * (1 + w_same["legs"][1]["num"]/w_same["legs"][1]["den"]) - 1e-9, w_same)
++# the OLD egregious case was Under 0.5 + Draw (Under 0.5 IS a draw — the naive product paid ~3x too
++# much). Under 0.5 isn't even a sellable single at these strengths any more (ladder-filtered), so the
++# ingredient itself is gone:
+ u05_draw = [{"match": mA, "selection": "UNDER", "market": "ou", "line": 0.5, "comp_home": CH, "comp_away": CA},
+             {"match": mA, "selection": "DRAW", "comp_home": CH, "comp_away": CA}]
+ ok_ud, w_ud = W.place_acca([], "Erol", u05_draw, 3, 100, now=NOW)
+-ck("Under 0.5 + Draw on the same game is REJECTED", not ok_ud, w_ud)
++ck("Under 0.5 + Draw can't be built — the unsellable line refuses cleanly", not ok_ud and isinstance(w_ud, str), w_ud)
++# ...and its modern equivalent, Draw + Under 1.5 (jointly EXACTLY 0-0), prices at the 0-0 joint —
++# a fraction of the naive product, so redundancy earns nothing:
++d_u15 = [{"match": mA, "selection": "UNDER", "market": "ou", "line": 1.5, "comp_home": CH, "comp_away": CA},
++         {"match": mA, "selection": "DRAW", "comp_home": CH, "comp_away": CA}]
++ok_d15, w_d15 = W.place_acca([], "Erol", d_u15, 3, 100, now=NOW)
++if ok_d15:
++    # what matters is the JOINT: the sold implied must beat the true P(0-0) by the SGM margin.
++    # (it may legitimately pay MORE than the naive product — two heavy marginal margins can overshoot a
++    # correlation; the joint prices it honestly while staying firmly house-positive.)
++    import math as _m
++    _lh, _la = W._team_lambdas(CH, CA)
++    _fair00 = _m.exp(-_lh) * _m.exp(-_la)
++    _g = w_d15["groups"][0]
++    ck("Draw + Under 1.5 sold above the true P(0-0) joint by the SGM margin",
++       (_g["den"] / (_g["num"] + _g["den"])) >= _fair00 * (1 + W.SGM_MIN_MARGIN) - 1e-9, (w_d15["decimal"], _fair00))
++else:
++    ck("Draw + Under 1.5 refused only as unsellable, never mispriced", isinstance(w_d15, str) and "price" in w_d15.lower(), w_d15)
+ dup_result = [{"match": mA, "selection": "HOME", "comp_home": CH, "comp_away": CA},
+               {"match": mA, "selection": "AWAY", "comp_home": CH, "comp_away": CA}]
+ ok_dup, msg_dup = W.place_acca([], "Erol", dup_result, 3, 100, now=NOW)
+@@ -76,7 +96,8 @@ ck("two RESULT legs on the same game are blocked", not ok_dup, msg_dup if ok_dup
+ dup_ou = [{"match": mA, "selection": "OVER", "market": "ou", "line": 2.5, "comp_home": CH, "comp_away": CA},
+           {"match": mA, "selection": "UNDER", "market": "ou", "line": 3.5, "comp_home": CH, "comp_away": CA}]
+ ok_dou, msg_dou = W.place_acca([], "Erol", dup_ou, 3, 100, now=NOW)
+-ck("two O/U legs on the same game are blocked", not ok_dou, msg_dou if ok_dou else None)
++ck("two compatible O/U legs on one game price jointly; the pair collapses to the tighter constraint",
++   ok_dou and isinstance(msg_dou, dict) and msg_dou.get("groups"), msg_dou)
+ 
+ print("\n== settlement: partial, then a losing O/U leg sinks the acca ==")
+ # acca: OVER 2.5 on Brazil-Serbia, HOME on Spain-Japan
 diff --git a/tracker.html b/tracker.html
-index 4335b2f..595f9f7 100644
+index 4335b2f..eaddd3b 100644
 --- a/tracker.html
 +++ b/tracker.html
 @@ -275,6 +275,17 @@
@@ -1746,7 +2070,30 @@ index 4335b2f..595f9f7 100644
    .betodd b{color:var(--gold)}
    .betodd.on{border-color:var(--gold);background:#13301c}
    /* Bet confirmation bar: floats pinned just above the bottom of the screen while its real slot is below the
-@@ -640,36 +651,126 @@ function samePick(p, mid, sel, market, line){   // are two picks the exact same
+@@ -335,7 +346,21 @@
+     .wcard .sc{font-size:11px}
+     .lmatch{font-size:13px}
+   }
+-</style>
++
++  .msopen{cursor:pointer}
++  #matchSheet{position:fixed;inset:0;z-index:120;display:none;background:rgba(4,14,9,.72);backdrop-filter:blur(3px)}
++  #matchSheet.on{display:block}
++  .mshWrap{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:18px 10px calc(30px + env(safe-area-inset-bottom,0px))}
++  .mshCard{max-width:720px;margin:0 auto;background:var(--bg,#07130c);border:1px solid var(--line);border-radius:16px;padding:16px 14px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
++  .mshHead{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;text-align:center;margin:8px 0 4px}
++  .mshHead .t{font-family:'Sora',sans-serif;font-weight:700;font-size:16px}
++  .mshHead .sc{font-family:'Sora',sans-serif;font-weight:800;font-size:26px;color:var(--gold)}
++  .mshSec{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
++  .mshSec>b{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
++  .mshRow{display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:3px 0}
++  .mshClose{position:sticky;top:0;float:right;background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:6px 12px;cursor:pointer;font-family:'Sora',sans-serif}
++
++  </style>
+ </head>
+ <body>
+ <div class="wrap">
+@@ -640,36 +665,139 @@ function samePick(p, mid, sel, market, line){   // are two picks the exact same
  function ouLineFor(mid,odds){ let ln=OULINE[mid]||'2.5';   // default to the most common line
    if(odds&&!odds[ln]){ const ks=Object.keys(odds).sort((a,b)=>Math.abs(parseFloat(a)-2.5)-Math.abs(parseFloat(b)-2.5)); ln=ks[0]||ln; }  // picked line no longer offered -> nearest available
    return ln; }
@@ -1779,9 +2126,20 @@ index 4335b2f..595f9f7 100644
 +}
 +const HCLINE={};            // per-match selected handicap HOME line (matchId -> '-1.5'); the dropdown sets it
 +function fmtHc(v){ v=Number(v); return (v>0?'+':'')+v; }   // signed half-line label: -1.5 / +1.5
-+function hcLineFor(mid,odds){ let ln=HCLINE[mid]||'-1.5';   // default to the classic favourite line
-+  if(odds&&!odds[ln]){ const ks=Object.keys(odds).sort((a,b)=>Math.abs(parseFloat(a))-Math.abs(parseFloat(b))||parseFloat(a)-parseFloat(b)); ln=ks[0]||ln; }  // picked line not offered -> tightest available
-+  return ln; }
++function hcLineFor(mid,odds){
++  const pick=HCLINE[mid];
++  if(pick&&odds&&odds[pick]) return pick;                       // the user's own choice always wins
++  if(!odds) return '-1.5';
++  // default: the TWO-SIDED line with the most balanced prices — for a home favourite that's -1.5, for an
++  // away favourite it's +1.5, never a lone 300/1 long shot (the old fixed '-1.5' default did exactly that)
++  const two=Object.keys(odds).filter(k=>odds[k].HOME&&odds[k].AWAY);
++  if(two.length){
++    const bal=k=>Math.abs((1/(odds[k].HOME.num/odds[k].HOME.den+1))-(1/(odds[k].AWAY.num/odds[k].AWAY.den+1)));
++    return two.sort((a,b)=>bal(a)-bal(b)||Math.abs(parseFloat(a))-Math.abs(parseFloat(b)))[0];
++  }
++  const ks=Object.keys(odds).sort((a,b)=>Math.abs(parseFloat(a))-Math.abs(parseFloat(b))||parseFloat(a)-parseFloat(b));
++  return ks[0]||'-1.5';
++}
 +function hcBtnsHTML(m){   // the two handicap price buttons for the CURRENT line — rebuilt in place on a line change
 +  const ln=hcLineFor(m.matchId,m.hcOdds), leg=(m.hcOdds||{})[ln];
 +  if(!leg) return '';
@@ -1850,15 +2208,17 @@ index 4335b2f..595f9f7 100644
 +function movLabel(m,sel){ const t=sel.indexOf('HOME')===0?m.home:m.away;
 +  const how={REG:"in 90'",ET:'in extra time',PENS:'on pens'}[sel.split('_')[1]]||'';
 +  return esc(t)+' '+how; }
++function movDefault(m){ const b=m.movOdds||{}; let best=null;      // default to the FAVOURITE in 90'
++  Object.keys(b).forEach(k=>{ if(!best||b[k].decimal<b[best].decimal) best=k; }); return best||'HOME_REG'; }
 +function movBtnHTML(m){
-+  const sel=MOVPICK[m.matchId]&&(m.movOdds||{})[MOVPICK[m.matchId]]?MOVPICK[m.matchId]:'HOME_REG';
++  const sel=MOVPICK[m.matchId]&&(m.movOdds||{})[MOVPICK[m.matchId]]?MOVPICK[m.matchId]:movDefault(m);
 +  const o=(m.movOdds||{})[sel]; if(!o) return '';
 +  const on=ACCAMODE?ACCA.some(l=>samePick(l,m.matchId,sel,'mov',null)):samePick(BETPICK,m.matchId,sel,'mov',null);
 +  return '<button class="betodd'+(on?' on':'')+'" data-mid="'+m.matchId+'" data-sel="'+sel+'" data-market="mov" data-frac="'+o.frac+'">'+movLabel(m,sel)+' <b>'+o.frac+'</b></button>';
 +}
 +function movRowHTML(m){
 +  if(!m.movOdds||!Object.keys(m.movOdds).length) return '';
-+  const sel=MOVPICK[m.matchId]&&m.movOdds[MOVPICK[m.matchId]]?MOVPICK[m.matchId]:'HOME_REG';
++  const sel=MOVPICK[m.matchId]&&m.movOdds[MOVPICK[m.matchId]]?MOVPICK[m.matchId]:movDefault(m);
 +  const order=['HOME_REG','HOME_ET','HOME_PENS','AWAY_REG','AWAY_ET','AWAY_PENS'];
 +  const opts=order.filter(k=>m.movOdds[k]).map(k=>'<option value="'+k+'"'+(k===sel?' selected':'')+'>'+movLabel(m,k)+'</option>').join('');
 +  return '<div class="mktrow">'
@@ -1889,7 +2249,7 @@ index 4335b2f..595f9f7 100644
      +'</div>';
  }
  function renderBets(){
-@@ -751,7 +852,7 @@ function renderBets(){
+@@ -751,7 +879,7 @@ function renderBets(){
    } else if(fbet.open && fbMine){
      h+='<div style="margin:0 0 12px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;color:var(--muted)">🎁 You\'ve claimed today\'s free points — they\'re in your balance above. Bet them on any game. The next drop is another day.</div>';
    }
@@ -1898,17 +2258,21 @@ index 4335b2f..595f9f7 100644
    if(ACCAMODE) h+='<div style="color:var(--muted);font-size:12.5px;margin:0 0 10px">🎰 Building an accumulator — odds multiply, but <b>every</b> leg must win. Up to '+maxLegs+' legs, and up to '+((caps.max_active_accas)||2)+' accas running at once.'+(retCap?(' Max return: <b>'+retCap+'</b>.'):'')+'</div>';
    if(!fx.length) h+='<div class="empty">No upcoming games to bet on right now — check back before kick-off.</div>';
    else h+='<div class="mdgrid">'+fx.map(m=>{
-@@ -763,7 +864,7 @@ function renderBets(){
+@@ -763,27 +891,41 @@ function renderBets(){
        return `<button class="betodd${on?' on':''}" data-mid="${m.matchId}" data-sel="${k}" data-market="result" data-frac="${o.frac}">${esc(lbl)} <b>${o.frac}</b></button>`; };
      const homeAway='<div style="display:flex;gap:6px">'+mk('HOME',m.home)+mk('AWAY',m.away)+'</div>';   // home left, away right
      const drawRow=(!ko && m.odds.DRAW)?('<div style="display:flex;margin-top:6px">'+mk('DRAW','Draw')+'</div>'):'';   // draw below, full width
 -    const ouRow=ouRowHTML(m)+(ACCAMODE?'':csRowHTML(m));                               // Over/Under row + exact-score row (singles only)
+-    return `<div class="mdcard"><div class="mdmeta">${ko?(STAGE_LABEL[m.stage]||m.stage):'Group '+(m.group||'?')} · ${esc(when)}</div>
 +    const ouRow=ouRowHTML(m)+bttsRowHTML(m)+hcRowHTML(m)+cardsRowHTML(m)+movRowHTML(m)+csRowHTML(m);   // all markets, all acca-able, one leg per game
-     return `<div class="mdcard"><div class="mdmeta">${ko?(STAGE_LABEL[m.stage]||m.stage):'Group '+(m.group||'?')} · ${esc(when)}</div>
++    return `<div class="mdcard"><div class="mdmeta msopen" data-mid="${esc(m.matchId)}" style="cursor:pointer" title="Tap for the full match sheet">${ko?(STAGE_LABEL[m.stage]||m.stage):'Group '+(m.group||'?')} · ${esc(when)} <span style="float:right;opacity:.7">ⓘ</span></div>
        <div class="mdteams" style="margin-bottom:6px"><span>${flag(m.home)}${esc(m.home)}</span><span style="color:var(--muted)">v</span><span class="mdr">${flag(m.away)}${esc(m.away)}</span></div>
        <div class="betodds" style="display:block">${homeAway}${drawRow}${ouRow}</div></div>`;
-@@ -773,7 +874,14 @@ function renderBets(){
+   }).join('')+'</div>';
+   if(ACCAMODE && ACCA.length){
+     let dec=1; ACCA.forEach(l=>{const [n,d2]=l.frac.split('/').map(Number); dec*=(1+n/d2);});
      const accaCap=Math.min(headroom, budgetLeft, Math.min.apply(null,ACCA.map(l=>{const f=fx.find(m=>m.matchId===l.matchId); return f&&f.maxStake?f.maxStake:caps.max_stake;})));
++    const SGMIX=new Set(ACCA.map(l=>l.matchId)).size<ACCA.length;      // any same-game group in the slip?
      h+='<div class="betcta" style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
        +'<div style="font-weight:600;margin-bottom:8px">🎰 '+ACCA.length+'-fold accumulator <span style="color:var(--muted);font-weight:400">· max stake '+accaCap+'</span></div>'
 -      +ACCA.map((l,i)=>{const fxp=fx.find(m=>m.matchId===l.matchId); const who=(l.market||'result')==='ou'?((l.sel==='OVER'?'Over':'Under')+' '+l.line+' '+(fxp?'('+esc(fxp.home)+' v '+esc(fxp.away)+')':'')):(l.sel==='HOME'?(fxp?fxp.home:'home'):(l.sel==='AWAY'?(fxp?fxp.away:'away'):'Draw'));
@@ -1922,8 +2286,14 @@ index 4335b2f..595f9f7 100644
 +                 :(l.sel==='HOME'?(fxp?fxp.home:'home'):(l.sel==='AWAY'?(fxp?fxp.away:'away'):'Draw')))))));
          return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>'+esc(who)+' <span style="color:var(--gold)">'+l.frac+'</span></span><button class="accarm" data-i="'+i+'" style="background:none;border:none;color:#ff7a7a;cursor:pointer">✕</button></div>';}).join('')
        +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;border-top:1px solid var(--line);padding-top:8px"><input id="accaStake" type="number" min="'+caps.min_stake+'" max="'+Math.min(accaCap,avail)+'" step="0.01" placeholder="stake (pts)" style="width:120px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:16px">'
-       +'<span id="accaReturn" style="color:var(--muted);font-size:13px">combined ~'+(Math.round(dec*100)/100)+'×</span>'
-@@ -783,7 +891,11 @@ function renderBets(){
+-      +'<span id="accaReturn" style="color:var(--muted);font-size:13px">combined ~'+(Math.round(dec*100)/100)+'×</span>'
+-      +'<button id="accaPlace" class="mini cta">Place acca</button></div><div style="color:var(--muted);font-size:11.5px;margin-top:6px">Once placed, this acca is final — it can\'t be cancelled.</div></div>';
++      +'<span id="accaReturn" style="color:var(--muted);font-size:13px">'+(SGMIX?'≈ up to ':'combined ~')+(Math.round(dec*100)/100)+'×</span>'
++      +'<button id="accaPlace" class="mini cta">Place acca</button></div>'
++      +(SGMIX?'<div style="color:var(--gold);font-size:11.5px;margin-top:6px">🔗 Same-game picks are priced <b>together</b> when you place — correlated combos pay less than the straight multiply (the exact odds show on your bet card).</div>':'')
++      +'<div style="color:var(--muted);font-size:11.5px;margin-top:6px">Once placed, this acca is final — it can\'t be cancelled.</div></div>';
+   }
+   if(!ACCAMODE && BETPICK){
      const fxp=fx.find(m=>m.matchId===BETPICK.matchId);
      if(fxp){ const isOU=(BETPICK.market||'result')==='ou';
        const isCS=(BETPICK.market||'result')==='cs';
@@ -1936,7 +2306,7 @@ index 4335b2f..595f9f7 100644
        const fracDisp=BETPICK.frac; const smax=Math.min(fxp.maxStake||caps.max_stake, headroom, budgetLeft);
        h+='<div class="betcta" style="margin-top:12px;padding:12px 14px;border:1px solid var(--gold);border-radius:12px;background:#0c1f15">'
          +'<div style="font-size:13.5px;margin-bottom:8px">Bet on <b>'+esc(who)+'</b> @ <b style="color:var(--gold)">'+fracDisp+'</b> <span style="color:var(--muted)">· max '+smax+'</span></div>'
-@@ -873,11 +985,24 @@ function renderBets(){
+@@ -873,22 +1015,35 @@ function renderBets(){
        else box.textContent=j.error||'Could not unlink.';
      }catch(e){ box.textContent='Could not reach the server.'; }
    };
@@ -1966,7 +2336,38 @@ index 4335b2f..595f9f7 100644
      const mid=b.dataset.mid, sel=b.dataset.sel, frac=b.dataset.frac;
      const market=b.dataset.market||'result', line=(b.dataset.line!=null && b.dataset.line!=='')?parseFloat(b.dataset.line):null;
      const pick=()=>({matchId:mid,sel:sel,frac:frac,market:market,line:line});
-@@ -906,7 +1031,8 @@ function renderBets(){
+     if(ACCAMODE){
+-      const ix=ACCA.findIndex(l=>l.matchId===mid);                     // ONE leg per game (any market) — never two correlated picks on a match
+-      if(ix>=0){
+-        if(samePick(ACCA[ix],mid,sel,market,line)) ACCA.splice(ix,1);   // re-tap the exact leg -> remove it
+-        else ACCA[ix]=pick();                                           // same game, different pick/market -> switch that game's leg
+-      } else {
++      const exact=ACCA.findIndex(l=>samePick(l,mid,sel,market,line));
++      const sameMkt=ACCA.findIndex(l=>l.matchId===mid&&(l.market||'result')===market);
++      if(exact>=0){ ACCA.splice(exact,1); }                             // re-tap the exact leg -> remove it
++      else if(sameMkt>=0){ ACCA[sameMkt]=pick(); }                      // same game+market -> switch that pick
++      else {
+         if(ACCA.length>=maxLegs){ BETMSG='An accumulator can have at most '+maxLegs+' legs.'; renderBets(); return; }
+-        ACCA.push(pick());                                              // a new game -> add a leg
++        ACCA.push(pick());                                              // new game OR a new market on the same game (priced jointly)
+       }
+       if(ACCA.length===1){ BETPICK=ACCA[0]; ACCA=[]; ACCAMODE=false; }   // down to one -> it's just a single again
+       else if(ACCA.length===0){ ACCAMODE=false; }                       // emptied -> nothing selected
+@@ -896,17 +1051,18 @@ function renderBets(){
+     } else {
+       if(samePick(BETPICK,mid,sel,market,line)){
+         BETPICK=null;                                                   // re-tap the single -> remove it
+-      } else if(BETPICK && BETPICK.matchId===mid){
+-        BETPICK=pick();                                                 // same game (any market/outcome) -> switch the single (no same-game combos)
++      } else if(BETPICK && BETPICK.matchId===mid && (BETPICK.market||'result')===market){
++        BETPICK=pick();                                                 // same game + same market -> switch the pick
+       } else if(BETPICK && accasOn){
+-        ACCA=[BETPICK,pick()];                                          // a DIFFERENT game -> auto-accumulator
+-        ACCAMODE=true; BETPICK=null;
++        ACCA=[BETPICK,pick()];                                          // another market (same OR different game) -> accumulator
++        ACCAMODE=true; BETPICK=null;                                    //   same-game combos are priced JOINTLY on Place
+       } else {
+         BETPICK=pick();                                                 // first pick (or accas off -> just switch)
        }
        BETMSG=''; renderBets();
      }
@@ -1976,7 +2377,7 @@ index 4335b2f..595f9f7 100644
    const cfb=document.getElementById('claimFreeBtn'); if(cfb) cfb.onclick=claimFreePoints;
    el.querySelectorAll('.accarm').forEach(b=>b.onclick=()=>{ ACCA.splice(+b.dataset.i,1); if(ACCA.length===1){ BETPICK=ACCA[0]; ACCA=[]; ACCAMODE=false; } else if(ACCA.length===0){ ACCAMODE=false; } renderBets(); });
    const ap=document.getElementById('accaPlace'); if(ap) ap.onclick=placeAcca;
-@@ -974,13 +1100,23 @@ function refreshBetsLive(){
+@@ -974,13 +1130,23 @@ function refreshBetsLive(){
  // ---- "is this bet currently winning?" — provisional result from the live score (display only; never settles anything) ----
  function pickName(o){   // human label for a bet or an acca leg, result OR over/under
    if((o.market||'result')==='ou') return (o.selection==='OVER'?'Over':'Under')+' '+o.line+' goals';
@@ -2000,7 +2401,7 @@ index 4335b2f..595f9f7 100644
    if(o.selection==='HOME') return hs>as_?'win':(hs<as_?'lose':'level');
    if(o.selection==='AWAY') return as_>hs?'win':(as_<hs?'lose':'level');
    return hs===as_?'win':'lose';   // DRAW selection
-@@ -1470,6 +1606,20 @@ function liveBreakLine(m){
+@@ -1470,6 +1636,20 @@ function liveBreakLine(m){
    });
    const un=[[m.homeOwner,m.home],[m.awayOwner,m.away]].filter(s=>!s[0]||s[0]==='—'||s[0]==='-').map(s=>esc(s[1]));
    if(un.length) html+='<div class="lbd-pool">'+un.join(' & ')+(un.length===1?' is':' are')+' unowned (pool) — scores for no one</div>';
@@ -2021,7 +2422,7 @@ index 4335b2f..595f9f7 100644
    // everyone's open bets on THIS game, shown like the owner rows: a "Name +N if it lands" you can expand
    const gbets=betsOnMatch(m);
    if(gbets.length){
-@@ -1728,9 +1878,13 @@ function renderBracket(d){
+@@ -1728,9 +1908,13 @@ function renderBracket(d){
    rounds.innerHTML='<button data-v="round" class="'+(BRACKETVIEW==='round'?'on':'')+'">By round</button><button data-v="full" class="'+(BRACKETVIEW==='full'?'on':'')+'">Full bracket</button>';
    rounds.querySelectorAll('button').forEach(b=>b.onclick=()=>{BRACKETVIEW=b.dataset.v;renderBracket(d);});
    if(BRACKETVIEW==='full'){
@@ -2035,7 +2436,16 @@ index 4335b2f..595f9f7 100644
      return;
    }
    if(!KO_USER_SET || !present.includes(KOROUND)) KOROUND=liveOrCurrentRound(ko,present);
-@@ -2286,7 +2440,10 @@ function buildLedger(d, wagers){
+@@ -2049,7 +2233,7 @@ function renderOverview(d){
+         const where=m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):('Group '+(m.group||'?'));
+         const kn=koNote(m);
+         return `<div class="mdcard${liveN?' mdlive':''}${fin?' mdfin':''}"><div class="mdmeta">${where} · ${tag}${kn?' · '+kn:''}</div>
+-          <div class="mdteams"><span>${flag(m.home)}${esc(m.home)}${own(m.homeOwner)}</span><span class="mdsc">${sc}</span><span class="mdr">${flag(m.away)}${esc(m.away)}${own(m.awayOwner)}</span></div></div>`;
++          <div class="mdteams msopen" data-mid="${esc(m.matchId||'')}" title="Tap for the full match sheet"><span>${flag(m.home)}${esc(m.home)}${own(m.homeOwner)}</span><span class="mdsc">${sc}</span><span class="mdr">${flag(m.away)}${esc(m.away)}${own(m.awayOwner)}</span></div></div>`;
+       }).join('')+'</div></div>';
+     }
+   }
+@@ -2286,7 +2470,10 @@ function buildLedger(d, wagers){
      const note=lower.length?(' \u00b7 replaces the earlier +'+lower[lower.length-1]+' \u2014 furthest round only'):'';
      ev.push({when:fins.length?Math.max.apply(null,fins):Date.now(),kind:'bonus',player:p.name,team:tm.name,stage:st,label:SL[st]||st,pts:SB[st],note:note});
    });});
@@ -2047,7 +2457,7 @@ index 4335b2f..595f9f7 100644
    (wagers||[]).forEach(function(w){
      if(w.credit){ ev.push({when:(w.placed_at?w.placed_at*1000:0), kind:'free', player:w.player, amount:+(w.amount||0)}); return; }
      if(w.status!=='won'&&w.status!=='lost') return;
-@@ -2294,7 +2451,8 @@ function buildLedger(d, wagers){
+@@ -2294,7 +2481,8 @@ function buildLedger(d, wagers){
      if(w.legs&&w.legs.length){ w.legs.forEach(function(l){ const fm=fx.find(function(m){return m.matchId===l.matchId;}); if(fm) ds.push(T(fm)); }); }
      else { const fm=fx.find(function(m){return m.matchId===w.matchId;}); if(fm) ds.push(T(fm)); }
      const net=w.status==='won'?Math.round(((w.return||0)-(w.stake||0))*100)/100:-(w.stake||0);
@@ -2057,6 +2467,112 @@ index 4335b2f..595f9f7 100644
    });
    ev.sort(function(a,b){return b.when-a.when;});
    return ev;
+@@ -3344,6 +3532,105 @@ _scheduleRefresh();
+ document.getElementById('auto').innerHTML='<span class="dot-live"></span>auto-refresh on';
+ 
+ window.addEventListener('pageshow',function(e){ if(e.persisted) location.reload(); });
++
++// ===================== MATCH SHEET: the full story of one game =====================
++function teamGames(team){ return (DATA.fixtures||[]).filter(f=>(f.home===team||f.away===team)); }
++function teamForm(team){   // last 5 finished: W/D/L from THIS team's perspective (shootout counts as W/L)
++  return teamGames(team).filter(f=>f.status==='FINISHED'||f.status==='AWARDED')
++    .sort((x,y)=>new Date(x.utcDate)-new Date(y.utcDate)).slice(-5).map(f=>{
++      const home=f.home===team, w=f.winner;
++      if(w==='DRAW'||(!w&&f.homeScore===f.awayScore)) return 'D';
++      return (w==='HOME')===home?'W':'L'; });
++}
++function teamStats(team){
++  const gs=teamGames(team).filter(f=>f.status==='FINISHED'||f.status==='AWARDED');
++  let w=0,d=0,l=0,gf=0,ga=0,cs=0,cards=0,hasCards=false;
++  gs.forEach(f=>{ const home=f.home===team;
++    const f_=home?f.homeScore:f.awayScore, a_=home?f.awayScore:f.homeScore;
++    if(f_!=null&&a_!=null){ gf+=f_; ga+=a_; if(a_===0)cs++; }
++    const wn=f.winner; if(wn==='DRAW')d++; else if(wn){ (wn==='HOME')===home?w++:l++; }
++    const c=home?f.cardsHome:f.cardsAway; if(c!=null){ cards+=c; hasCards=true; } });
++  return {p:gs.length,w,d,l,gf,ga,cs,cards:hasCards?cards:null};
++}
++function formHTML(fm){ return fm.map(r=>'<span style="display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;border-radius:5px;font-size:11px;font-weight:700;margin-left:3px;background:'+(r==='W'?'#1d5c33':(r==='L'?'#5c1d1d':'#4a4a22'))+'">'+r+'</span>').join(''); }
++function bestOddsLine(m){
++  const rows=[];
++  if(m.odds){ const o=m.odds; rows.push(['Result', [esc(m.home)+' '+o.HOME.frac, o.DRAW?('Draw '+o.DRAW.frac):null, esc(m.away)+' '+o.AWAY.frac].filter(Boolean).join(' · ')]); }
++  if(m.ouOdds){ const ln=ouLineFor(m.matchId,m.ouOdds), g=m.ouOdds[ln]; if(g) rows.push(['Goals '+ln, 'Over '+g.OVER.frac+' · Under '+g.UNDER.frac]); }
++  if(m.bttsOdds&&m.bttsOdds.YES) rows.push(['BTTS', 'Yes '+m.bttsOdds.YES.frac+' · No '+m.bttsOdds.NO.frac]);
++  if(m.hcOdds){ const ln=hcLineFor(m.matchId,m.hcOdds), g=m.hcOdds[ln]; if(g) rows.push(['Handicap '+fmtHc(ln),
++    [(g.HOME?esc(m.home)+' '+fmtHc(ln)+' '+g.HOME.frac:null),(g.AWAY?esc(m.away)+' '+fmtHc(-parseFloat(ln))+' '+g.AWAY.frac:null)].filter(Boolean).join(' · ')]); }
++  if(m.cardsOdds&&m.cardsOdds['4.5']) rows.push(['Cards 4.5', 'Over '+m.cardsOdds['4.5'].OVER.frac+' · Under '+m.cardsOdds['4.5'].UNDER.frac]);
++  if(m.movOdds){ const k=movDefault(m); if(k&&m.movOdds[k]) rows.push(['Method', movLabel(m,k)+' '+m.movOdds[k].frac]); }
++  return rows;
++}
++function openMatchSheet(mid){
++  const m=(DATA.fixtures||[]).find(f=>f.matchId===mid); if(!m) return;
++  const live=m.status==='IN_PLAY'||m.status==='PAUSED';
++  const done=m.status==='FINISHED'||m.status==='AWARDED';
++  const sc=(m.homeScore!=null&&m.awayScore!=null)?(m.homeScore+'–'+m.awayScore):'v';
++  let h='<button class="mshClose" id="mshClose">✕ close</button>';
++  h+='<div style="font-size:12px;color:var(--muted)">'+esc(m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):('Group '+(m.group||'?')))+' · '+(live?('<span class="livedot"></span>'+liveClock(m)):(done?'Full-time':fmtTime(m.utcDate)))+'</div>';
++  h+='<div class="mshHead"><span class="t">'+flag(m.home)+esc(m.home)+'<div style="font-size:11px;color:var(--muted)">'+esc(m.homeOwner||'pool')+'</div></span><span class="sc">'+sc+'</span><span class="t">'+flag(m.away)+esc(m.away)+'<div style="font-size:11px;color:var(--muted)">'+esc(m.awayOwner||'pool')+'</div></span></div>';
++  const kn=koNote(m); if(kn) h+='<div style="text-align:center;font-size:12px;color:var(--gold)">'+esc(kn)+'</div>';
++  if(done&&m.winner&&m.winner!=='DRAW') h+='<div style="text-align:center;font-size:13px;margin-top:2px">🏆 <b>'+esc(m.winner==='HOME'?m.home:m.away)+'</b> '+(m.shootout?'win on penalties':(m.aet?'win after extra time':'win'))+'</div>';
++  // timeline (scorers) + cards
++  if(Array.isArray(m.scorers)&&m.scorers.length){
++    h+='<div class="mshSec"><b>Timeline</b>'+m.scorers.slice().sort((x,y)=>(x.minute||0)-(y.minute||0)).map(g=>
++      '<div class="mshRow"><span>'+(g.minute!=null?esc(String(g.minute))+"'":'')+' ⚽ '+esc(g.player)+(g.type==='PENALTY'?' (pen)':(g.type==='OWN'?' (og)':''))+'</span><span style="color:var(--muted)">'+esc(g.team==='HOME'?m.home:m.away)+'</span></div>').join('')+'</div>';
++  }
++  if(m.cardsHome!=null||m.cardsAway!=null){
++    h+='<div class="mshSec"><b>Cards (90\')</b><div class="mshRow"><span>'+esc(m.home)+' '+(m.cardsHome??0)+(m.redHome?' ('+m.redHome+'🟥)':'')+'</span><span>'+esc(m.away)+' '+(m.cardsAway??0)+(m.redAway?' ('+m.redAway+'🟥)':'')+'</span></div></div>';
++  }
++  // lineups
++  if((m.homeLineup&&m.homeLineup.length)||(m.awayLineup&&m.awayLineup.length)){
++    const xi=(t,lu)=>'<div style="flex:1;min-width:140px"><b style="font-size:12px">'+esc(t)+'</b>'+(lu||[]).map(p=>'<div style="font-size:11.5px;color:var(--muted)">'+(p.shirtNumber!=null?esc(String(p.shirtNumber))+' ':'')+esc(p.name||'')+'</div>').join('')+'</div>';
++    h+='<div class="mshSec"><b>Starting XIs 📋</b><div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px">'+xi(m.home,m.homeLineup)+xi(m.away,m.awayLineup)+'</div></div>';
++  }
++  // odds (upcoming/live) or a pointer to bet
++  const bettable=!done&&(m.odds||m.ouOdds);
++  if(bettable){
++    h+='<div class="mshSec"><b>Odds</b>'+bestOddsLine(m).map(r=>'<div class="mshRow"><span style="color:var(--muted)">'+esc(r[0])+'</span><span>'+r[1]+'</span></div>').join('')
++      +'<div style="margin-top:6px"><button class="mini cta" id="mshBet">Bet on this game →</button></div></div>';
++  }
++  // points won from this game (live or final)
++  if(m.homeScore!=null&&m.awayScore!=null&&(live||done)){
++    const rows=[];
++    [[m.homeOwner,m.homeScore,m.awayScore,m.home],[m.awayOwner,m.awayScore,m.homeScore,m.away]].forEach(([ow,f_,a_,tm])=>{
++      if(!ow||ow==='—'||ow==='-') return; const b=liveParts(f_,a_);
++      rows.push('<div class="mshRow"><span><b>'+esc(ow)+'</b> · '+esc(tm)+'</span><span>'+(b.parts.length?b.parts.map(p=>esc(p[0])+' +'+p[1]).join(' · '):'nothing yet')+' = <b>+'+b.pts+'</b></span></div>');
++    });
++    if(rows.length) h+='<div class="mshSec"><b>Points '+(done?'won':'as it stands')+'</b>'+rows.join('')+'</div>';
++  }
++  // bets on this game: open + settled ("bet winners")
++  const gb=betsOnMatch(m);
++  const open_=gb.filter(w=>w.status==='pending'), settled=gb.filter(w=>w.status==='won'||w.status==='lost'||w.status==='void');
++  if(open_.length) h+='<div class="mshSec"><b>Open bets on this game</b>'+open_.map(w=>'<div class="mshRow"><span>'+esc(w.player)+' · '+esc(w.legs?betLabel(w).split(' → ')[0]:(w.stake+' on '+pickName(w)+' @ '+w.frac))+'</span><span style="color:var(--muted)">'+(w.legs?'acca':'open')+'</span></div>').join('')+'</div>';
++  if(settled.length) h+='<div class="mshSec"><b>Bet winners &amp; losers here</b>'+settled.map(w=>{
++      const em=w.status==='won'?'✅':(w.status==='void'?'➖':'❌');
++      const amt=w.status==='won'?('+'+(Math.round(((w.return||0)-(w.stake||0))*100)/100)):(w.status==='void'?'stake back':('−'+w.stake));
++      return '<div class="mshRow"><span>'+em+' '+esc(w.player)+' · '+esc(w.legs?betLabel(w).split(' → ')[0]:(w.stake+' on '+pickName(w)+' @ '+w.frac))+'</span><span>'+amt+'</span></div>';}).join('')+'</div>';
++  // form + tournament stats
++  const stH=teamStats(m.home), stA=teamStats(m.away);
++  h+='<div class="mshSec"><b>World Cup so far</b>'
++    +'<div class="mshRow"><span>'+esc(m.home)+' '+formHTML(teamForm(m.home))+'</span><span>'+esc(m.away)+' '+formHTML(teamForm(m.away))+'</span></div>'
++    +'<div class="mshRow"><span style="color:var(--muted)">P'+stH.p+' · '+stH.w+'-'+stH.d+'-'+stH.l+' · GF '+stH.gf+' GA '+stH.ga+' · CS '+stH.cs+(stH.cards!=null?' · 🟨 '+stH.cards:'')+'</span>'
++    +'<span style="color:var(--muted)">P'+stA.p+' · '+stA.w+'-'+stA.d+'-'+stA.l+' · GF '+stA.gf+' GA '+stA.ga+' · CS '+stA.cs+(stA.cards!=null?' · 🟨 '+stA.cards:'')+'</span></div></div>';
++  document.getElementById('mshCard').innerHTML=h;
++  const sheet=document.getElementById('matchSheet'); sheet.classList.add('on');
++  document.getElementById('mshClose').onclick=closeMatchSheet;
++  const bb=document.getElementById('mshBet'); if(bb) bb.onclick=()=>{ closeMatchSheet(); const tb=document.querySelector('.tab[data-s="bets"]'); if(tb) tb.click(); };
++}
++function closeMatchSheet(){ document.getElementById('matchSheet').classList.remove('on'); }
++document.addEventListener('click', e=>{
++  const sheet=document.getElementById('matchSheet');
++  if(sheet&&sheet.classList.contains('on')&&e.target===sheet.querySelector('.mshWrap')) return closeMatchSheet();
++  const t=e.target.closest&&e.target.closest('.msopen');
++  if(t&&t.dataset.mid){ openMatchSheet(t.dataset.mid); }
++});
++document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeMatchSheet(); });
++
+ </script>
++<div id="matchSheet"><div class="mshWrap"><div class="mshCard" id="mshCard"></div></div></div>
+ </body>
+ </html>
 diff --git a/update_results.py b/update_results.py
 index 223d105..d36c29b 100644
 --- a/update_results.py
@@ -2223,7 +2739,7 @@ index 223d105..d36c29b 100644
          standings = _get(f"/competitions/{COMPETITION}/standings", token).get("standings", [])
      except Exception:
 diff --git a/wager.py b/wager.py
-index aca4590..f2cdc6a 100644
+index aca4590..5623e40 100644
 --- a/wager.py
 +++ b/wager.py
 @@ -333,6 +333,12 @@ def _winner_side(m):
@@ -2338,7 +2854,7 @@ index aca4590..f2cdc6a 100644
      out = {}
      for h in range(CS_GRID_MAX + 1):
          for a in range(CS_GRID_MAX + 1):
-@@ -770,6 +822,392 @@ def _cs_result(selection, match):
+@@ -770,6 +822,494 @@ def _cs_result(selection, match):
      return "won" if selection == ("%d-%d" % (int(hs), int(as_))) else "lost"
  
  
@@ -2728,10 +3244,112 @@ index aca4590..f2cdc6a 100644
 +    return None
 +
 +
++# ---------------------------------------------------------------- same-game multi (joint pricing)
++SGM_LEG_MARGIN = 1.10       # per-leg margin factor on the JOINT probability (compounds with legs)
++SGM_MIN_MARGIN = 0.05       # post-rounding: sold implied must beat fair joint by at least this
++SGM_MAX_PROB = 0.90         # a near-certain combo isn't worth selling (and a capped one is farmable)
++
++
++def _sgm_leg_pays(mk, sel, line, h, a):
++    """Does a SCORE-BASED leg pay at final score (h, a)? (result HOME/AWAY handled separately — winner
++    at a level knockout score is the shootout, not the scoreline.)"""
++    if mk == "ou":
++        return (h + a) > line if sel == "OVER" else (h + a) < line
++    if mk == "hc":
++        cov = (h + line) > a
++        return cov if sel == "HOME" else not cov
++    if mk == "cs":
++        return sel == "%d-%d" % (h, a)
++    if mk == "btts":
++        both = h > 0 and a > 0
++        return both if sel == "YES" else not both
++    if mk == "result" and sel == "DRAW":
++        return h == a
++    return None                                     # winner-dependent / independent-axis legs handled elsewhere
++
++
++def sgm_joint_prob(group, comp_home, comp_away, knockout=False):
++    """TRUE joint probability that every pick in a SAME-GAME group wins, computed on the score grid the
++    single-market books already price from — never the naive product a correlated parlay would farm.
++    group: [{market, selection, line}]. Score legs (ou/hc/cs/btts/draw) evaluate per cell; result
++    HOME/AWAY legs use the winner (level knockout cells weigh in the shootout edge, consistent with the
++    method-of-victory book); cards legs are an independent axis and multiply in their own Poisson joint."""
++    lh, la = _team_lambdas(comp_home, comp_away)
++    score_legs, winner_side, cards_legs = [], None, []
++    for g in group:
++        mk = (str(g.get("market") or "result")).lower()
++        sel = g.get("selection")
++        if mk == "cards":
++            cards_legs.append((float(g.get("line")), sel))
++            continue
++        if mk == "result" and sel in ("HOME", "AWAY"):
++            if winner_side is not None and winner_side != sel:
++                return 0.0                          # both sides to win: impossible
++            winner_side = sel
++            continue
++        score_legs.append((mk, sel, (float(g.get("line")) if g.get("line") is not None else None)))
++    # shootout edge for level knockout cells — same lean as mov_odds
++    p_h90 = _hc_home_prob(lh, la, -0.5); p_a90 = 1.0 - _hc_home_prob(lh, la, 0.5)
++    strong = p_h90 / max(1e-9, p_h90 + p_a90)
++    pn_home = 0.5 + (MOV_PENS_EDGE - 0.5) * (2.0 * strong - 1.0)
++    # score-grid pass
++    ph = [math.exp(-lh)]; pa = [math.exp(-la)]
++    for k in range(1, HC_GRID_MAX + 1):
++        ph.append(ph[-1] * lh / k); pa.append(pa[-1] * la / k)
++    p = 0.0
++    for h in range(HC_GRID_MAX + 1):
++        for a in range(HC_GRID_MAX + 1):
++            ok = True
++            for mk, sel, ln in score_legs:
++                r = _sgm_leg_pays(mk, sel, ln, h, a)
++                if r is not True:
++                    ok = False; break
++            if not ok:
++                continue
++            w = 1.0
++            if winner_side is not None:
++                if h == a:
++                    if not knockout:
++                        continue                    # a drawn group game has no winner
++                    w = pn_home if winner_side == "HOME" else (1.0 - pn_home)
++                elif (h > a) != (winner_side == "HOME"):
++                    continue
++            p += ph[h] * pa[a] * w
++    # independent cards axis: joint of the cards legs over ONE total-cards Poisson
++    if cards_legs:
++        lam = _cards_lambda(knockout)
++        pc, term = 0.0, math.exp(-lam)
++        for k in range(0, CARDS_GRID_MAX + 1):
++            if k > 0:
++                term *= lam / k
++            if all(((k > ln) if sel == "OVER" else (k < ln)) for ln, sel in cards_legs):
++                pc += term
++        p *= pc
++    return max(0.0, min(1.0, p))
++
++
++def sgm_group_price(group, comp_home, comp_away, knockout=False):
++    """(price_dict, None) for a same-game group, or (None, reason). The sold price ALWAYS beats the fair
++    joint by SGM_MIN_MARGIN after fraction rounding — correlation is priced, never given away."""
++    p = sgm_joint_prob(group, comp_home, comp_away, knockout=knockout)
++    if p <= 1e-9:
++        return None, "Those picks can't all win together — one of them rules out another."
++    if p > SGM_MAX_PROB:
++        return None, "That combo is too close to certain to price — back the picks as singles."
++    implied = min(SGM_MAX_PROB, p * (SGM_LEG_MARGIN ** max(2, len(group))))
++    for _ in range(10):
++        num, den = _nearest_fraction(1.0 / implied)
++        if den > 0 and (den / (num + den)) >= p * (1.0 + SGM_MIN_MARGIN) - 1e-12:
++            return {"frac": "%d/%d" % (num, den), "num": num, "den": den,
++                    "decimal": round(_dec((num, den)), 3), "fair": round(p, 6)}, None
++        implied = min(0.97, implied + 0.005)
++    return None, "Couldn't price that combo — try different picks."
++
++
  def _match_total(match):
      """Final total goals for a finished match, or None if no valid score. Penalties never count
      (a shootout isn't goals); a knockout's score is its 90+ET total, which is what the tracker shows."""
-@@ -809,6 +1247,32 @@ def _leg_result(leg, match):
+@@ -809,6 +1349,32 @@ def _leg_result(leg, match):
          if status not in ("FINISHED", "AWARDED"):
              return None
          return _cs_result(leg.get("selection"), match)
@@ -2764,7 +3382,7 @@ index aca4590..f2cdc6a 100644
      side = _winner_side(match)
      if status not in ("FINISHED", "AWARDED") or side is None:
          return None
-@@ -819,7 +1283,11 @@ def _leg_result(leg, match):
+@@ -819,7 +1385,11 @@ def _leg_result(leg, match):
  
  def settle(wagers, match, now=None):
      """Settle every pending wager affected by this match. Singles settle outright; accumulators settle
@@ -2777,7 +3395,28 @@ index aca4590..f2cdc6a 100644
      if not isinstance(match, dict):
          return 0
      mid = match_id(match)
-@@ -858,6 +1326,9 @@ def settle(wagers, match, now=None):
+@@ -847,6 +1417,20 @@ def settle(wagers, match, now=None):
+             if "lost" in results:                  # any leg down -> the whole acca is down
+                 w["status"] = "lost"; w["return"] = 0; w["settled_at"] = ts; n += 1
+             elif None not in results:              # every leg decided, none lost
++                if w.get("groups"):                # same-game-aware payout: a group pays its JOINT price
++                    dec, any_won = 1.0, False      #   only when EVERY leg in it won; one void leg voids
++                    for g in w["groups"]:          #   the whole group (drops to 1.0) — never repriced
++                        rs = [legs[i].get("result") for i in g.get("legs", []) if 0 <= i < len(legs)]
++                        if rs and all(r == "won" for r in rs):
++                            den = _num(g.get("den")); num = _num(g.get("num"))
++                            if den > 0:
++                                dec *= (1.0 + num / den)
++                            any_won = True
++                    rv = round(_num(w.get("stake")) * dec, 2)
++                    w["return"] = min(MAX_RETURN, rv) if MAX_RETURN is not None else rv
++                    w["status"] = "void" if not any_won else "won"
++                    w["settled_at"] = ts; n += 1
++                    continue
+                 won_legs = [leg for leg in legs if leg.get("result") == "won"]
+                 dec = 1.0
+                 for leg in won_legs:               # void legs drop out (odds treated as 1.0)
+@@ -858,6 +1442,9 @@ def settle(wagers, match, now=None):
                  w["return"] = min(MAX_RETURN, rv) if MAX_RETURN is not None else rv
                  w["status"] = "void" if not won_legs else "won"   # every leg void = a push (stake back)
                  w["settled_at"] = ts; n += 1
@@ -2787,7 +3426,7 @@ index aca4590..f2cdc6a 100644
              continue
          # ---- single ----
          if w.get("matchId") != mid:
-@@ -889,6 +1360,68 @@ def settle(wagers, match, now=None):
+@@ -889,6 +1476,68 @@ def settle(wagers, match, now=None):
                  w["status"] = "lost"; w["return"] = 0
              w["result"] = r
              w["settled_at"] = ts; n += 1; continue
@@ -2856,7 +3495,35 @@ index aca4590..f2cdc6a 100644
          if status not in ("FINISHED", "AWARDED") or side is None:
              continue
          if side == "DRAW" and _norm_stage(w.get("stage")) != "GROUP_STAGE":
-@@ -968,8 +1501,79 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
+@@ -923,9 +1572,24 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
+                      market=s.get("market", "result"), line=s.get("line"))
+     keys = [match_id(s["match"]) for s in selections]
+     if len(set(keys)) != len(keys):
+-        return False, ("Each game can only go in an accumulator once. A result and a goals bet on the same "
+-                       "match are correlated — e.g. Under 0.5 is always a draw, and Under 0.5 with a team to "
+-                       "win can never happen — so combining them would be mispriced. Back those as separate singles.")
++        # SAME-GAME legs are allowed — they get priced off the JOINT score distribution below (never the
++        # naive product, which correlated picks would farm). Two rules still apply per game:
++        #   1. no duplicate identical picks (same market + selection + line twice)
++        #   2. no method-of-victory leg in a multi-pick game — the score grid can't split 90' vs ET wins,
++        #      so a joint with a MoV leg would be a guess. MoV combines across games only.
++        seen = {}
++        for s in selections:
++            k = match_id(s["match"])
++            sig = (k, (str(s.get("market") or "result")).lower(), s.get("selection"), s.get("line"))
++            if sig in seen:
++                return False, "You've picked the exact same thing twice on one game — drop one of them."
++            seen[sig] = True
++        from collections import Counter
++        multi = {k for k, c in Counter(keys).items() if c > 1}
++        for s in selections:
++            if match_id(s["match"]) in multi and (str(s.get("market") or "result")).lower() == "mov":
++                return False, ("Method-of-victory picks can't combine with other picks on the SAME game — "
++                               "the model can't price that joint honestly. Pair it with picks on other games.")
+     try:
+         stake = round(float(stake), 2)
+     except (TypeError, ValueError):
+@@ -968,8 +1632,79 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
              return False, "One of those games has kicked off or finished — accas must be all upcoming."
          mk = (str(s.get("market") or "result")).lower()
          if mk == "cs":
@@ -2938,3 +3605,46 @@ index aca4590..f2cdc6a 100644
              if s.get("selection") not in ("OVER", "UNDER"):
                  return False, "Pick Over or Under for every goals leg."
              try:
+@@ -996,6 +1731,33 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
+                          "home": s["match"].get("home"), "away": s["match"].get("away"),
+                          "stage": s["match"].get("stage"), "num": o["num"], "den": o["den"], "frac": o["frac"]})
+         dec *= o["decimal"]
++    # SAME-GAME groups get repriced off the JOINT distribution — the per-leg product above is only right
++    # for independent (different-game) legs. groups[] carries the price each group actually pays.
++    order, byk = [], {}
++    for i, leg in enumerate(legs):
++        k = leg["matchId"]
++        if k not in byk:
++            byk[k] = []; order.append(k)
++        byk[k].append(i)
++    groups, dec = [], 1.0
++    for k in order:
++        idxs = byk[k]
++        if len(idxs) == 1:
++            leg = legs[idxs[0]]
++            g = {"matchId": k, "num": leg["num"], "den": leg["den"], "frac": leg["frac"],
++                 "decimal": round(1.0 + leg["num"] / leg["den"], 3), "legs": idxs}
++        else:
++            sel0 = next(s0 for s0 in selections if match_id(s0["match"]) == k)
++            gp, err = sgm_group_price([{"market": (str(s0.get("market") or "result")).lower(),
++                                        "selection": s0.get("selection"), "line": s0.get("line")}
++                                       for s0 in selections if match_id(s0["match"]) == k],
++                                      sel0["comp_home"], sel0["comp_away"], knockout=is_knockout(sel0["match"]))
++            if not gp:
++                return False, err
++            g = {"matchId": k, "num": gp["num"], "den": gp["den"], "frac": gp["frac"],
++                 "decimal": gp["decimal"], "legs": idxs, "sgm": True}
++        groups.append(g)
++        dec *= g["decimal"]
+     ret = round(stake * dec, 2)
+     if MAX_RETURN is not None and ret > MAX_RETURN + 1e-9:
+         return False, "That acca would return %g — the cap is %g per bet. Lower your stake." % (ret, MAX_RETURN)
+@@ -1003,6 +1765,8 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
+          "home": legs[0]["home"], "away": legs[0]["away"], "selection": "ACCA",
+          "stake": stake, "decimal": round(dec, 3), "frac": "%d-fold" % len(legs),
+          "return": ret, "status": "pending", "placed_at": int(now if now is not None else time.time())}
++    if any(len(g["legs"]) > 1 for g in groups):
++        w["groups"] = groups                        # only stored when a same-game group exists (old records unchanged)
+     wagers.append(w)
+     return True, w
+ 

@@ -76,11 +76,13 @@ ok, acc = W.place_acca([], "Erol",
                         {"match": GRP2, "selection": "HOME", "comp_home": 70, "comp_away": 40}],
                        5, 100, now=NOW)
 ck("a BTTS leg + a result leg across games places", ok and any(l.get("market") == "btts" for l in acc.get("legs", [])), acc)
-okx, msgx = W.place_acca([], "Erol",
-                         [{"match": GRP, "selection": "YES", "comp_home": 60, "comp_away": 60, "market": "btts"},
-                          {"match": GRP, "selection": "OVER", "comp_home": 60, "comp_away": 60, "market": "ou", "line": 2.5}],
-                         5, 100, now=NOW)
-ck("same-game BTTS+OU (heavily correlated) is blocked", not okx, msgx if okx else None)
+okx, wx = W.place_acca([], "Erol",
+                       [{"match": GRP, "selection": "YES", "comp_home": 60, "comp_away": 60, "market": "btts"},
+                        {"match": GRP, "selection": "OVER", "comp_home": 60, "comp_away": 60, "market": "ou", "line": 2.5}],
+                       5, 100, now=NOW)
+_naive = (1 + wx["legs"][0]["num"]/wx["legs"][0]["den"]) * (1 + wx["legs"][1]["num"]/wx["legs"][1]["den"]) if okx else 0
+ck("same-game BTTS+OU (heavily POSITIVELY correlated) prices jointly, paying under the naive product",
+   okx and wx.get("groups") and wx["decimal"] < _naive - 1e-9, (wx.get("decimal") if okx else wx, _naive))
 
 print("\n== BTTS exploit: covering dutches with OU are margin-negative (YES ∪ Under 1.5 covers everything) ==")
 # BTTS NO pays unless both score; Over 0.5/1.5 relationships — enumerate covers over the score grid

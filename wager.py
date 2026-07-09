@@ -1208,6 +1208,108 @@ def _btts_result(selection, match):
     return None
 
 
+# ---------------------------------------------------------------- same-game multi (joint pricing)
+SGM_LEG_MARGIN = 1.10       # per-leg margin factor on the JOINT probability (compounds with legs)
+SGM_MIN_MARGIN = 0.05       # post-rounding: sold implied must beat fair joint by at least this
+SGM_MAX_PROB = 0.90         # a near-certain combo isn't worth selling (and a capped one is farmable)
+
+
+def _sgm_leg_pays(mk, sel, line, h, a):
+    """Does a SCORE-BASED leg pay at final score (h, a)? (result HOME/AWAY handled separately — winner
+    at a level knockout score is the shootout, not the scoreline.)"""
+    if mk == "ou":
+        return (h + a) > line if sel == "OVER" else (h + a) < line
+    if mk == "hc":
+        cov = (h + line) > a
+        return cov if sel == "HOME" else not cov
+    if mk == "cs":
+        return sel == "%d-%d" % (h, a)
+    if mk == "btts":
+        both = h > 0 and a > 0
+        return both if sel == "YES" else not both
+    if mk == "result" and sel == "DRAW":
+        return h == a
+    return None                                     # winner-dependent / independent-axis legs handled elsewhere
+
+
+def sgm_joint_prob(group, comp_home, comp_away, knockout=False):
+    """TRUE joint probability that every pick in a SAME-GAME group wins, computed on the score grid the
+    single-market books already price from — never the naive product a correlated parlay would farm.
+    group: [{market, selection, line}]. Score legs (ou/hc/cs/btts/draw) evaluate per cell; result
+    HOME/AWAY legs use the winner (level knockout cells weigh in the shootout edge, consistent with the
+    method-of-victory book); cards legs are an independent axis and multiply in their own Poisson joint."""
+    lh, la = _team_lambdas(comp_home, comp_away)
+    score_legs, winner_side, cards_legs = [], None, []
+    for g in group:
+        mk = (str(g.get("market") or "result")).lower()
+        sel = g.get("selection")
+        if mk == "cards":
+            cards_legs.append((float(g.get("line")), sel))
+            continue
+        if mk == "result" and sel in ("HOME", "AWAY"):
+            if winner_side is not None and winner_side != sel:
+                return 0.0                          # both sides to win: impossible
+            winner_side = sel
+            continue
+        score_legs.append((mk, sel, (float(g.get("line")) if g.get("line") is not None else None)))
+    # shootout edge for level knockout cells — same lean as mov_odds
+    p_h90 = _hc_home_prob(lh, la, -0.5); p_a90 = 1.0 - _hc_home_prob(lh, la, 0.5)
+    strong = p_h90 / max(1e-9, p_h90 + p_a90)
+    pn_home = 0.5 + (MOV_PENS_EDGE - 0.5) * (2.0 * strong - 1.0)
+    # score-grid pass
+    ph = [math.exp(-lh)]; pa = [math.exp(-la)]
+    for k in range(1, HC_GRID_MAX + 1):
+        ph.append(ph[-1] * lh / k); pa.append(pa[-1] * la / k)
+    p = 0.0
+    for h in range(HC_GRID_MAX + 1):
+        for a in range(HC_GRID_MAX + 1):
+            ok = True
+            for mk, sel, ln in score_legs:
+                r = _sgm_leg_pays(mk, sel, ln, h, a)
+                if r is not True:
+                    ok = False; break
+            if not ok:
+                continue
+            w = 1.0
+            if winner_side is not None:
+                if h == a:
+                    if not knockout:
+                        continue                    # a drawn group game has no winner
+                    w = pn_home if winner_side == "HOME" else (1.0 - pn_home)
+                elif (h > a) != (winner_side == "HOME"):
+                    continue
+            p += ph[h] * pa[a] * w
+    # independent cards axis: joint of the cards legs over ONE total-cards Poisson
+    if cards_legs:
+        lam = _cards_lambda(knockout)
+        pc, term = 0.0, math.exp(-lam)
+        for k in range(0, CARDS_GRID_MAX + 1):
+            if k > 0:
+                term *= lam / k
+            if all(((k > ln) if sel == "OVER" else (k < ln)) for ln, sel in cards_legs):
+                pc += term
+        p *= pc
+    return max(0.0, min(1.0, p))
+
+
+def sgm_group_price(group, comp_home, comp_away, knockout=False):
+    """(price_dict, None) for a same-game group, or (None, reason). The sold price ALWAYS beats the fair
+    joint by SGM_MIN_MARGIN after fraction rounding — correlation is priced, never given away."""
+    p = sgm_joint_prob(group, comp_home, comp_away, knockout=knockout)
+    if p <= 1e-9:
+        return None, "Those picks can't all win together — one of them rules out another."
+    if p > SGM_MAX_PROB:
+        return None, "That combo is too close to certain to price — back the picks as singles."
+    implied = min(SGM_MAX_PROB, p * (SGM_LEG_MARGIN ** max(2, len(group))))
+    for _ in range(10):
+        num, den = _nearest_fraction(1.0 / implied)
+        if den > 0 and (den / (num + den)) >= p * (1.0 + SGM_MIN_MARGIN) - 1e-12:
+            return {"frac": "%d/%d" % (num, den), "num": num, "den": den,
+                    "decimal": round(_dec((num, den)), 3), "fair": round(p, 6)}, None
+        implied = min(0.97, implied + 0.005)
+    return None, "Couldn't price that combo — try different picks."
+
+
 def _match_total(match):
     """Final total goals for a finished match, or None if no valid score. Penalties never count
     (a shootout isn't goals); a knockout's score is its 90+ET total, which is what the tracker shows."""
@@ -1315,6 +1417,20 @@ def settle(wagers, match, now=None):
             if "lost" in results:                  # any leg down -> the whole acca is down
                 w["status"] = "lost"; w["return"] = 0; w["settled_at"] = ts; n += 1
             elif None not in results:              # every leg decided, none lost
+                if w.get("groups"):                # same-game-aware payout: a group pays its JOINT price
+                    dec, any_won = 1.0, False      #   only when EVERY leg in it won; one void leg voids
+                    for g in w["groups"]:          #   the whole group (drops to 1.0) — never repriced
+                        rs = [legs[i].get("result") for i in g.get("legs", []) if 0 <= i < len(legs)]
+                        if rs and all(r == "won" for r in rs):
+                            den = _num(g.get("den")); num = _num(g.get("num"))
+                            if den > 0:
+                                dec *= (1.0 + num / den)
+                            any_won = True
+                    rv = round(_num(w.get("stake")) * dec, 2)
+                    w["return"] = min(MAX_RETURN, rv) if MAX_RETURN is not None else rv
+                    w["status"] = "void" if not any_won else "won"
+                    w["settled_at"] = ts; n += 1
+                    continue
                 won_legs = [leg for leg in legs if leg.get("result") == "won"]
                 dec = 1.0
                 for leg in won_legs:               # void legs drop out (odds treated as 1.0)
@@ -1456,9 +1572,24 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
                      market=s.get("market", "result"), line=s.get("line"))
     keys = [match_id(s["match"]) for s in selections]
     if len(set(keys)) != len(keys):
-        return False, ("Each game can only go in an accumulator once. A result and a goals bet on the same "
-                       "match are correlated — e.g. Under 0.5 is always a draw, and Under 0.5 with a team to "
-                       "win can never happen — so combining them would be mispriced. Back those as separate singles.")
+        # SAME-GAME legs are allowed — they get priced off the JOINT score distribution below (never the
+        # naive product, which correlated picks would farm). Two rules still apply per game:
+        #   1. no duplicate identical picks (same market + selection + line twice)
+        #   2. no method-of-victory leg in a multi-pick game — the score grid can't split 90' vs ET wins,
+        #      so a joint with a MoV leg would be a guess. MoV combines across games only.
+        seen = {}
+        for s in selections:
+            k = match_id(s["match"])
+            sig = (k, (str(s.get("market") or "result")).lower(), s.get("selection"), s.get("line"))
+            if sig in seen:
+                return False, "You've picked the exact same thing twice on one game — drop one of them."
+            seen[sig] = True
+        from collections import Counter
+        multi = {k for k, c in Counter(keys).items() if c > 1}
+        for s in selections:
+            if match_id(s["match"]) in multi and (str(s.get("market") or "result")).lower() == "mov":
+                return False, ("Method-of-victory picks can't combine with other picks on the SAME game — "
+                               "the model can't price that joint honestly. Pair it with picks on other games.")
     try:
         stake = round(float(stake), 2)
     except (TypeError, ValueError):
@@ -1600,6 +1731,33 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
                          "home": s["match"].get("home"), "away": s["match"].get("away"),
                          "stage": s["match"].get("stage"), "num": o["num"], "den": o["den"], "frac": o["frac"]})
         dec *= o["decimal"]
+    # SAME-GAME groups get repriced off the JOINT distribution — the per-leg product above is only right
+    # for independent (different-game) legs. groups[] carries the price each group actually pays.
+    order, byk = [], {}
+    for i, leg in enumerate(legs):
+        k = leg["matchId"]
+        if k not in byk:
+            byk[k] = []; order.append(k)
+        byk[k].append(i)
+    groups, dec = [], 1.0
+    for k in order:
+        idxs = byk[k]
+        if len(idxs) == 1:
+            leg = legs[idxs[0]]
+            g = {"matchId": k, "num": leg["num"], "den": leg["den"], "frac": leg["frac"],
+                 "decimal": round(1.0 + leg["num"] / leg["den"], 3), "legs": idxs}
+        else:
+            sel0 = next(s0 for s0 in selections if match_id(s0["match"]) == k)
+            gp, err = sgm_group_price([{"market": (str(s0.get("market") or "result")).lower(),
+                                        "selection": s0.get("selection"), "line": s0.get("line")}
+                                       for s0 in selections if match_id(s0["match"]) == k],
+                                      sel0["comp_home"], sel0["comp_away"], knockout=is_knockout(sel0["match"]))
+            if not gp:
+                return False, err
+            g = {"matchId": k, "num": gp["num"], "den": gp["den"], "frac": gp["frac"],
+                 "decimal": gp["decimal"], "legs": idxs, "sgm": True}
+        groups.append(g)
+        dec *= g["decimal"]
     ret = round(stake * dec, 2)
     if MAX_RETURN is not None and ret > MAX_RETURN + 1e-9:
         return False, "That acca would return %g — the cap is %g per bet. Lower your stake." % (ret, MAX_RETURN)
@@ -1607,6 +1765,8 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
          "home": legs[0]["home"], "away": legs[0]["away"], "selection": "ACCA",
          "stake": stake, "decimal": round(dec, 3), "frac": "%d-fold" % len(legs),
          "return": ret, "status": "pending", "placed_at": int(now if now is not None else time.time())}
+    if any(len(g["legs"]) > 1 for g in groups):
+        w["groups"] = groups                        # only stored when a same-game group exists (old records unchanged)
     wagers.append(w)
     return True, w
 

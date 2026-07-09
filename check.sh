@@ -104,6 +104,9 @@ if python3 qa_hc_exploit.py >/dev/null; then echo "  ok"; else echo "  FAIL"; py
 say "Method of victory + O/U cards (pricing floors vs the KO book, KO-only gate, REG/ET/PENS + 90'-cards settlement, no-data void grace, feed normaliser)"
 if python3 test_mov_cards.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_mov_cards.py | tail -24; FAIL=1; fi
 
+say "Same-game multis (joint pricing vs an independent reference, 1500-combo fuzz, correlation farms killed, group settlement/void semantics)"
+if python3 qa_sgm.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_sgm.py | tail -24; FAIL=1; fi
+
 say "BTTS + feed-tier degradation (pricing/settlement/accas, free-tier proofs: MoV push, cards auto-gate, scorers/lineups normaliser)"
 if python3 test_btts_feed.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_btts_feed.py | tail -24; FAIL=1; fi
 

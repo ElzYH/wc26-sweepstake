@@ -150,11 +150,21 @@ try:
     ck("the acca's hc leg is struck at the served price",
        j4.get("ok") and any(l.get("market") == "hc" and l.get("num") == served["num"] and l.get("den") == served["den"]
                             for l in (j4.get("wager") or {}).get("legs", [])), j4.get("wager"))
-    st5, b5 = S.req("POST", "/api/place_acca", {"player": "James", "stake": 3, "pin": "WXYZ",
+    st5, b5 = S.req("POST", "/api/place_acca", {"player": "Erol", "stake": 1, "pin": "ABCD", "nonce": "sgm1",
                                                 "legs": [{"matchId": "g1", "selection": "HOME", "market": "hc", "line": float(ln)},
                                                          {"matchId": "g1", "selection": "OVER", "market": "ou", "line": 2.5}]})
-    ck("two acca legs on the SAME game are still rejected over HTTP (the exploit gate)",
-       json.loads(b5).get("ok") is not True and "once" in json.loads(b5).get("error", "").lower(), b5[:160])
+    j5 = json.loads(b5)
+    _wsg = j5.get("wager") or {}
+    _n = 1.0
+    for _l in _wsg.get("legs", []):
+        _n *= 1 + _l["num"] / _l["den"]
+    ck("a SAME-game hc+OU acca now places over HTTP at a JOINT group price under the naive product",
+       j5.get("ok") and _wsg.get("groups") and _wsg.get("decimal", 99) < _n - 1e-9, b5[:200])
+    st5b, b5b = S.req("POST", "/api/place_acca", {"player": "James", "stake": 1, "pin": "WXYZ", "nonce": "sgm2",
+                                                  "legs": [{"matchId": "g1", "selection": "OVER", "market": "ou", "line": 2.5},
+                                                           {"matchId": "g1", "selection": "UNDER", "market": "ou", "line": 2.5}]})
+    ck("a contradictory same-game combo is rejected over HTTP with the can't-all-win message",
+       json.loads(b5b).get("ok") is not True and "can't all win" in json.loads(b5b).get("error", ""), b5b[:160])
 
     # -------- settle through the real poll --------
     S.set_results([match("g1", HOME, AWAY, "FINISHED", hs=3, as_=1), match("g2", OTHERH, OTHERA, "FINISHED", hs=1, as_=0)])

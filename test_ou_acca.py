@@ -59,16 +59,36 @@ badsel = [{"match": fx("A", "B"), "selection": "HOME", "market": "ou", "line": 2
 oks, msg = W.place_acca([], "Erol", badsel, 3, 100, now=NOW)
 ck("a 1X2 selection on an O/U-market leg rejects", not oks, msg if oks else None)
 
-print("\n== same game: a result + goals combo is correlated, so it's blocked (back them as singles) ==")
+print("\n== same game: a result + goals combo is PRICED JOINTLY (correlation captured, never given away) ==")
 same_corr = [{"match": mA, "selection": "OVER", "market": "ou", "line": 2.5, "comp_home": CH, "comp_away": CA},
              {"match": mA, "selection": "HOME", "comp_home": CH, "comp_away": CA}]
 ok_same, w_same = W.place_acca([], "Erol", same_corr, 3, 100, now=NOW)
-ck("O/U + match-winner on the SAME game is REJECTED (correlated — was mispriced)", not ok_same, w_same)
-# the egregious case: Under 0.5 IS a draw -> combining them paid ~3x too much
+ck("O/U + match-winner on the SAME game places as a joint-priced group (paying under the naive product)",
+   ok_same and w_same.get("groups") and w_same["decimal"] < (1 + w_same["legs"][0]["num"]/w_same["legs"][0]["den"]) * (1 + w_same["legs"][1]["num"]/w_same["legs"][1]["den"]) - 1e-9, w_same)
+# the OLD egregious case was Under 0.5 + Draw (Under 0.5 IS a draw — the naive product paid ~3x too
+# much). Under 0.5 isn't even a sellable single at these strengths any more (ladder-filtered), so the
+# ingredient itself is gone:
 u05_draw = [{"match": mA, "selection": "UNDER", "market": "ou", "line": 0.5, "comp_home": CH, "comp_away": CA},
             {"match": mA, "selection": "DRAW", "comp_home": CH, "comp_away": CA}]
 ok_ud, w_ud = W.place_acca([], "Erol", u05_draw, 3, 100, now=NOW)
-ck("Under 0.5 + Draw on the same game is REJECTED", not ok_ud, w_ud)
+ck("Under 0.5 + Draw can't be built — the unsellable line refuses cleanly", not ok_ud and isinstance(w_ud, str), w_ud)
+# ...and its modern equivalent, Draw + Under 1.5 (jointly EXACTLY 0-0), prices at the 0-0 joint —
+# a fraction of the naive product, so redundancy earns nothing:
+d_u15 = [{"match": mA, "selection": "UNDER", "market": "ou", "line": 1.5, "comp_home": CH, "comp_away": CA},
+         {"match": mA, "selection": "DRAW", "comp_home": CH, "comp_away": CA}]
+ok_d15, w_d15 = W.place_acca([], "Erol", d_u15, 3, 100, now=NOW)
+if ok_d15:
+    # what matters is the JOINT: the sold implied must beat the true P(0-0) by the SGM margin.
+    # (it may legitimately pay MORE than the naive product — two heavy marginal margins can overshoot a
+    # correlation; the joint prices it honestly while staying firmly house-positive.)
+    import math as _m
+    _lh, _la = W._team_lambdas(CH, CA)
+    _fair00 = _m.exp(-_lh) * _m.exp(-_la)
+    _g = w_d15["groups"][0]
+    ck("Draw + Under 1.5 sold above the true P(0-0) joint by the SGM margin",
+       (_g["den"] / (_g["num"] + _g["den"])) >= _fair00 * (1 + W.SGM_MIN_MARGIN) - 1e-9, (w_d15["decimal"], _fair00))
+else:
+    ck("Draw + Under 1.5 refused only as unsellable, never mispriced", isinstance(w_d15, str) and "price" in w_d15.lower(), w_d15)
 dup_result = [{"match": mA, "selection": "HOME", "comp_home": CH, "comp_away": CA},
               {"match": mA, "selection": "AWAY", "comp_home": CH, "comp_away": CA}]
 ok_dup, msg_dup = W.place_acca([], "Erol", dup_result, 3, 100, now=NOW)
@@ -76,7 +96,8 @@ ck("two RESULT legs on the same game are blocked", not ok_dup, msg_dup if ok_dup
 dup_ou = [{"match": mA, "selection": "OVER", "market": "ou", "line": 2.5, "comp_home": CH, "comp_away": CA},
           {"match": mA, "selection": "UNDER", "market": "ou", "line": 3.5, "comp_home": CH, "comp_away": CA}]
 ok_dou, msg_dou = W.place_acca([], "Erol", dup_ou, 3, 100, now=NOW)
-ck("two O/U legs on the same game are blocked", not ok_dou, msg_dou if ok_dou else None)
+ck("two compatible O/U legs on one game price jointly; the pair collapses to the tighter constraint",
+   ok_dou and isinstance(msg_dou, dict) and msg_dou.get("groups"), msg_dou)
 
 print("\n== settlement: partial, then a losing O/U leg sinks the acca ==")
 # acca: OVER 2.5 on Brazil-Serbia, HOME on Spain-Japan

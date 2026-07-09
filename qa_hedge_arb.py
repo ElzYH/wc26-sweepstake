@@ -159,9 +159,13 @@ ck("garbage scorelines are rejected", not W.place([], "Erol", g1cs, "12-0", 5, 1
 ck("a cs leg rides in a CROSS-game accumulator (independent margined events — nothing to dutch)", W.place_acca([], "Erol",
    [{"match": g1cs, "selection": "2-1", "market": "cs", "comp_home": 95, "comp_away": 55},
     {"match": g2, "selection": "HOME", "comp_home": 95, "comp_away": 55}], 5, 1000, now=NOW)[0], None)
-ck("a cs leg NEVER combines with another pick on the SAME game (the correlated-combo exploit gate)", not W.place_acca([], "Erol",
+_oksg, _wsg = W.place_acca([], "Erol",
    [{"match": g1cs, "selection": "2-1", "market": "cs", "comp_home": 95, "comp_away": 55},
-    {"match": g1cs, "selection": "HOME", "comp_home": 95, "comp_away": 55}], 5, 1000, now=NOW)[0], None)
+    {"match": g1cs, "selection": "HOME", "comp_home": 95, "comp_away": 55}], 5, 1000, now=NOW)
+_n = (1 + _wsg["legs"][0]["num"]/_wsg["legs"][0]["den"]) * (1 + _wsg["legs"][1]["num"]/_wsg["legs"][1]["den"]) if _oksg else 0
+ck("a cs + result pick on the SAME game prices at the JOINT (2-1 implies a home win — a total subset: "
+   "the joint equals the 2-1 cell and pays LESS than the naive product)",
+   _oksg and _wsg.get("groups") and _wsg["decimal"] < _n - 1e-9, (_wsg.get("decimal") if _oksg else _wsg, _n))
 ck("cs alongside a result bet is allowed (mutually-exclusive cells, margin-protected — not a hedge)",
    W.place(wl, "Erol", g1cs, "HOME", 5, 1000, 95, 55, now=NOW)[0], None)
 import copy as _cp
