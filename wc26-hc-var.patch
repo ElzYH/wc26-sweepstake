@@ -1234,10 +1234,10 @@ index 034f9b0..d69f2bc 100644
                      ok, err = False, str(e)
 diff --git a/test_btts_feed.py b/test_btts_feed.py
 new file mode 100644
-index 0000000..b3c38ae
+index 0000000..a99ce9e
 --- /dev/null
 +++ b/test_btts_feed.py
-@@ -0,0 +1,162 @@
+@@ -0,0 +1,187 @@
 +#!/usr/bin/env python3
 +"""BTTS + feed-tier degradation QA. BTTS: pricing integrity off the shared lambdas, ladder rule,
 +placement, settlement on the final score only (so it works on the FREE tier), accas, hostile input.
@@ -1378,6 +1378,31 @@ index 0000000..b3c38ae
 +# cards market auto-gate: with a bare feed scoring must NOT attach cardsOdds
 +import scoring
 +ck("scoring exposes the cards capability gate (compute takes cards_market)", "cards_market" in scoring.compute.__code__.co_varnames, None)
++
++print("\n== empty-array tier: list `goals: []` / `bookings: []` is ABSENCE until a detail fetch confirms it ==")
++api_empty = [{"id": 21, "homeTeam": {"name": "A"}, "awayTeam": {"name": "B"}, "utcDate": "2026-06-20T18:00:00Z",
++              "status": "FINISHED", "stage": "GROUP_STAGE", "goals": [], "bookings": [],
++              "score": {"fullTime": {"home": 2, "away": 1}, "regularTime": {"home": 2, "away": 1},
++                        "duration": "REGULAR", "winner": "HOME_TEAM"}}]
++oe = UR.normalize_matches(api_empty, lambda n: n)[0]
++ck("unconfirmed empty arrays -> scorers None, cards None (no phantom zeros, backfill stays hungry)",
++   oe["scorers"] is None and oe["cardsHome"] is None and not oe["deepChecked"], oe)
++oc = UR.normalize_matches([dict(api_empty[0], _deepConfirmed=True)], lambda n: n)[0]
++ck("detail-CONFIRMED empty arrays -> genuinely zero (cards settle, timeline is a real blank)",
++   oc["cardsHome"] == 0 and oc["scorers"] == [] and oc["deepChecked"] is True, oc)
++_calls = []
++_old_get = UR._get
++UR._get = lambda path, token: (_calls.append(path) or {"goals": [], "bookings": []})
++try:
++    _rows = [dict(api_empty[0])]
++    UR._backfill_finished(_rows, {}, "tok")
++    ck("the backfill FIRES on the empty-array tier (this starved every old game before)",
++       _calls == ["/matches/21"] and _rows[0].get("_deepConfirmed"), _calls)
++    _calls.clear()
++    UR._backfill_finished([dict(api_empty[0])], {"21": {"deepChecked": True}}, "tok")
++    ck("a deep-checked game is NEVER refetched (one detail call per game, ever)", _calls == [], _calls)
++finally:
++    UR._get = _old_get
 +
 +print("\n== deep-data normaliser: scorers + lineups extraction ==")
 +api_deep = [{"id": 11, "homeTeam": {"name": "A", "lineup": [{"name": "Keeper One", "position": "Goalkeeper", "shirtNumber": 1},
@@ -2651,7 +2676,7 @@ index 4335b2f..f3b75b6 100644
  </body>
  </html>
 diff --git a/update_results.py b/update_results.py
-index 223d105..7b381b4 100644
+index 223d105..7169215 100644
 --- a/update_results.py
 +++ b/update_results.py
 @@ -10,6 +10,7 @@ import json
@@ -2662,14 +2687,18 @@ index 223d105..7b381b4 100644
  import urllib.request
  
  COMPETITION = os.environ.get("COMPETITION", "WC")
-@@ -40,6 +41,38 @@ def build_name_map(teams_path="teams.json"):
+@@ -40,6 +41,42 @@ def build_name_map(teams_path="teams.json"):
      return resolve
  
  
 +def _scorers(m, h, a, resolve):
 +    """Deep-data goals[] -> a compact scorer list, or None when the feed carries no scorers at all.
++    An EMPTY goals array from the list endpoint is treated as absence (some tiers ship goals: [] on
++    every row) unless a detail fetch confirmed this match — then empty genuinely means no goals.
 +    Own goals are attributed to the team CREDITED with the goal (that's what the score shows)."""
 +    if not isinstance(m.get("goals"), list):
++        return None
++    if not m["goals"] and not m.get("_deepConfirmed"):
 +        return None
 +    out = []
 +    for g in m["goals"][:40]:
@@ -2701,7 +2730,7 @@ index 223d105..7b381b4 100644
  def normalize_matches(api_matches, resolve):
      out = []
      for m in api_matches:
-@@ -51,6 +84,7 @@ def normalize_matches(api_matches, resolve):
+@@ -51,6 +88,7 @@ def normalize_matches(api_matches, resolve):
          et = score.get("extraTime", {}) or {}
          pen = score.get("penalties", {}) or {}
          duration = score.get("duration", "REGULAR")
@@ -2709,7 +2738,7 @@ index 223d105..7b381b4 100644
          winner = {"HOME_TEAM": "HOME", "AWAY_TEAM": "AWAY", "DRAW": "DRAW"}.get(score.get("winner"))
  
          # v4 quirk: score/fullTime INCLUDES extra-time AND penalty-shootout goals. For our points and
-@@ -63,6 +97,36 @@ def normalize_matches(api_matches, resolve):
+@@ -63,6 +101,37 @@ def normalize_matches(api_matches, resolve):
                  return ft.get(side) - pen.get(side, 0)
              return ft.get(side)
  
@@ -2718,10 +2747,11 @@ index 223d105..7b381b4 100644
 +        # counts (conservative). Every booking = 1 card regardless of colour. cardsHome/cardsAway stay
 +        # None when the payload has no bookings key at all — settlement must tell "no data on this plan"
 +        # (leave pending, void at FT) apart from "genuinely zero cards" (an empty list).
++        _confirmed = bool(m.get("_deepConfirmed"))
 +        cards_h = cards_a = None
 +        reds_h = reds_a = 0
 +        card_events = None
-+        if isinstance(m.get("bookings"), list):
++        if isinstance(m.get("bookings"), list) and (m["bookings"] or _confirmed):
 +            cards_h = cards_a = 0
 +            card_events = []
 +            for bk in m["bookings"][:40]:
@@ -2746,7 +2776,7 @@ index 223d105..7b381b4 100644
          out.append({
              "id": m["id"], "stage": m.get("stage", "GROUP_STAGE"),
              "group": ((m.get("group") or "").replace("GROUP_", "").strip() or None), "utcDate": m.get("utcDate"),
-@@ -75,6 +139,14 @@ def normalize_matches(api_matches, resolve):
+@@ -75,6 +144,15 @@ def normalize_matches(api_matches, resolve):
              "aet": duration in ("EXTRA_TIME", "PENALTY_SHOOTOUT"),          # went to extra time
              "shootout": duration == "PENALTY_SHOOTOUT",
              "penHome": pen.get("home"), "penAway": pen.get("away"),         # shootout score, if any
@@ -2756,12 +2786,13 @@ index 223d105..7b381b4 100644
 +                                                                            #   method-of-victory won't guess REG vs ET
 +            "scorers": _scorers(m, h, a, resolve),                          # [{minute, team: HOME/AWAY, player}] or None
 +            "cardEvents": card_events,                                      # every booking with minute (timeline)
++            "deepChecked": _confirmed,                                      # detail fetched at least once for this game
 +            "homeLineup": _lineup(m.get("homeTeam")),                       # [{name, position, shirtNumber}] or None
 +            "awayLineup": _lineup(m.get("awayTeam")),
          })
      return out
  
-@@ -139,27 +211,182 @@ def _get(path, token):
+@@ -139,27 +217,188 @@ def _get(path, token):
          return json.load(r)
  
  
@@ -2812,6 +2843,7 @@ index 223d105..7b381b4 100644
 +                                                   "formation": d.get("formation"), "coach": d.get("coach")})
 +            if isinstance(detail.get("score"), dict):        # detail score is at least as fresh as the list's
 +                m["score"] = detail["score"]
++            m["_deepConfirmed"] = True                        # detail seen: empty arrays now MEAN empty
 +            budget -= 1
 +            DEEP_STATS["enriched"] += 1
 +        except Exception as e:
@@ -2835,6 +2867,8 @@ index 223d105..7b381b4 100644
 +        for k in ("scorers", "homeLineup", "awayLineup", "cardsHome", "cardsAway", "redHome", "redAway", "cardEvents"):
 +            if m.get(k) is None and old.get(k) is not None:
 +                m[k] = old[k]
++        if old.get("deepChecked") and not m.get("deepChecked"):
++            m["deepChecked"] = True                 # one detail fetch per game, EVER — the flag survives polls
 +        if not m.get("durationKnown") and old.get("durationKnown"):
 +            m["durationKnown"] = True
 +            for k in ("duration", "aet", "shootout"):
@@ -2853,10 +2887,12 @@ index 223d105..7b381b4 100644
 +        if m.get("status") not in ("FINISHED", "AWARDED"):
 +            continue
 +        pv = norm_prev.get(str(m.get("id"))) or {}
-+        need_goals = not isinstance(m.get("goals"), list) and pv.get("scorers") is None
-+        need_cards = not isinstance(m.get("bookings"), list) and pv.get("cardsHome") is None
-+        if not (need_goals or need_cards):
-+            continue                                # this game's deep data is already in hand
++        if pv.get("deepChecked"):
++            continue                                # already detail-fetched once — never again
++        have_goals = isinstance(m.get("goals"), list) and m["goals"]        # an EMPTY list is not "in hand"
++        have_cards = isinstance(m.get("bookings"), list) and m["bookings"]  #   (some tiers ship [] on every row)
++        if have_goals and have_cards:
++            continue                                # the list genuinely carries this game's deep data
 +        try:
 +            detail = _get("/matches/%s" % m.get("id"), token)
 +            detail = detail.get("match", detail) or {}
@@ -2865,6 +2901,7 @@ index 223d105..7b381b4 100644
 +                    m[k] = detail[k]
 +            if isinstance(detail.get("score"), dict):
 +                m["score"] = detail["score"]
++            m["_deepConfirmed"] = True
 +            budget -= 1
 +            DEEP_STATS["backfilled"] += 1
 +        except Exception as e:

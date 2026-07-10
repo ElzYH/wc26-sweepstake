@@ -43,8 +43,12 @@ def build_name_map(teams_path="teams.json"):
 
 def _scorers(m, h, a, resolve):
     """Deep-data goals[] -> a compact scorer list, or None when the feed carries no scorers at all.
+    An EMPTY goals array from the list endpoint is treated as absence (some tiers ship goals: [] on
+    every row) unless a detail fetch confirmed this match — then empty genuinely means no goals.
     Own goals are attributed to the team CREDITED with the goal (that's what the score shows)."""
     if not isinstance(m.get("goals"), list):
+        return None
+    if not m["goals"] and not m.get("_deepConfirmed"):
         return None
     out = []
     for g in m["goals"][:40]:
@@ -102,10 +106,11 @@ def normalize_matches(api_matches, resolve):
         # counts (conservative). Every booking = 1 card regardless of colour. cardsHome/cardsAway stay
         # None when the payload has no bookings key at all — settlement must tell "no data on this plan"
         # (leave pending, void at FT) apart from "genuinely zero cards" (an empty list).
+        _confirmed = bool(m.get("_deepConfirmed"))
         cards_h = cards_a = None
         reds_h = reds_a = 0
         card_events = None
-        if isinstance(m.get("bookings"), list):
+        if isinstance(m.get("bookings"), list) and (m["bookings"] or _confirmed):
             cards_h = cards_a = 0
             card_events = []
             for bk in m["bookings"][:40]:
@@ -145,6 +150,7 @@ def normalize_matches(api_matches, resolve):
                                                                             #   method-of-victory won't guess REG vs ET
             "scorers": _scorers(m, h, a, resolve),                          # [{minute, team: HOME/AWAY, player}] or None
             "cardEvents": card_events,                                      # every booking with minute (timeline)
+            "deepChecked": _confirmed,                                      # detail fetched at least once for this game
             "homeLineup": _lineup(m.get("homeTeam")),                       # [{name, position, shirtNumber}] or None
             "awayLineup": _lineup(m.get("awayTeam")),
         })
@@ -258,6 +264,7 @@ def _enrich_near_live(api_matches, token):
                                                    "formation": d.get("formation"), "coach": d.get("coach")})
             if isinstance(detail.get("score"), dict):        # detail score is at least as fresh as the list's
                 m["score"] = detail["score"]
+            m["_deepConfirmed"] = True                        # detail seen: empty arrays now MEAN empty
             budget -= 1
             DEEP_STATS["enriched"] += 1
         except Exception as e:
@@ -281,6 +288,8 @@ def _carry_deep_fields(new_matches, prev_path):
         for k in ("scorers", "homeLineup", "awayLineup", "cardsHome", "cardsAway", "redHome", "redAway", "cardEvents"):
             if m.get(k) is None and old.get(k) is not None:
                 m[k] = old[k]
+        if old.get("deepChecked") and not m.get("deepChecked"):
+            m["deepChecked"] = True                 # one detail fetch per game, EVER — the flag survives polls
         if not m.get("durationKnown") and old.get("durationKnown"):
             m["durationKnown"] = True
             for k in ("duration", "aet", "shootout"):
@@ -299,10 +308,12 @@ def _backfill_finished(api_matches, norm_prev, token):
         if m.get("status") not in ("FINISHED", "AWARDED"):
             continue
         pv = norm_prev.get(str(m.get("id"))) or {}
-        need_goals = not isinstance(m.get("goals"), list) and pv.get("scorers") is None
-        need_cards = not isinstance(m.get("bookings"), list) and pv.get("cardsHome") is None
-        if not (need_goals or need_cards):
-            continue                                # this game's deep data is already in hand
+        if pv.get("deepChecked"):
+            continue                                # already detail-fetched once — never again
+        have_goals = isinstance(m.get("goals"), list) and m["goals"]        # an EMPTY list is not "in hand"
+        have_cards = isinstance(m.get("bookings"), list) and m["bookings"]  #   (some tiers ship [] on every row)
+        if have_goals and have_cards:
+            continue                                # the list genuinely carries this game's deep data
         try:
             detail = _get("/matches/%s" % m.get("id"), token)
             detail = detail.get("match", detail) or {}
@@ -311,6 +322,7 @@ def _backfill_finished(api_matches, norm_prev, token):
                     m[k] = detail[k]
             if isinstance(detail.get("score"), dict):
                 m["score"] = detail["score"]
+            m["_deepConfirmed"] = True
             budget -= 1
             DEEP_STATS["backfilled"] += 1
         except Exception as e:

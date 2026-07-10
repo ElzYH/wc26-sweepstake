@@ -139,6 +139,31 @@ ck("BTTS settles on the bare feed", btt[0]["status"] == "won", btt[0])
 import scoring
 ck("scoring exposes the cards capability gate (compute takes cards_market)", "cards_market" in scoring.compute.__code__.co_varnames, None)
 
+print("\n== empty-array tier: list `goals: []` / `bookings: []` is ABSENCE until a detail fetch confirms it ==")
+api_empty = [{"id": 21, "homeTeam": {"name": "A"}, "awayTeam": {"name": "B"}, "utcDate": "2026-06-20T18:00:00Z",
+              "status": "FINISHED", "stage": "GROUP_STAGE", "goals": [], "bookings": [],
+              "score": {"fullTime": {"home": 2, "away": 1}, "regularTime": {"home": 2, "away": 1},
+                        "duration": "REGULAR", "winner": "HOME_TEAM"}}]
+oe = UR.normalize_matches(api_empty, lambda n: n)[0]
+ck("unconfirmed empty arrays -> scorers None, cards None (no phantom zeros, backfill stays hungry)",
+   oe["scorers"] is None and oe["cardsHome"] is None and not oe["deepChecked"], oe)
+oc = UR.normalize_matches([dict(api_empty[0], _deepConfirmed=True)], lambda n: n)[0]
+ck("detail-CONFIRMED empty arrays -> genuinely zero (cards settle, timeline is a real blank)",
+   oc["cardsHome"] == 0 and oc["scorers"] == [] and oc["deepChecked"] is True, oc)
+_calls = []
+_old_get = UR._get
+UR._get = lambda path, token: (_calls.append(path) or {"goals": [], "bookings": []})
+try:
+    _rows = [dict(api_empty[0])]
+    UR._backfill_finished(_rows, {}, "tok")
+    ck("the backfill FIRES on the empty-array tier (this starved every old game before)",
+       _calls == ["/matches/21"] and _rows[0].get("_deepConfirmed"), _calls)
+    _calls.clear()
+    UR._backfill_finished([dict(api_empty[0])], {"21": {"deepChecked": True}}, "tok")
+    ck("a deep-checked game is NEVER refetched (one detail call per game, ever)", _calls == [], _calls)
+finally:
+    UR._get = _old_get
+
 print("\n== deep-data normaliser: scorers + lineups extraction ==")
 api_deep = [{"id": 11, "homeTeam": {"name": "A", "lineup": [{"name": "Keeper One", "position": "Goalkeeper", "shirtNumber": 1},
                                                             {"name": "Back Two", "position": "Defence", "shirtNumber": 2}]},
