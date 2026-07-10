@@ -857,6 +857,7 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                           "redHome": m.get("redHome"), "redAway": m.get("redAway"),
                           "aet": m.get("aet"), "shootout": m.get("shootout"),
                           "scorers": m.get("scorers"),                                       # deep-data goal scorers
+                          "cardEvents": m.get("cardEvents"),                                 # bookings timeline
                           "homeLineup": m.get("homeLineup"), "awayLineup": m.get("awayLineup"),   # starting XIs
                           "winner": _winner_side(m)} for m in matches]}
     # a feed that has EVER supplied bookings can settle cards bets; a bare tier can't, so the market is

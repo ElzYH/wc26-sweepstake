@@ -879,7 +879,7 @@ function renderBets(){
   } else if(fbet.open && fbMine){
     h+='<div style="margin:0 0 12px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;color:var(--muted)">🎁 You\'ve claimed today\'s free points — they\'re in your balance above. Bet them on any game. The next drop is another day.</div>';
   }
-  h+='<div style="color:var(--muted);font-size:12px;margin:0 0 10px">Tap a game to bet · tap it again to remove'+(accasOn?' · tap a second game to build a 🎰 accumulator':'')+'. Each game also has an <b>\u26bd Over/Under goals</b> market (pick a goals line \u2014 near-certain lines pay on a deeper ladder, down to 1/14), a <b>\ud83e\udd1d Both teams to score</b> market, a <b>\u00b1 Handicap</b> market (give a side a goal start or deficit \u2014 pick the line, settles on the 90&#39;+extra-time score, penalties don\u2019t count) a <b>\ud83d\udfe8 Cards</b> market (total bookings in 90 minutes \u2014 every card counts 1; if the feed carries no cards data the bet pushes with a full refund), on knockouts a <b>\ud83c\udfc1 Method of victory</b> market (in 90&#39;, in extra time, or on penalties) and a <b>\ud83c\udfaf Exact score</b> market \u2014 type the final score (after extra time, 0\u20139 each way) and back it. Result = who goes through (a shootout win counts); everything settles automatically, and any market can be an accumulator leg \u2014 one pick per game.</div>';
+  h+='<div style="color:var(--muted);font-size:12px;margin:0 0 10px">Tap a game to bet · tap it again to remove'+(accasOn?' · tap a second game to build a 🎰 accumulator':'')+'. Each game also has an <b>\u26bd Over/Under goals</b> market (pick a goals line \u2014 near-certain lines pay on a deeper ladder, down to 1/14), a <b>\u00b1 Handicap</b> market (give a side a goal start or deficit \u2014 pick the line, settles on the 90&#39;+extra-time score, penalties don\u2019t count) a <b>\ud83d\udfe8 Cards</b> market (total bookings in 90 minutes \u2014 every card counts 1; if the feed carries no cards data the bet pushes with a full refund), on knockouts a <b>\ud83c\udfc1 Method of victory</b> market (in 90&#39;, in extra time, or on penalties) and a <b>\ud83c\udfaf Exact score</b> market \u2014 type the final score (after extra time, 0\u20139 each way) and back it. Result = who goes through (a shootout win counts); everything settles automatically, and any market can be an accumulator leg \u2014 one pick per game.</div>';
   if(ACCAMODE) h+='<div style="color:var(--muted);font-size:12.5px;margin:0 0 10px">🎰 Building an accumulator — odds multiply, but <b>every</b> leg must win. Up to '+maxLegs+' legs, and up to '+((caps.max_active_accas)||2)+' accas running at once.'+(retCap?(' Max return: <b>'+retCap+'</b>.'):'')+'</div>';
   if(!fx.length) h+='<div class="empty">No upcoming games to bet on right now — check back before kick-off.</div>';
   else h+='<div class="mdgrid">'+fx.map(m=>{
@@ -1199,7 +1199,7 @@ function betCardHTML(w, opts){
       return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0;color:var(--muted)"><span>'+lr+'<b style="color:var(--ink)">'+esc(pick)+'</b> <span style="opacity:.8">('+esc(l.home)+' v '+esc(l.away)+')</span>'+scoreBit+chip+'</span><span style="color:var(--gold);font-weight:600">'+l.frac+'</span></div>';
     }).join('');
     const ovr=(w.status==='pending')?accaLiveStatus(w,fixOf,live):null;
-    body='<div style="font-weight:600;font-size:13.5px">'+who+'🎰 '+w.legs.length+'-fold accumulator · combined <span style="color:var(--gold)">~'+(Math.round(dec*100)/100)+'×</span>'+(ovr?' · '+provChip(ovr):'')+'</div><div style="margin-top:4px">'+rows+'</div>';
+    body='<div style="font-weight:600;font-size:13.5px;overflow-wrap:anywhere">'+who+'🎰 '+w.legs.length+'-fold acca · <span style="color:var(--gold)">~'+(Math.round(dec*100)/100)+'×</span>'+(ovr?' · '+provChip(ovr):'')+'</div><div style="margin-top:4px">'+rows+'</div>';
   } else {
     const pick=pickName(w); const isL=live.has(w.matchId);
     let liveBit=''; const f=fixOf(w.matchId);
@@ -1214,12 +1214,16 @@ function betCardHTML(w, opts){
   if(w.status==='pending'&&opts&&opts.fixById&&!opts.showPlayer&&w.player===BETPLAYER&&w.id){
     const fb=opts.fixById, kos=(w.legs||[w]).map(l=>{const f=fb.get?fb.get(l.matchId):fb[l.matchId]; return f&&f.utcDate?Date.parse(f.utcDate):NaN;});
     if(kos.every(t=>!isNaN(t))&&Date.now()<Math.min.apply(null,kos)-2*3600*1000)
-      voidBtn=' <button class="voidbet" data-id="'+esc(w.id)+'" style="margin-left:8px;background:none;border:1px solid var(--line);border-radius:8px;color:#ff9a9a;font-size:11px;padding:3px 9px;cursor:pointer">Void</button>';
+      voidBtn='<button class="voidbet" data-id="'+esc(w.id)+'" style="flex:0 0 auto;margin-left:auto;background:none;border:1px solid #5c2a2a;border-radius:9px;color:#ff9a9a;font-size:12px;padding:6px 14px;cursor:pointer;font-family:\'Sora\',sans-serif">Void</button>';
   }
-  const outcome=(w.status==='won'?('+'+Math.round((w.return-w.stake)*100)/100+' pts'):(w.status==='lost'?('−'+w.stake+' pts'):(w.status==='void'?'refunded':'→ '+w.return+' back if it wins · '+w.stake+' stake + '+(Math.round((w.return-w.stake)*100)/100)+' winnings')))+voidBtn;
-  return '<div style="border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:6px"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'
-    +'<div style="flex:1;min-width:0">'+body+'</div>'
-    +'<div style="text-align:right;white-space:nowrap"><span style="color:'+tg[0]+';font-weight:700;font-size:11px">'+tg[1]+'</span><div style="font-size:12.5px">stake <b>'+w.stake+'</b></div><div style="color:'+tg[0]+';font-size:12.5px;font-weight:600">'+outcome+'</div></div>'
+  const outcome=(w.status==='won'?('+'+Math.round((w.return-w.stake)*100)/100+' pts'):(w.status==='lost'?('−'+w.stake+' pts'):(w.status==='void'?'refunded':'→ '+w.return+' back if it wins · '+w.stake+' stake + '+(Math.round((w.return-w.stake)*100)/100)+' winnings')));
+  return '<div style="border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:6px">'
+    +'<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;column-gap:10px;row-gap:2px">'
+    +'<div style="flex:1 1 200px;min-width:0">'+body+'</div>'
+    +'<div style="flex:0 0 auto;margin-left:auto;white-space:nowrap;font-size:12px"><span style="color:'+tg[0]+';font-weight:700;font-size:11px">'+tg[1]+'</span> · stake <b>'+w.stake+'</b></div>'
+    +'</div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;border-top:1px solid var(--line);padding-top:6px">'
+    +'<span style="color:'+tg[0]+';font-size:12.5px;font-weight:600;min-width:0;flex:1 1 200px">'+outcome+'</span>'+voidBtn
     +'</div></div>';
 }
 async function loadAllBets(){
@@ -3557,7 +3561,6 @@ function bestOddsLine(m){
   const rows=[];
   if(m.odds){ const o=m.odds; rows.push(['Result', [esc(m.home)+' '+o.HOME.frac, o.DRAW?('Draw '+o.DRAW.frac):null, esc(m.away)+' '+o.AWAY.frac].filter(Boolean).join(' · ')]); }
   if(m.ouOdds){ const ln=ouLineFor(m.matchId,m.ouOdds), g=m.ouOdds[ln]; if(g) rows.push(['Goals '+ln, 'Over '+g.OVER.frac+' · Under '+g.UNDER.frac]); }
-  if(m.bttsOdds&&m.bttsOdds.YES) rows.push(['BTTS', 'Yes '+m.bttsOdds.YES.frac+' · No '+m.bttsOdds.NO.frac]);
   if(m.hcOdds){ const ln=hcLineFor(m.matchId,m.hcOdds), g=m.hcOdds[ln]; if(g) rows.push(['Handicap '+fmtHc(ln),
     [(g.HOME?esc(m.home)+' '+fmtHc(ln)+' '+g.HOME.frac:null),(g.AWAY?esc(m.away)+' '+fmtHc(-parseFloat(ln))+' '+g.AWAY.frac:null)].filter(Boolean).join(' · ')]); }
   if(m.cardsOdds&&m.cardsOdds['4.5']) rows.push(['Cards 4.5', 'Over '+m.cardsOdds['4.5'].OVER.frac+' · Under '+m.cardsOdds['4.5'].UNDER.frac]);
@@ -3574,10 +3577,17 @@ function openMatchSheet(mid){
   h+='<div class="mshHead"><span class="t">'+flag(m.home)+esc(m.home)+'<div style="font-size:11px;color:var(--muted)">'+esc(m.homeOwner||'pool')+'</div></span><span class="sc">'+sc+'</span><span class="t">'+flag(m.away)+esc(m.away)+'<div style="font-size:11px;color:var(--muted)">'+esc(m.awayOwner||'pool')+'</div></span></div>';
   const kn=koNote(m); if(kn) h+='<div style="text-align:center;font-size:12px;color:var(--gold)">'+esc(kn)+'</div>';
   if(done&&m.winner&&m.winner!=='DRAW') h+='<div style="text-align:center;font-size:13px;margin-top:2px">🏆 <b>'+esc(m.winner==='HOME'?m.home:m.away)+'</b> '+(m.shootout?'win on penalties':(m.aet?'win after extra time':'win'))+'</div>';
-  // timeline (scorers) + cards
-  if(Array.isArray(m.scorers)&&m.scorers.length){
-    h+='<div class="mshSec"><b>Timeline</b>'+m.scorers.slice().sort((x,y)=>(x.minute||0)-(y.minute||0)).map(g=>
-      '<div class="mshRow"><span>'+(g.minute!=null?esc(String(g.minute))+"'":'')+' ⚽ '+esc(g.player)+(g.type==='PENALTY'?' (pen)':(g.type==='OWN'?' (og)':''))+'</span><span style="color:var(--muted)">'+esc(g.team==='HOME'?m.home:m.away)+'</span></div>').join('')+'</div>';
+  // timeline: goals + cards merged by minute, live-score style
+  {
+    const ev=[];
+    (m.scorers||[]).forEach(g=>ev.push({min:g.minute,icon:'⚽',txt:esc(g.player||'')+(g.type==='PENALTY'?' (pen)':(g.type==='OWN'?' (og)':'')),team:g.team}));
+    (m.cardEvents||[]).forEach(c=>ev.push({min:c.minute,icon:c.red?'🟥':'🟨',txt:esc(c.player||''),team:c.team}));
+    if(ev.length){
+      ev.sort((x,y)=>(x.min??999)-(y.min??999));
+      let rows=ev.map(e=>'<div class="mshRow"><span>'+(e.min!=null?esc(String(e.min))+"'":'')+' '+e.icon+' '+e.txt+'</span><span style="color:var(--muted)">'+esc(e.team==='HOME'?m.home:m.away)+'</span></div>').join('');
+      if(done) rows+='<div class="mshRow" style="color:var(--muted)"><span>FT'+(m.aet?' (a.e.t.)':'')+'</span><span>'+sc+(m.shootout&&m.penHome!=null?' · pens '+m.penHome+'–'+m.penAway:'')+'</span></div>';
+      h+='<div class="mshSec"><b>Timeline</b>'+rows+'</div>';
+    }
   }
   if(m.cardsHome!=null||m.cardsAway!=null){
     h+='<div class="mshSec"><b>Cards (90\')</b><div class="mshRow"><span>'+esc(m.home)+' '+(m.cardsHome??0)+(m.redHome?' ('+m.redHome+'🟥)':'')+'</span><span>'+esc(m.away)+' '+(m.cardsAway??0)+(m.redAway?' ('+m.redAway+'🟥)':'')+'</span></div></div>';

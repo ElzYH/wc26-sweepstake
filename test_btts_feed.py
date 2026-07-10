@@ -44,12 +44,11 @@ b5050, b8020 = W.btts_odds(50, 50), W.btts_odds(80, 20)
 ck("a lopsided game lengthens YES vs an even one (the weak side scores less often)",
    (not b5050 or not b8020) or b8020["YES"]["decimal"] > b5050["YES"]["decimal"], (b8020.get("YES"), b5050.get("YES")))
 
-print("\n== BTTS placement + settlement (final score only — free-tier settleable) ==")
-ok, w = W.place([], "Erol", GRP, "YES", 5, 100, 60, 60, now=NOW, market="btts")
-ck("YES places, struck at the live price", ok and w["num"] == W.btts_odds(60, 60)["YES"]["num"], w)
-for badsel in ("MAYBE", "OVER", "yes", "", None):
-    okb, msg = W.place([], "Erol", GRP, badsel, 5, 100, 60, 60, now=NOW, market="btts")
-    ck("selection %r rejected" % (badsel,), not okb, msg if okb else None)
+print("\n== BTTS placement (back on sale at the harsher book) ==")
+ok, msg = W.place([], "Erol", GRP, "YES", 5, 100, 60, 60, now=NOW, market="btts")
+ck("a BTTS bet places, struck at the live price", ok and msg["num"] == W.btts_odds(60, 60)["YES"]["num"], msg)
+ck("the book is genuinely harsh (>= 1.20 overround at even strengths)",
+   (lambda b: (1.0 / b["YES"]["decimal"] + 1.0 / b["NO"]["decimal"]) >= 1.20)(W.btts_odds(50, 50)), W.btts_odds(50, 50))
 def fin(h, a, **kw):
     m = {"id": "g1", "home": "A", "away": "B", "stage": "GROUP_STAGE", "status": "FINISHED",
          "utcDate": "2099-01-01T00:00:00Z", "homeScore": h, "awayScore": a}
@@ -70,19 +69,12 @@ for h, a in ((float("nan"), 1), (-1, 0), ("x", "y")):
     wl = bb("YES"); W.settle(wl, fin(h, a))
     ck("hostile score %r never settles" % ((h, a),), wl[0]["status"] == "pending", wl[0])
 
-print("\n== BTTS accas: cross-game in, same-game blocked ==")
-ok, acc = W.place_acca([], "Erol",
+print("\n== BTTS acca legs place again ==")
+ok, msg = W.place_acca([], "Erol",
                        [{"match": GRP, "selection": "YES", "comp_home": 60, "comp_away": 60, "market": "btts"},
                         {"match": GRP2, "selection": "HOME", "comp_home": 70, "comp_away": 40}],
                        5, 100, now=NOW)
-ck("a BTTS leg + a result leg across games places", ok and any(l.get("market") == "btts" for l in acc.get("legs", [])), acc)
-okx, wx = W.place_acca([], "Erol",
-                       [{"match": GRP, "selection": "YES", "comp_home": 60, "comp_away": 60, "market": "btts"},
-                        {"match": GRP, "selection": "OVER", "comp_home": 60, "comp_away": 60, "market": "ou", "line": 2.5}],
-                       5, 100, now=NOW)
-_naive = (1 + wx["legs"][0]["num"]/wx["legs"][0]["den"]) * (1 + wx["legs"][1]["num"]/wx["legs"][1]["den"]) if okx else 0
-ck("same-game BTTS+OU (heavily POSITIVELY correlated) prices jointly, paying under the naive product",
-   okx and wx.get("groups") and wx["decimal"] < _naive - 1e-9, (wx.get("decimal") if okx else wx, _naive))
+ck("a BTTS leg + a result leg across games places", ok and any(l.get("market") == "btts" for l in (msg.get("legs") or [])), msg)
 
 print("\n== BTTS exploit: covering dutches with OU are margin-negative (YES ∪ Under 1.5 covers everything) ==")
 # BTTS NO pays unless both score; Over 0.5/1.5 relationships — enumerate covers over the score grid

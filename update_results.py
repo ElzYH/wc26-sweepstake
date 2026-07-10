@@ -104,20 +104,26 @@ def normalize_matches(api_matches, resolve):
         # (leave pending, void at FT) apart from "genuinely zero cards" (an empty list).
         cards_h = cards_a = None
         reds_h = reds_a = 0
+        card_events = None
         if isinstance(m.get("bookings"), list):
             cards_h = cards_a = 0
-            for bk in m["bookings"]:
+            card_events = []
+            for bk in m["bookings"][:40]:
                 if not isinstance(bk, dict):
                     continue
                 minute = bk.get("minute")
-                if isinstance(minute, (int, float)) and minute > 90:
-                    continue
                 t = ((bk.get("team") or {}).get("name")) or ""
+                side = "HOME" if resolve(t) == h else ("AWAY" if resolve(t) == a else None)
                 is_red = (bk.get("card") or "").upper() in ("RED", "YELLOW_RED", "RED_CARD", "SECOND_YELLOW")
-                if resolve(t) == h:
+                if side:                                                    # the timeline shows EVERY booking (ET incl.)
+                    card_events.append({"minute": minute, "team": side, "red": is_red,
+                                        "player": ((bk.get("player") or {}).get("name")) or None})
+                if isinstance(minute, (int, float)) and minute > 90:
+                    continue                                                # the BETTING count stays 90' only
+                if side == "HOME":
                     cards_h += 1
                     reds_h += 1 if is_red else 0
-                elif resolve(t) == a:
+                elif side == "AWAY":
                     cards_a += 1
                     reds_a += 1 if is_red else 0
 
@@ -138,6 +144,7 @@ def normalize_matches(api_matches, resolve):
             "durationKnown": duration_known,                                # False on bare free-tier payloads ->
                                                                             #   method-of-victory won't guess REG vs ET
             "scorers": _scorers(m, h, a, resolve),                          # [{minute, team: HOME/AWAY, player}] or None
+            "cardEvents": card_events,                                      # every booking with minute (timeline)
             "homeLineup": _lineup(m.get("homeTeam")),                       # [{name, position, shirtNumber}] or None
             "awayLineup": _lineup(m.get("awayTeam")),
         })
@@ -210,6 +217,14 @@ DETAIL_BUDGET_PER_POLL = 8            # never more than this many /matches/{id} 
 BACKFILL_BUDGET_PER_POLL = 3          # old FINISHED games get their scorers/cards backfilled a few per poll
 
 
+DEEP_STATS = {"enriched": 0, "backfilled": 0, "errors": 0, "last_error": None}
+
+
+def _note_err(e):
+    DEEP_STATS["errors"] += 1
+    DEEP_STATS["last_error"] = "%s: %s" % (type(e).__name__, str(e)[:200])
+
+
 def _enrich_near_live(api_matches, token):
     """For matches near kickoff / live / just finished, fetch the match DETAIL and merge the deep-data
     blocks (bookings, goals/scorers, line-ups) the LIST endpoint may not carry. Every part is optional:
@@ -244,7 +259,9 @@ def _enrich_near_live(api_matches, token):
             if isinstance(detail.get("score"), dict):        # detail score is at least as fresh as the list's
                 m["score"] = detail["score"]
             budget -= 1
-        except Exception:
+            DEEP_STATS["enriched"] += 1
+        except Exception as e:
+            _note_err(e)
             continue                                          # a detail blip never blocks the whole poll
     return api_matches
 
@@ -261,7 +278,7 @@ def _carry_deep_fields(new_matches, prev_path):
         old = prev.get(str(m.get("id")))
         if not old:
             continue
-        for k in ("scorers", "homeLineup", "awayLineup", "cardsHome", "cardsAway", "redHome", "redAway"):
+        for k in ("scorers", "homeLineup", "awayLineup", "cardsHome", "cardsAway", "redHome", "redAway", "cardEvents"):
             if m.get(k) is None and old.get(k) is not None:
                 m[k] = old[k]
         if not m.get("durationKnown") and old.get("durationKnown"):
@@ -281,11 +298,11 @@ def _backfill_finished(api_matches, norm_prev, token):
             break
         if m.get("status") not in ("FINISHED", "AWARDED"):
             continue
-        if isinstance(m.get("goals"), list):
-            continue                                # the list payload already carries it
         pv = norm_prev.get(str(m.get("id"))) or {}
-        if pv.get("scorers") is not None:
-            continue                                # already backfilled on an earlier poll
+        need_goals = not isinstance(m.get("goals"), list) and pv.get("scorers") is None
+        need_cards = not isinstance(m.get("bookings"), list) and pv.get("cardsHome") is None
+        if not (need_goals or need_cards):
+            continue                                # this game's deep data is already in hand
         try:
             detail = _get("/matches/%s" % m.get("id"), token)
             detail = detail.get("match", detail) or {}
@@ -295,7 +312,9 @@ def _backfill_finished(api_matches, norm_prev, token):
             if isinstance(detail.get("score"), dict):
                 m["score"] = detail["score"]
             budget -= 1
-        except Exception:
+            DEEP_STATS["backfilled"] += 1
+        except Exception as e:
+            _note_err(e)
             continue
 
 
@@ -329,11 +348,45 @@ def fetch(out="results.json", token=None):
     with open(out, "w") as f:
         json.dump(data, f, indent=2)
     print(f"Wrote {out}: {len(data['matches'])} matches, {len(data['standings'])} groups")
+    ds = DEEP_STATS
+    print("deep-data: enriched %d, backfilled %d, errors %d%s" % (
+        ds["enriched"], ds["backfilled"], ds["errors"],
+        (" — last: " + ds["last_error"]) if ds["last_error"] else ""))
     return data
+
+
+def diag(token=None):
+    """Run on the box: python3 update_results.py diag — proves what THIS token/plan actually returns.
+    Checks the list payload for deep fields, then fetches ONE finished match's detail and reports which
+    blocks (goals / bookings / lineups) come back, or the exact HTTP error if the plan refuses."""
+    token = _resolve_token(token)
+    if not token:
+        print("no token set"); return
+    ms = _get(f"/competitions/{COMPETITION}/matches", token).get("matches", [])
+    fin = [m for m in ms if m.get("status") in ("FINISHED", "AWARDED")]
+    print("list: %d matches, %d finished" % (len(ms), len(fin)))
+    if fin:
+        sample = fin[-1]
+        print("list payload carries: goals=%s bookings=%s lineup=%s duration=%s" % (
+            isinstance(sample.get("goals"), list), isinstance(sample.get("bookings"), list),
+            bool((sample.get("homeTeam") or {}).get("lineup")), (sample.get("score") or {}).get("duration")))
+        try:
+            d = _get("/matches/%s" % sample.get("id"), token)
+            d = d.get("match", d) or {}
+            print("detail %s (%s v %s): goals=%s bookings=%s lineup=%s" % (
+                sample.get("id"), (sample.get("homeTeam") or {}).get("name"), (sample.get("awayTeam") or {}).get("name"),
+                len(d.get("goals") or []), len(d.get("bookings") or []),
+                len(((d.get("homeTeam") or {}).get("lineup")) or [])))
+        except Exception as e:
+            print("detail fetch FAILED — this is the blocker: %s: %s" % (type(e).__name__, e))
+    else:
+        print("no finished matches to probe")
 
 
 if __name__ == "__main__":
     if "--check" in sys.argv:
         audit()
+    elif "diag" in sys.argv:
+        diag()
     else:
         fetch()

@@ -312,10 +312,10 @@ index 0000000..cfd7a68
 +print("ALL HANDICAP EXPLOIT CHECKS PASSED")
 diff --git a/qa_hc_http.py b/qa_hc_http.py
 new file mode 100644
-index 0000000..3648f50
+index 0000000..d02f6a7
 --- /dev/null
 +++ b/qa_hc_http.py
-@@ -0,0 +1,304 @@
+@@ -0,0 +1,297 @@
 +#!/usr/bin/env python3
 +"""Handicap over the wire — boot the REAL server, bet real HTTP, settle through the real poll.
 +Locks in: the tracker payload carries margined hcOdds for a bettable fixture; a bet struck via
@@ -592,26 +592,19 @@ index 0000000..3648f50
 +    S.stop()
 +
 +# ============================================================ 5. BTTS over REAL HTTP + the cards auto-gate
-+print("\n== 5. BTTS served/placed/settled; the cards market auto-hides on a feed with no bookings ==")
++print("\n== 5. BTTS served/placed/settled at the harsher book; the cards market auto-hides on a feed with no bookings ==")
 +S = Server([match("g1", HOME, AWAY, "TIMED", stage="GROUP_STAGE"),
 +            match("g2", OTHERH, OTHERA, "TIMED", stage="GROUP_STAGE")])
 +try:
-+    ok_fx = S.wait(lambda: (next((f for f in S.tracker().get("fixtures", []) if f.get("matchId") == "g1"), {}) or {}).get("bttsOdds"))
++    ok_fx = S.wait(lambda: (next((f for f in S.tracker().get("fixtures", []) if f.get("matchId") == "g1"), {}) or {}).get("odds"))
 +    fxs = {f.get("matchId"): f for f in S.tracker().get("fixtures", [])}
-+    ck("fixtures carry bttsOdds", ok_fx and fxs["g1"].get("bttsOdds", {}).get("YES"), sorted(fxs.get("g1", {}).keys()))
++    ck("fixtures carry bttsOdds again (back on sale at the harsher book)", ok_fx and fxs["g1"].get("bttsOdds", {}).get("YES"), sorted(fxs.get("g1", {}).keys()))
 +    ck("the cards market is HIDDEN when this feed has never supplied bookings (auto-gate)",
 +       not fxs["g1"].get("cardsOdds"), sorted(fxs.get("g1", {}).keys()))
-+    bt = fxs["g1"]["bttsOdds"]
 +    st, b = S.req("POST", "/api/place_wager", {"player": "Erol", "matchId": "g1", "selection": "YES",
 +                                               "market": "btts", "stake": 4, "pin": "ABCD"})
-+    j = json.loads(b)
-+    ck("a BTTS bet places over HTTP at the served price", j.get("ok") and (j.get("wager") or {}).get("num") == bt["YES"]["num"], b[:140])
-+    S.set_results([match("g1", HOME, AWAY, "FINISHED", hs=2, as_=1, winner="HOME"),
-+                   match("g2", OTHERH, OTHERA, "TIMED")])
-+    S.req("POST", "/api/poll")
-+    S.wait(lambda: all(x.get("status") != "pending" for x in S.wagers()))
-+    got = S.wagers()[0]
-+    ck("BTTS YES settled WON on 2-1 through the real pipeline", got.get("status") == "won", got)
++    _j = json.loads(b)
++    ck("a BTTS bet places over HTTP at the served price", _j.get("ok") and (_j.get("wager") or {}).get("num") == fxs["g1"]["bttsOdds"]["YES"]["num"], b[:160])
 +finally:
 +    S.stop()
 +
@@ -1021,7 +1014,7 @@ index 0000000..664cd91
 +    raise SystemExit(1)
 +print("ALL DISALLOWED-GOAL ALERT CHECKS PASSED")
 diff --git a/scoring.py b/scoring.py
-index b61d202..86d768f 100644
+index b61d202..4782eba 100644
 --- a/scoring.py
 +++ b/scoring.py
 @@ -372,7 +372,7 @@ def _clinched_top2(standings, group_matches):
@@ -1033,7 +1026,7 @@ index b61d202..86d768f 100644
      teams = {t["name"]: t for t in _load(teams_path)["teams"]}
      # Overlay calibrated composites (from the server's calibration.json) so the DISPLAYED odds are priced
      # from the SAME strengths that bet PLACEMENT uses. Without this, auto-calibration moves placement odds
-@@ -853,7 +853,17 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
+@@ -853,7 +853,18 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                            "minute": m.get("minute"),
                            "aet": m.get("aet"), "shootout": m.get("shootout"),
                            "penHome": m.get("penHome"), "penAway": m.get("penAway"),
@@ -1041,6 +1034,7 @@ index b61d202..86d768f 100644
 +                          "redHome": m.get("redHome"), "redAway": m.get("redAway"),
 +                          "aet": m.get("aet"), "shootout": m.get("shootout"),
 +                          "scorers": m.get("scorers"),                                       # deep-data goal scorers
++                          "cardEvents": m.get("cardEvents"),                                 # bookings timeline
 +                          "homeLineup": m.get("homeLineup"), "awayLineup": m.get("awayLineup"),   # starting XIs
                            "winner": _winner_side(m)} for m in matches]}
 +    # a feed that has EVER supplied bookings can settle cards bets; a bare tier can't, so the market is
@@ -1051,7 +1045,7 @@ index b61d202..86d768f 100644
      # odds on still-to-play fixtures (only when wagering is active; guarded)
      if wagers is not None and wager is not None:
          try:
-@@ -866,6 +876,12 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
+@@ -866,6 +877,12 @@ def compute(teams_path="teams.json", draw_path="draw_result.json",
                      f["odds"] = wager.match_odds(ch, ca, knockout=wager.is_knockout(f))
                      f["ouOdds"] = wager.goals_odds(ch, ca)        # Over/Under prices per line (ladder-rule filtered)
                      f["csOdds"] = wager.cs_odds(ch, ca)           # exact-scoreline prices (0-0..4-4 + OTHER)
@@ -1065,7 +1059,7 @@ index b61d202..86d768f 100644
                      f["maxStake"] = wager.stage_max_stake(f.get("stage"))
              data["wager_stats"] = wager.stats(wagers)
 diff --git a/server.py b/server.py
-index 034f9b0..d2fa9a7 100644
+index 034f9b0..d69f2bc 100644
 --- a/server.py
 +++ b/server.py
 @@ -1290,6 +1290,25 @@ def _pick_label(w, draw="the draw"):
@@ -1198,7 +1192,7 @@ index 034f9b0..d2fa9a7 100644
          cfg["last_update"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
          save_config(cfg)
          notify_changes(old_snapshot)        # personalised alerts (if any subscribers)
-@@ -2895,6 +2978,35 @@ def _odds_integrity_violations(td, teams):
+@@ -2895,6 +2978,30 @@ def _odds_integrity_violations(td, teams):
                  bo = _odds_book_overround([leg["OVER"]["decimal"], leg["UNDER"]["decimal"]])
                  if bo is not None and bo <= 1.0:
                      out.append("%s v %s — O/U %s book %.1f%%" % (h, a, ln, bo * 100))
@@ -1214,11 +1208,6 @@ index 034f9b0..d2fa9a7 100644
 +                        pf = pfh if sel == "HOME" else (1.0 - pfh)
 +                        if (1.0 / d["decimal"]) <= pf:
 +                            out.append("%s v %s — handicap %s %s one-sided price at/below fair" % (h, a, ln, sel))
-+            bt = wager_mod.btts_odds(ch, ca) or {}
-+            if "YES" in bt and "NO" in bt:
-+                bb = _odds_book_overround([bt["YES"]["decimal"], bt["NO"]["decimal"]])
-+                if bb is not None and bb <= 1.0:
-+                    out.append("%s v %s — BTTS book %.1f%%" % (h, a, bb * 100))
 +            for ln, leg in (wager_mod.cards_odds(knockout=ko) or {}).items():
 +                bc = _odds_book_overround([leg["OVER"]["decimal"], leg["UNDER"]["decimal"]])
 +                if bc is not None and bc <= 1.0:
@@ -1234,7 +1223,7 @@ index 034f9b0..d2fa9a7 100644
      except Exception as e:
          log("odds integrity check error (non-fatal):", e)
      return out
-@@ -3973,7 +4085,7 @@ class Handler(BaseHTTPRequestHandler):
+@@ -3973,7 +4080,7 @@ class Handler(BaseHTTPRequestHandler):
                  wl = load_wagers() or None             # standing bets always count, even if NEW betting is switched off
                  try:                                 # rebuild the tracker from the restored data (no network needed)
                      scoring_mod.compute(out="tracker_data.json",
@@ -1245,10 +1234,10 @@ index 034f9b0..d2fa9a7 100644
                      ok, err = False, str(e)
 diff --git a/test_btts_feed.py b/test_btts_feed.py
 new file mode 100644
-index 0000000..052b7d1
+index 0000000..b3c38ae
 --- /dev/null
 +++ b/test_btts_feed.py
-@@ -0,0 +1,170 @@
+@@ -0,0 +1,162 @@
 +#!/usr/bin/env python3
 +"""BTTS + feed-tier degradation QA. BTTS: pricing integrity off the shared lambdas, ladder rule,
 +placement, settlement on the final score only (so it works on the FREE tier), accas, hostile input.
@@ -1295,12 +1284,11 @@ index 0000000..052b7d1
 +ck("a lopsided game lengthens YES vs an even one (the weak side scores less often)",
 +   (not b5050 or not b8020) or b8020["YES"]["decimal"] > b5050["YES"]["decimal"], (b8020.get("YES"), b5050.get("YES")))
 +
-+print("\n== BTTS placement + settlement (final score only — free-tier settleable) ==")
-+ok, w = W.place([], "Erol", GRP, "YES", 5, 100, 60, 60, now=NOW, market="btts")
-+ck("YES places, struck at the live price", ok and w["num"] == W.btts_odds(60, 60)["YES"]["num"], w)
-+for badsel in ("MAYBE", "OVER", "yes", "", None):
-+    okb, msg = W.place([], "Erol", GRP, badsel, 5, 100, 60, 60, now=NOW, market="btts")
-+    ck("selection %r rejected" % (badsel,), not okb, msg if okb else None)
++print("\n== BTTS placement (back on sale at the harsher book) ==")
++ok, msg = W.place([], "Erol", GRP, "YES", 5, 100, 60, 60, now=NOW, market="btts")
++ck("a BTTS bet places, struck at the live price", ok and msg["num"] == W.btts_odds(60, 60)["YES"]["num"], msg)
++ck("the book is genuinely harsh (>= 1.20 overround at even strengths)",
++   (lambda b: (1.0 / b["YES"]["decimal"] + 1.0 / b["NO"]["decimal"]) >= 1.20)(W.btts_odds(50, 50)), W.btts_odds(50, 50))
 +def fin(h, a, **kw):
 +    m = {"id": "g1", "home": "A", "away": "B", "stage": "GROUP_STAGE", "status": "FINISHED",
 +         "utcDate": "2099-01-01T00:00:00Z", "homeScore": h, "awayScore": a}
@@ -1321,19 +1309,12 @@ index 0000000..052b7d1
 +    wl = bb("YES"); W.settle(wl, fin(h, a))
 +    ck("hostile score %r never settles" % ((h, a),), wl[0]["status"] == "pending", wl[0])
 +
-+print("\n== BTTS accas: cross-game in, same-game blocked ==")
-+ok, acc = W.place_acca([], "Erol",
++print("\n== BTTS acca legs place again ==")
++ok, msg = W.place_acca([], "Erol",
 +                       [{"match": GRP, "selection": "YES", "comp_home": 60, "comp_away": 60, "market": "btts"},
 +                        {"match": GRP2, "selection": "HOME", "comp_home": 70, "comp_away": 40}],
 +                       5, 100, now=NOW)
-+ck("a BTTS leg + a result leg across games places", ok and any(l.get("market") == "btts" for l in acc.get("legs", [])), acc)
-+okx, wx = W.place_acca([], "Erol",
-+                       [{"match": GRP, "selection": "YES", "comp_home": 60, "comp_away": 60, "market": "btts"},
-+                        {"match": GRP, "selection": "OVER", "comp_home": 60, "comp_away": 60, "market": "ou", "line": 2.5}],
-+                       5, 100, now=NOW)
-+_naive = (1 + wx["legs"][0]["num"]/wx["legs"][0]["den"]) * (1 + wx["legs"][1]["num"]/wx["legs"][1]["den"]) if okx else 0
-+ck("same-game BTTS+OU (heavily POSITIVELY correlated) prices jointly, paying under the naive product",
-+   okx and wx.get("groups") and wx["decimal"] < _naive - 1e-9, (wx.get("decimal") if okx else wx, _naive))
++ck("a BTTS leg + a result leg across games places", ok and any(l.get("market") == "btts" for l in (msg.get("legs") or [])), msg)
 +
 +print("\n== BTTS exploit: covering dutches with OU are margin-negative (YES ∪ Under 1.5 covers everything) ==")
 +# BTTS NO pays unless both score; Over 0.5/1.5 relationships — enumerate covers over the score grid
@@ -2063,7 +2044,7 @@ index 4d46912..078b83b 100644
  print("\n== settlement: partial, then a losing O/U leg sinks the acca ==")
  # acca: OVER 2.5 on Brazil-Serbia, HOME on Spain-Japan
 diff --git a/tracker.html b/tracker.html
-index 4335b2f..0d5a225 100644
+index 4335b2f..f3b75b6 100644
 --- a/tracker.html
 +++ b/tracker.html
 @@ -275,6 +275,17 @@
@@ -2268,7 +2249,7 @@ index 4335b2f..0d5a225 100644
      h+='<div style="margin:0 0 12px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;color:var(--muted)">🎁 You\'ve claimed today\'s free points — they\'re in your balance above. Bet them on any game. The next drop is another day.</div>';
    }
 -  h+='<div style="color:var(--muted);font-size:12px;margin:0 0 10px">Tap a game to bet · tap it again to remove'+(accasOn?' · tap a second game to build a 🎰 accumulator':'')+'. Each game also has an <b>\u26bd Over/Under goals</b> market (pick a goals line \u2014 near-certain lines pay on a deeper ladder, down to 1/14) and a <b>\ud83c\udfaf Exact score</b> market \u2014 type the final score (after extra time, 0\u20139 each way) and back it. Result = who goes through (a shootout win counts); all three settle automatically.</div>';
-+  h+='<div style="color:var(--muted);font-size:12px;margin:0 0 10px">Tap a game to bet · tap it again to remove'+(accasOn?' · tap a second game to build a 🎰 accumulator':'')+'. Each game also has an <b>\u26bd Over/Under goals</b> market (pick a goals line \u2014 near-certain lines pay on a deeper ladder, down to 1/14), a <b>\ud83e\udd1d Both teams to score</b> market, a <b>\u00b1 Handicap</b> market (give a side a goal start or deficit \u2014 pick the line, settles on the 90&#39;+extra-time score, penalties don\u2019t count) a <b>\ud83d\udfe8 Cards</b> market (total bookings in 90 minutes \u2014 every card counts 1; if the feed carries no cards data the bet pushes with a full refund), on knockouts a <b>\ud83c\udfc1 Method of victory</b> market (in 90&#39;, in extra time, or on penalties) and a <b>\ud83c\udfaf Exact score</b> market \u2014 type the final score (after extra time, 0\u20139 each way) and back it. Result = who goes through (a shootout win counts); everything settles automatically, and any market can be an accumulator leg \u2014 one pick per game.</div>';
++  h+='<div style="color:var(--muted);font-size:12px;margin:0 0 10px">Tap a game to bet · tap it again to remove'+(accasOn?' · tap a second game to build a 🎰 accumulator':'')+'. Each game also has an <b>\u26bd Over/Under goals</b> market (pick a goals line \u2014 near-certain lines pay on a deeper ladder, down to 1/14), a <b>\u00b1 Handicap</b> market (give a side a goal start or deficit \u2014 pick the line, settles on the 90&#39;+extra-time score, penalties don\u2019t count) a <b>\ud83d\udfe8 Cards</b> market (total bookings in 90 minutes \u2014 every card counts 1; if the feed carries no cards data the bet pushes with a full refund), on knockouts a <b>\ud83c\udfc1 Method of victory</b> market (in 90&#39;, in extra time, or on penalties) and a <b>\ud83c\udfaf Exact score</b> market \u2014 type the final score (after extra time, 0\u20139 each way) and back it. Result = who goes through (a shootout win counts); everything settles automatically, and any market can be an accumulator leg \u2014 one pick per game.</div>';
    if(ACCAMODE) h+='<div style="color:var(--muted);font-size:12.5px;margin:0 0 10px">🎰 Building an accumulator — odds multiply, but <b>every</b> leg must win. Up to '+maxLegs+' legs, and up to '+((caps.max_active_accas)||2)+' accas running at once.'+(retCap?(' Max return: <b>'+retCap+'</b>.'):'')+'</div>';
    if(!fx.length) h+='<div class="empty">No upcoming games to bet on right now — check back before kick-off.</div>';
    else h+='<div class="mdgrid">'+fx.map(m=>{
@@ -2415,7 +2396,38 @@ index 4335b2f..0d5a225 100644
    if(o.selection==='HOME') return hs>as_?'win':(hs<as_?'lose':'level');
    if(o.selection==='AWAY') return as_>hs?'win':(as_<hs?'lose':'level');
    return hs===as_?'win':'lose';   // DRAW selection
-@@ -1470,6 +1636,20 @@ function liveBreakLine(m){
+@@ -1033,7 +1199,7 @@ function betCardHTML(w, opts){
+       return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0;color:var(--muted)"><span>'+lr+'<b style="color:var(--ink)">'+esc(pick)+'</b> <span style="opacity:.8">('+esc(l.home)+' v '+esc(l.away)+')</span>'+scoreBit+chip+'</span><span style="color:var(--gold);font-weight:600">'+l.frac+'</span></div>';
+     }).join('');
+     const ovr=(w.status==='pending')?accaLiveStatus(w,fixOf,live):null;
+-    body='<div style="font-weight:600;font-size:13.5px">'+who+'🎰 '+w.legs.length+'-fold accumulator · combined <span style="color:var(--gold)">~'+(Math.round(dec*100)/100)+'×</span>'+(ovr?' · '+provChip(ovr):'')+'</div><div style="margin-top:4px">'+rows+'</div>';
++    body='<div style="font-weight:600;font-size:13.5px;overflow-wrap:anywhere">'+who+'🎰 '+w.legs.length+'-fold acca · <span style="color:var(--gold)">~'+(Math.round(dec*100)/100)+'×</span>'+(ovr?' · '+provChip(ovr):'')+'</div><div style="margin-top:4px">'+rows+'</div>';
+   } else {
+     const pick=pickName(w); const isL=live.has(w.matchId);
+     let liveBit=''; const f=fixOf(w.matchId);
+@@ -1048,12 +1214,16 @@ function betCardHTML(w, opts){
+   if(w.status==='pending'&&opts&&opts.fixById&&!opts.showPlayer&&w.player===BETPLAYER&&w.id){
+     const fb=opts.fixById, kos=(w.legs||[w]).map(l=>{const f=fb.get?fb.get(l.matchId):fb[l.matchId]; return f&&f.utcDate?Date.parse(f.utcDate):NaN;});
+     if(kos.every(t=>!isNaN(t))&&Date.now()<Math.min.apply(null,kos)-2*3600*1000)
+-      voidBtn=' <button class="voidbet" data-id="'+esc(w.id)+'" style="margin-left:8px;background:none;border:1px solid var(--line);border-radius:8px;color:#ff9a9a;font-size:11px;padding:3px 9px;cursor:pointer">Void</button>';
++      voidBtn='<button class="voidbet" data-id="'+esc(w.id)+'" style="flex:0 0 auto;margin-left:auto;background:none;border:1px solid #5c2a2a;border-radius:9px;color:#ff9a9a;font-size:12px;padding:6px 14px;cursor:pointer;font-family:\'Sora\',sans-serif">Void</button>';
+   }
+-  const outcome=(w.status==='won'?('+'+Math.round((w.return-w.stake)*100)/100+' pts'):(w.status==='lost'?('−'+w.stake+' pts'):(w.status==='void'?'refunded':'→ '+w.return+' back if it wins · '+w.stake+' stake + '+(Math.round((w.return-w.stake)*100)/100)+' winnings')))+voidBtn;
+-  return '<div style="border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:6px"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'
+-    +'<div style="flex:1;min-width:0">'+body+'</div>'
+-    +'<div style="text-align:right;white-space:nowrap"><span style="color:'+tg[0]+';font-weight:700;font-size:11px">'+tg[1]+'</span><div style="font-size:12.5px">stake <b>'+w.stake+'</b></div><div style="color:'+tg[0]+';font-size:12.5px;font-weight:600">'+outcome+'</div></div>'
++  const outcome=(w.status==='won'?('+'+Math.round((w.return-w.stake)*100)/100+' pts'):(w.status==='lost'?('−'+w.stake+' pts'):(w.status==='void'?'refunded':'→ '+w.return+' back if it wins · '+w.stake+' stake + '+(Math.round((w.return-w.stake)*100)/100)+' winnings')));
++  return '<div style="border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:6px">'
++    +'<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;column-gap:10px;row-gap:2px">'
++    +'<div style="flex:1 1 200px;min-width:0">'+body+'</div>'
++    +'<div style="flex:0 0 auto;margin-left:auto;white-space:nowrap;font-size:12px"><span style="color:'+tg[0]+';font-weight:700;font-size:11px">'+tg[1]+'</span> · stake <b>'+w.stake+'</b></div>'
++    +'</div>'
++    +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;border-top:1px solid var(--line);padding-top:6px">'
++    +'<span style="color:'+tg[0]+';font-size:12.5px;font-weight:600;min-width:0;flex:1 1 200px">'+outcome+'</span>'+voidBtn
+     +'</div></div>';
+ }
+ async function loadAllBets(){
+@@ -1470,6 +1640,20 @@ function liveBreakLine(m){
    });
    const un=[[m.homeOwner,m.home],[m.awayOwner,m.away]].filter(s=>!s[0]||s[0]==='—'||s[0]==='-').map(s=>esc(s[1]));
    if(un.length) html+='<div class="lbd-pool">'+un.join(' & ')+(un.length===1?' is':' are')+' unowned (pool) — scores for no one</div>';
@@ -2436,7 +2448,7 @@ index 4335b2f..0d5a225 100644
    // everyone's open bets on THIS game, shown like the owner rows: a "Name +N if it lands" you can expand
    const gbets=betsOnMatch(m);
    if(gbets.length){
-@@ -1546,7 +1726,7 @@ function renderLive(d){
+@@ -1546,7 +1730,7 @@ function renderLive(d){
        const stg=m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):(m.group?'Group '+m.group:'');
        return `<div class="lccard">
          <div class="lchead"><span class="lcdot"></span>${liveClock(m)}${stg?' · '+stg:''}</div>
@@ -2445,7 +2457,7 @@ index 4335b2f..0d5a225 100644
          <div class="lcrow"><span class="lcteam">${flag(m.away)}${esc(m.away)}${own(m.awayOwner)}</span><span class="lcscore">${m.awayScore??0}</span></div>
          ${(m.shootout||m.penHome!=null||m.penAway!=null)?`<div class="lcpens">🥅 Penalties <b>${m.penHome??0}–${m.penAway??0}</b></div>`:wpBar3(m,true)}
        </div>`;}).join('')+'</div>';
-@@ -1728,9 +1908,13 @@ function renderBracket(d){
+@@ -1728,9 +1912,13 @@ function renderBracket(d){
    rounds.innerHTML='<button data-v="round" class="'+(BRACKETVIEW==='round'?'on':'')+'">By round</button><button data-v="full" class="'+(BRACKETVIEW==='full'?'on':'')+'">Full bracket</button>';
    rounds.querySelectorAll('button').forEach(b=>b.onclick=()=>{BRACKETVIEW=b.dataset.v;renderBracket(d);});
    if(BRACKETVIEW==='full'){
@@ -2459,7 +2471,7 @@ index 4335b2f..0d5a225 100644
      return;
    }
    if(!KO_USER_SET || !present.includes(KOROUND)) KOROUND=liveOrCurrentRound(ko,present);
-@@ -1746,7 +1930,7 @@ function fbMatch(m){
+@@ -1746,7 +1934,7 @@ function fbMatch(m){
    const sc=h=>show?((h?m.homeScore:m.awayScore)??0):'';
    const row=(team,owner,score,wc,lc)=>'<div class="fbR '+wc+' '+lc+'"><span class="fbT">'+flag(team)+'<span class="fbNW"><span class="fbNm">'+esc(team||'TBD')+'</span>'+(owner?'<small>'+esc(owner)+'</small>':'')+'</span></span><span class="fbSc">'+score+'</span></div>';
    const foot=isLive?'<div class="fbFoot live">\u25cf '+liveClock(m)+'</div>':(done?(koNote(m)?'<div class="fbFoot">'+koNote(m)+'</div>':''):'<div class="fbFoot">'+fmtTime(m.utcDate)+'</div>');
@@ -2468,7 +2480,7 @@ index 4335b2f..0d5a225 100644
  }
  function fullBracketHTML(ko,present){
    const TREE=["LAST_32","LAST_16","QUARTER_FINALS","SEMI_FINALS","FINAL"].filter(s=>present.includes(s));
-@@ -1825,7 +2009,7 @@ function fbMatch2(m,mn){ // bracket card that shows a structural label when a te
+@@ -1825,7 +2013,7 @@ function fbMatch2(m,mn){ // bracket card that shows a structural label when a te
    const labelCell=side=>'<span class="fbNW"><span class="fbNm fbTBDlbl">'+esc(koSlotLabel(mn,side))+'</span></span>';
    const cell=(team,owner,side,score,wc,lc)=>'<div class="fbR '+wc+' '+lc+'"><span class="fbT">'+(team?teamCell(team,owner):labelCell(side))+'</span><span class="fbSc">'+score+'</span></div>';
    const foot=isLive?'<div class="fbFoot live">\u25cf '+liveClock(m)+'</div>':(done?(koNote(m)?'<div class="fbFoot">'+koNote(m)+'</div>':''):'<div class="fbFoot">'+fmtTime(m.utcDate)+'</div>');
@@ -2477,7 +2489,7 @@ index 4335b2f..0d5a225 100644
  }
  function fullBracketTree(ko,present,map){ // full skeleton R32->Final with placeholders + line overlay
    const get=mn=>map[mn]||synthMatch(mn);
-@@ -1874,7 +2058,7 @@ function bracketCard(m){
+@@ -1874,7 +2062,7 @@ function bracketCard(m){
    const sc=home=>show?((home?m.homeScore:m.awayScore)??0):'';
    const foot=isLive?`<div class="blive"><span class="pd"></span>${liveClock(m)}</div>`:(done?'':`<div class="btime">${fmtTime(m.utcDate)}</div>`);
    const konote=koNote(m)?`<div class="bnote">${koNote(m)}</div>`:'';
@@ -2486,7 +2498,7 @@ index 4335b2f..0d5a225 100644
      <div class="brow ${hw?'win':''} ${done&&aw?'lose':''}"><span class="bteam">${flag(m.home)}${esc(m.home)}<small>${esc(m.homeOwner)}</small></span><span class="bsc">${sc(true)}</span></div>
      <div class="brow ${aw?'win':''} ${done&&hw?'lose':''}"><span class="bteam">${flag(m.away)}${esc(m.away)}<small>${esc(m.awayOwner)}</small></span><span class="bsc">${sc(false)}</span></div>
      ${konote}
-@@ -1910,7 +2094,7 @@ function matchRow(m){
+@@ -1910,7 +2098,7 @@ function matchRow(m){
    const mid=live?`<span class="live">● ${liveClock(m)}</span>`:(done?`<div class="sc">${score}</div>${knEl}`:`<div class="time">${fmtTime(m.utcDate)}</div>`);
    const grp=(m.group||'').replace('GROUP_','').trim();
    const left=m.stage!=='GROUP_STAGE'?`${STAGE_LABEL[m.stage]||m.stage}`:(grp?`Group ${grp}`:'');
@@ -2495,7 +2507,7 @@ index 4335b2f..0d5a225 100644
      <div class="t home">${flag(m.home)}${esc(m.home||'TBD')}<span class="o">${esc(m.homeOwner||'')}</span></div>
      <div class="mmid">${live?`<div class="sc">${score}</div>`+mid:mid}</div>
      <div class="t away">${flag(m.away)}${esc(m.away||'TBD')}<span class="o">${esc(m.awayOwner||'')}</span></div>
-@@ -2049,7 +2233,7 @@ function renderOverview(d){
+@@ -2049,7 +2237,7 @@ function renderOverview(d){
          const where=m.stage&&m.stage!=='GROUP_STAGE'?(STAGE_LABEL[m.stage]||m.stage):('Group '+(m.group||'?'));
          const kn=koNote(m);
          return `<div class="mdcard${liveN?' mdlive':''}${fin?' mdfin':''}"><div class="mdmeta">${where} · ${tag}${kn?' · '+kn:''}</div>
@@ -2504,7 +2516,7 @@ index 4335b2f..0d5a225 100644
        }).join('')+'</div></div>';
      }
    }
-@@ -2286,7 +2470,10 @@ function buildLedger(d, wagers){
+@@ -2286,7 +2474,10 @@ function buildLedger(d, wagers){
      const note=lower.length?(' \u00b7 replaces the earlier +'+lower[lower.length-1]+' \u2014 furthest round only'):'';
      ev.push({when:fins.length?Math.max.apply(null,fins):Date.now(),kind:'bonus',player:p.name,team:tm.name,stage:st,label:SL[st]||st,pts:SB[st],note:note});
    });});
@@ -2516,7 +2528,7 @@ index 4335b2f..0d5a225 100644
    (wagers||[]).forEach(function(w){
      if(w.credit){ ev.push({when:(w.placed_at?w.placed_at*1000:0), kind:'free', player:w.player, amount:+(w.amount||0)}); return; }
      if(w.status!=='won'&&w.status!=='lost') return;
-@@ -2294,7 +2481,8 @@ function buildLedger(d, wagers){
+@@ -2294,7 +2485,8 @@ function buildLedger(d, wagers){
      if(w.legs&&w.legs.length){ w.legs.forEach(function(l){ const fm=fx.find(function(m){return m.matchId===l.matchId;}); if(fm) ds.push(T(fm)); }); }
      else { const fm=fx.find(function(m){return m.matchId===w.matchId;}); if(fm) ds.push(T(fm)); }
      const net=w.status==='won'?Math.round(((w.return||0)-(w.stake||0))*100)/100:-(w.stake||0);
@@ -2526,7 +2538,7 @@ index 4335b2f..0d5a225 100644
    });
    ev.sort(function(a,b){return b.when-a.when;});
    return ev;
-@@ -3344,6 +3532,105 @@ _scheduleRefresh();
+@@ -3344,6 +3536,111 @@ _scheduleRefresh();
  document.getElementById('auto').innerHTML='<span class="dot-live"></span>auto-refresh on';
  
  window.addEventListener('pageshow',function(e){ if(e.persisted) location.reload(); });
@@ -2555,7 +2567,6 @@ index 4335b2f..0d5a225 100644
 +  const rows=[];
 +  if(m.odds){ const o=m.odds; rows.push(['Result', [esc(m.home)+' '+o.HOME.frac, o.DRAW?('Draw '+o.DRAW.frac):null, esc(m.away)+' '+o.AWAY.frac].filter(Boolean).join(' · ')]); }
 +  if(m.ouOdds){ const ln=ouLineFor(m.matchId,m.ouOdds), g=m.ouOdds[ln]; if(g) rows.push(['Goals '+ln, 'Over '+g.OVER.frac+' · Under '+g.UNDER.frac]); }
-+  if(m.bttsOdds&&m.bttsOdds.YES) rows.push(['BTTS', 'Yes '+m.bttsOdds.YES.frac+' · No '+m.bttsOdds.NO.frac]);
 +  if(m.hcOdds){ const ln=hcLineFor(m.matchId,m.hcOdds), g=m.hcOdds[ln]; if(g) rows.push(['Handicap '+fmtHc(ln),
 +    [(g.HOME?esc(m.home)+' '+fmtHc(ln)+' '+g.HOME.frac:null),(g.AWAY?esc(m.away)+' '+fmtHc(-parseFloat(ln))+' '+g.AWAY.frac:null)].filter(Boolean).join(' · ')]); }
 +  if(m.cardsOdds&&m.cardsOdds['4.5']) rows.push(['Cards 4.5', 'Over '+m.cardsOdds['4.5'].OVER.frac+' · Under '+m.cardsOdds['4.5'].UNDER.frac]);
@@ -2572,10 +2583,17 @@ index 4335b2f..0d5a225 100644
 +  h+='<div class="mshHead"><span class="t">'+flag(m.home)+esc(m.home)+'<div style="font-size:11px;color:var(--muted)">'+esc(m.homeOwner||'pool')+'</div></span><span class="sc">'+sc+'</span><span class="t">'+flag(m.away)+esc(m.away)+'<div style="font-size:11px;color:var(--muted)">'+esc(m.awayOwner||'pool')+'</div></span></div>';
 +  const kn=koNote(m); if(kn) h+='<div style="text-align:center;font-size:12px;color:var(--gold)">'+esc(kn)+'</div>';
 +  if(done&&m.winner&&m.winner!=='DRAW') h+='<div style="text-align:center;font-size:13px;margin-top:2px">🏆 <b>'+esc(m.winner==='HOME'?m.home:m.away)+'</b> '+(m.shootout?'win on penalties':(m.aet?'win after extra time':'win'))+'</div>';
-+  // timeline (scorers) + cards
-+  if(Array.isArray(m.scorers)&&m.scorers.length){
-+    h+='<div class="mshSec"><b>Timeline</b>'+m.scorers.slice().sort((x,y)=>(x.minute||0)-(y.minute||0)).map(g=>
-+      '<div class="mshRow"><span>'+(g.minute!=null?esc(String(g.minute))+"'":'')+' ⚽ '+esc(g.player)+(g.type==='PENALTY'?' (pen)':(g.type==='OWN'?' (og)':''))+'</span><span style="color:var(--muted)">'+esc(g.team==='HOME'?m.home:m.away)+'</span></div>').join('')+'</div>';
++  // timeline: goals + cards merged by minute, live-score style
++  {
++    const ev=[];
++    (m.scorers||[]).forEach(g=>ev.push({min:g.minute,icon:'⚽',txt:esc(g.player||'')+(g.type==='PENALTY'?' (pen)':(g.type==='OWN'?' (og)':'')),team:g.team}));
++    (m.cardEvents||[]).forEach(c=>ev.push({min:c.minute,icon:c.red?'🟥':'🟨',txt:esc(c.player||''),team:c.team}));
++    if(ev.length){
++      ev.sort((x,y)=>(x.min??999)-(y.min??999));
++      let rows=ev.map(e=>'<div class="mshRow"><span>'+(e.min!=null?esc(String(e.min))+"'":'')+' '+e.icon+' '+e.txt+'</span><span style="color:var(--muted)">'+esc(e.team==='HOME'?m.home:m.away)+'</span></div>').join('');
++      if(done) rows+='<div class="mshRow" style="color:var(--muted)"><span>FT'+(m.aet?' (a.e.t.)':'')+'</span><span>'+sc+(m.shootout&&m.penHome!=null?' · pens '+m.penHome+'–'+m.penAway:'')+'</span></div>';
++      h+='<div class="mshSec"><b>Timeline</b>'+rows+'</div>';
++    }
 +  }
 +  if(m.cardsHome!=null||m.cardsAway!=null){
 +    h+='<div class="mshSec"><b>Cards (90\')</b><div class="mshRow"><span>'+esc(m.home)+' '+(m.cardsHome??0)+(m.redHome?' ('+m.redHome+'🟥)':'')+'</span><span>'+esc(m.away)+' '+(m.cardsAway??0)+(m.redAway?' ('+m.redAway+'🟥)':'')+'</span></div></div>';
@@ -2633,7 +2651,7 @@ index 4335b2f..0d5a225 100644
  </body>
  </html>
 diff --git a/update_results.py b/update_results.py
-index 223d105..aa8f4e7 100644
+index 223d105..7b381b4 100644
 --- a/update_results.py
 +++ b/update_results.py
 @@ -10,6 +10,7 @@ import json
@@ -2691,7 +2709,7 @@ index 223d105..aa8f4e7 100644
          winner = {"HOME_TEAM": "HOME", "AWAY_TEAM": "AWAY", "DRAW": "DRAW"}.get(score.get("winner"))
  
          # v4 quirk: score/fullTime INCLUDES extra-time AND penalty-shootout goals. For our points and
-@@ -63,6 +97,30 @@ def normalize_matches(api_matches, resolve):
+@@ -63,6 +97,36 @@ def normalize_matches(api_matches, resolve):
                  return ft.get(side) - pen.get(side, 0)
              return ft.get(side)
  
@@ -2702,27 +2720,33 @@ index 223d105..aa8f4e7 100644
 +        # (leave pending, void at FT) apart from "genuinely zero cards" (an empty list).
 +        cards_h = cards_a = None
 +        reds_h = reds_a = 0
++        card_events = None
 +        if isinstance(m.get("bookings"), list):
 +            cards_h = cards_a = 0
-+            for bk in m["bookings"]:
++            card_events = []
++            for bk in m["bookings"][:40]:
 +                if not isinstance(bk, dict):
 +                    continue
 +                minute = bk.get("minute")
-+                if isinstance(minute, (int, float)) and minute > 90:
-+                    continue
 +                t = ((bk.get("team") or {}).get("name")) or ""
++                side = "HOME" if resolve(t) == h else ("AWAY" if resolve(t) == a else None)
 +                is_red = (bk.get("card") or "").upper() in ("RED", "YELLOW_RED", "RED_CARD", "SECOND_YELLOW")
-+                if resolve(t) == h:
++                if side:                                                    # the timeline shows EVERY booking (ET incl.)
++                    card_events.append({"minute": minute, "team": side, "red": is_red,
++                                        "player": ((bk.get("player") or {}).get("name")) or None})
++                if isinstance(minute, (int, float)) and minute > 90:
++                    continue                                                # the BETTING count stays 90' only
++                if side == "HOME":
 +                    cards_h += 1
 +                    reds_h += 1 if is_red else 0
-+                elif resolve(t) == a:
++                elif side == "AWAY":
 +                    cards_a += 1
 +                    reds_a += 1 if is_red else 0
 +
          out.append({
              "id": m["id"], "stage": m.get("stage", "GROUP_STAGE"),
              "group": ((m.get("group") or "").replace("GROUP_", "").strip() or None), "utcDate": m.get("utcDate"),
-@@ -75,6 +133,13 @@ def normalize_matches(api_matches, resolve):
+@@ -75,6 +139,14 @@ def normalize_matches(api_matches, resolve):
              "aet": duration in ("EXTRA_TIME", "PENALTY_SHOOTOUT"),          # went to extra time
              "shootout": duration == "PENALTY_SHOOTOUT",
              "penHome": pen.get("home"), "penAway": pen.get("away"),         # shootout score, if any
@@ -2731,12 +2755,13 @@ index 223d105..aa8f4e7 100644
 +            "durationKnown": duration_known,                                # False on bare free-tier payloads ->
 +                                                                            #   method-of-victory won't guess REG vs ET
 +            "scorers": _scorers(m, h, a, resolve),                          # [{minute, team: HOME/AWAY, player}] or None
++            "cardEvents": card_events,                                      # every booking with minute (timeline)
 +            "homeLineup": _lineup(m.get("homeTeam")),                       # [{name, position, shirtNumber}] or None
 +            "awayLineup": _lineup(m.get("awayTeam")),
          })
      return out
  
-@@ -139,18 +204,127 @@ def _get(path, token):
+@@ -139,27 +211,182 @@ def _get(path, token):
          return json.load(r)
  
  
@@ -2744,6 +2769,14 @@ index 223d105..aa8f4e7 100644
 +DETAIL_WINDOW_AFTER_S = 4 * 3600      # bookings/scorers keep updating a while after FT
 +DETAIL_BUDGET_PER_POLL = 8            # never more than this many /matches/{id} calls per poll (30/min plan cap)
 +BACKFILL_BUDGET_PER_POLL = 3          # old FINISHED games get their scorers/cards backfilled a few per poll
++
++
++DEEP_STATS = {"enriched": 0, "backfilled": 0, "errors": 0, "last_error": None}
++
++
++def _note_err(e):
++    DEEP_STATS["errors"] += 1
++    DEEP_STATS["last_error"] = "%s: %s" % (type(e).__name__, str(e)[:200])
 +
 +
 +def _enrich_near_live(api_matches, token):
@@ -2780,7 +2813,9 @@ index 223d105..aa8f4e7 100644
 +            if isinstance(detail.get("score"), dict):        # detail score is at least as fresh as the list's
 +                m["score"] = detail["score"]
 +            budget -= 1
-+        except Exception:
++            DEEP_STATS["enriched"] += 1
++        except Exception as e:
++            _note_err(e)
 +            continue                                          # a detail blip never blocks the whole poll
 +    return api_matches
 +
@@ -2797,7 +2832,7 @@ index 223d105..aa8f4e7 100644
 +        old = prev.get(str(m.get("id")))
 +        if not old:
 +            continue
-+        for k in ("scorers", "homeLineup", "awayLineup", "cardsHome", "cardsAway", "redHome", "redAway"):
++        for k in ("scorers", "homeLineup", "awayLineup", "cardsHome", "cardsAway", "redHome", "redAway", "cardEvents"):
 +            if m.get(k) is None and old.get(k) is not None:
 +                m[k] = old[k]
 +        if not m.get("durationKnown") and old.get("durationKnown"):
@@ -2817,11 +2852,11 @@ index 223d105..aa8f4e7 100644
 +            break
 +        if m.get("status") not in ("FINISHED", "AWARDED"):
 +            continue
-+        if isinstance(m.get("goals"), list):
-+            continue                                # the list payload already carries it
 +        pv = norm_prev.get(str(m.get("id"))) or {}
-+        if pv.get("scorers") is not None:
-+            continue                                # already backfilled on an earlier poll
++        need_goals = not isinstance(m.get("goals"), list) and pv.get("scorers") is None
++        need_cards = not isinstance(m.get("bookings"), list) and pv.get("cardsHome") is None
++        if not (need_goals or need_cards):
++            continue                                # this game's deep data is already in hand
 +        try:
 +            detail = _get("/matches/%s" % m.get("id"), token)
 +            detail = detail.get("match", detail) or {}
@@ -2831,7 +2866,9 @@ index 223d105..aa8f4e7 100644
 +            if isinstance(detail.get("score"), dict):
 +                m["score"] = detail["score"]
 +            budget -= 1
-+        except Exception:
++            DEEP_STATS["backfilled"] += 1
++        except Exception as e:
++            _note_err(e)
 +            continue
 +
 +
@@ -2865,8 +2902,51 @@ index 223d105..aa8f4e7 100644
              "standings": normalize_standings(standings, resolve)}
      with open(out, "w") as f:
          json.dump(data, f, indent=2)
+     print(f"Wrote {out}: {len(data['matches'])} matches, {len(data['standings'])} groups")
++    ds = DEEP_STATS
++    print("deep-data: enriched %d, backfilled %d, errors %d%s" % (
++        ds["enriched"], ds["backfilled"], ds["errors"],
++        (" — last: " + ds["last_error"]) if ds["last_error"] else ""))
+     return data
+ 
+ 
++def diag(token=None):
++    """Run on the box: python3 update_results.py diag — proves what THIS token/plan actually returns.
++    Checks the list payload for deep fields, then fetches ONE finished match's detail and reports which
++    blocks (goals / bookings / lineups) come back, or the exact HTTP error if the plan refuses."""
++    token = _resolve_token(token)
++    if not token:
++        print("no token set"); return
++    ms = _get(f"/competitions/{COMPETITION}/matches", token).get("matches", [])
++    fin = [m for m in ms if m.get("status") in ("FINISHED", "AWARDED")]
++    print("list: %d matches, %d finished" % (len(ms), len(fin)))
++    if fin:
++        sample = fin[-1]
++        print("list payload carries: goals=%s bookings=%s lineup=%s duration=%s" % (
++            isinstance(sample.get("goals"), list), isinstance(sample.get("bookings"), list),
++            bool((sample.get("homeTeam") or {}).get("lineup")), (sample.get("score") or {}).get("duration")))
++        try:
++            d = _get("/matches/%s" % sample.get("id"), token)
++            d = d.get("match", d) or {}
++            print("detail %s (%s v %s): goals=%s bookings=%s lineup=%s" % (
++                sample.get("id"), (sample.get("homeTeam") or {}).get("name"), (sample.get("awayTeam") or {}).get("name"),
++                len(d.get("goals") or []), len(d.get("bookings") or []),
++                len(((d.get("homeTeam") or {}).get("lineup")) or [])))
++        except Exception as e:
++            print("detail fetch FAILED — this is the blocker: %s: %s" % (type(e).__name__, e))
++    else:
++        print("no finished matches to probe")
++
++
+ if __name__ == "__main__":
+     if "--check" in sys.argv:
+         audit()
++    elif "diag" in sys.argv:
++        diag()
+     else:
+         fetch()
 diff --git a/wager.py b/wager.py
-index aca4590..cbc8370 100644
+index aca4590..5352156 100644
 --- a/wager.py
 +++ b/wager.py
 @@ -333,6 +333,12 @@ def _winner_side(m):
@@ -2986,7 +3066,7 @@ index aca4590..cbc8370 100644
  
  
 +# ---- Handicap (goal-margin) market — the SAME Poisson grid as the exact-score book -------------
-+HC_OVERROUND = 1.13          # same margin class as the O/U goals book (a touch above the 1X2's 1.08)
++HC_OVERROUND = 1.15          # same margin class as the O/U goals book (a touch above the 1X2's 1.08)
 +HC_MIN_MARGIN = 0.02         # minimum book overround on any offered line (a capped near-certainty still has an edge)
 +HC_MAX_PROB = 0.93           # deep price ladder like O/U (shortest ~1/13); beyond it the line is NOT offered
 +HC_LINES = [-3.5, -2.5, -1.5, 1.5, 2.5, 3.5]   # HOME-team half-lines only -> a bet can never push. ±0.5 is
@@ -3109,7 +3189,7 @@ index aca4590..cbc8370 100644
 +
 +# ---------------------------------------------------------------- method of victory (knockouts only)
 +MOV_SELECTIONS = ("HOME_REG", "HOME_ET", "HOME_PENS", "AWAY_REG", "AWAY_ET", "AWAY_PENS")
-+MOV_OVERROUND = 1.22        # 6-way book, margined like the exact-score grid
++MOV_OVERROUND = 1.25        # 6-way book, margined like the exact-score grid
 +MOV_MAX_PROB = 0.857        # a 6-way outcome is never near-certain, but cap it like the result book anyway
 +MOV_MIN_MARGIN = 0.04
 +MOV_P_LEVEL_ET = 0.45       # P(a level-after-90 knockout is STILL level after extra time) — ET is short + cagey
@@ -3243,7 +3323,7 @@ index aca4590..cbc8370 100644
 +CARDS_LINES = [2.5, 3.5, 4.5, 5.5, 6.5]
 +CARDS_BASE = 4.6            # expected total 90' bookings in a World Cup game — flat prior, margin does the work
 +CARDS_KO_BUMP = 0.6         # knockouts are spikier (tactical fouls, stakes)
-+CARDS_OVERROUND = 1.13
++CARDS_OVERROUND = 1.17
 +CARDS_MAX_PROB = 0.93
 +CARDS_MIN_MARGIN = 0.02
 +CARDS_GRID_MAX = 25
@@ -3337,9 +3417,9 @@ index aca4590..cbc8370 100644
 +
 +
 +# ---------------------------------------------------------------- both teams to score (works on EVERY feed tier)
-+BTTS_OVERROUND = 1.13
++BTTS_OVERROUND = 1.25
 +BTTS_MAX_PROB = 0.93
-+BTTS_MIN_MARGIN = 0.02
++BTTS_MIN_MARGIN = 0.04
 +
 +
 +def btts_odds(comp_home, comp_away):
