@@ -1738,6 +1738,11 @@ def notify_changes(old):
     _any_live = any((m.get("status") in LIVE_STATUSES) for m in (new.get("fixtures") or []))
     if _mp == 0 and not _any_live:
         return                              # truly nothing happening yet (pre-tournament): stay quiet
+    if (load_config().get("alerts") or "").lower() in ("off", "false", "0", "no"):
+        return                              # admin kill-switch: "alerts": "off" in config.json
+    _fx = new.get("fixtures") or []
+    if _fx and not _any_live and all(m.get("status") in ("FINISHED", "AWARDED", "CANCELLED", "POSTPONED") for m in _fx)             and _old_mp == _mp and (new.get("champion") or (old.get("champion") if old else None)):
+        return                              # tournament over, nothing changing: automatic quiet
 
     def match_event(etype, recipients, group_line, ping=False, important=False, match_id=None):
         # recipients: list of (owner, title, body). Personal alerts always go to the owner (push + DM).
@@ -1813,7 +1818,9 @@ def notify_changes(old):
                 match_event("flow",
                             [(ho, "Half-time ⏸️", sc), (ao, "Half-time ⏸️", sc)],
                             "⏸️ Half-time — %s" % sc, important=_ko, match_id=mid)
-            elif st in FT_STATUSES and was in LIVE_STATUSES and _alert_first_time(mid, h, a, "full"):  # full-time (once) (incl. a.e.t. / pens)
+            elif st in FT_STATUSES and was in LIVE_STATUSES and wager_mod.match_decided(nmatch.get(key) or {"status": st}) \
+                    and _alert_first_time(mid, h, a, "full"):  # full-time (once, incl. a.e.t./pens) — a level
+                # knockout ticked FINISHED with no decider is the premature 90' flap, not full-time
                 mm = nmatch.get(key) or {}
                 sc = "%s %s–%s %s" % (h, nhs, nas, a) if None not in (nhs, nas) else "%s vs %s" % (h, a)
                 extra = ""
@@ -2979,22 +2986,17 @@ def _odds_integrity_violations(td, teams):
                 if bo is not None and bo <= 1.0:
                     out.append("%s v %s — O/U %s book %.1f%%" % (h, a, ln, bo * 100))
             for ln, leg in (wager_mod.hc_odds(ch, ca) or {}).items():
-                if "HOME" in leg and "AWAY" in leg:
-                    bh = _odds_book_overround([leg["HOME"]["decimal"], leg["AWAY"]["decimal"]])
+                if all(x in leg for x in ("HOME", "DRAW", "AWAY")):
+                    bh = _odds_book_overround([leg[x]["decimal"] for x in ("HOME", "DRAW", "AWAY")])
                     if bh is not None and bh <= 1.0:
                         out.append("%s v %s — handicap %s book %.1f%%" % (h, a, ln, bh * 100))
-                else:                                   # one-sided line: the lone price must still beat fair
+                else:                                   # partial line: every SOLD outcome must still beat its own fair
                     lh_, la_ = wager_mod._team_lambdas(ch, ca)
-                    pfh = wager_mod._hc_home_prob(lh_, la_, float(ln))
+                    pw_, pd_, pl_ = wager_mod._hc_probs3(lh_, la_, float(ln))
+                    fairs = {"HOME": pw_, "DRAW": pd_, "AWAY": pl_}
                     for sel, d in leg.items():
-                        pf = pfh if sel == "HOME" else (1.0 - pfh)
-                        if (1.0 / d["decimal"]) <= pf:
-                            out.append("%s v %s — handicap %s %s one-sided price at/below fair" % (h, a, ln, sel))
-            bt = wager_mod.btts_odds(ch, ca) or {}
-            if "YES" in bt and "NO" in bt:
-                bb = _odds_book_overround([bt["YES"]["decimal"], bt["NO"]["decimal"]])
-                if bb is not None and bb <= 1.0:
-                    out.append("%s v %s — BTTS book %.1f%%" % (h, a, bb * 100))
+                        if (1.0 / d["decimal"]) <= fairs.get(sel, 0.0):
+                            out.append("%s v %s — handicap %s %s priced at/below fair" % (h, a, ln, sel))
             for ln, leg in (wager_mod.cards_odds(knockout=ko) or {}).items():
                 bc = _odds_book_overround([leg["OVER"]["decimal"], leg["UNDER"]["decimal"]])
                 if bc is not None and bc <= 1.0:

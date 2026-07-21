@@ -1,0 +1,15 @@
+[
+  {
+    "id": "a1",
+    "player": "Erol",
+    "stake": 10,
+    "status": "pending"
+  },
+  {
+    "id": "a2",
+    "player": "James",
+    "stake": 5,
+    "status": "won",
+    "return": 12
+  }
+]

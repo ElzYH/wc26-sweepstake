@@ -8,7 +8,7 @@ FAIL=0
 say(){ printf '\n=== %s ===\n' "$1"; }
 
 say "Python syntax (compile)"
-for f in *.py; do
+for f in *.py tests/*.py tools/*.py; do
   if python3 -c "import sys; compile(open('$f').read(), '$f', 'exec')" 2>/tmp/pyerr; then
     echo "  ok   $f"
   else
@@ -63,148 +63,151 @@ PY
 if [ $? -ne 0 ]; then FAIL=1; fi
 
 say "Scoring unit tests"
-if python3 test_scoring.py; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
+if PYTHONPATH=. python3 tests/test_scoring.py; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
 
 say "Unexpected-scenario tests (kickoff, forfeit, abandoned, corrections)"
-if python3 test_scenarios.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_scenarios.py | grep FAIL; FAIL=1; fi
+if PYTHONPATH=. python3 tests/test_scenarios.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/test_scenarios.py | grep FAIL; FAIL=1; fi
 
 say "Full-tournament replay (2022: knockouts, penalties, champion)"
-if python3 test_2022.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_2022.py | tail -8; FAIL=1; fi
+if PYTHONPATH=. python3 tests/test_2022.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/test_2022.py | tail -8; FAIL=1; fi
 
 say "Result-correctness tests (exact points, champion bonus, pens, survival, defence)"
-if python3 test_results.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_results.py | tail -12; FAIL=1; fi
+if PYTHONPATH=. python3 tests/test_results.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/test_results.py | tail -12; FAIL=1; fi
 
 say "Wagering engine tests (odds, payout, caps, pre-kickoff lock, settlement, balances)"
-if python3 test_wager.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_wager.py | tail -14; FAIL=1; fi
+if PYTHONPATH=. python3 tests/test_wager.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/test_wager.py | tail -14; FAIL=1; fi
 
 say "Over/Under goals odds model (Poisson pricing, realism, margin, monotonicity, hostile inputs)"
-if python3 test_ou_odds.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_ou_odds.py | tail -20; FAIL=1; fi
+if PYTHONPATH=. python3 tests/test_ou_odds.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/test_ou_odds.py | tail -20; FAIL=1; fi
 
 say "Over/Under placement (line/selection validation, kickoff lock, caps, return cap; result bets unchanged)"
-if python3 test_ou_place.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_ou_place.py | tail -24; FAIL=1; fi
+if PYTHONPATH=. python3 tests/test_ou_place.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/test_ou_place.py | tail -24; FAIL=1; fi
 
 say "Over/Under settlement (final-goals golden vectors, push-free, pens excluded, void/hostile scores; result settle intact)"
-if python3 test_ou_settle.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_ou_settle.py | tail -24; FAIL=1; fi
+if PYTHONPATH=. python3 tests/test_ou_settle.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/test_ou_settle.py | tail -24; FAIL=1; fi
 
 say "Over/Under accumulators (O/U legs, mixed with 1X2, combined odds, partial/void/losing-leg settle; 1X2 accas unchanged)"
-if python3 test_ou_acca.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_ou_acca.py | tail -24; FAIL=1; fi
+if PYTHONPATH=. python3 tests/test_ou_acca.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/test_ou_acca.py | tail -24; FAIL=1; fi
 
 say "Handicap odds model (complementarity, ladder rule, margin, monotonicity, no ±0.5 twin, hostile inputs)"
-if python3 test_hc_odds.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_hc_odds.py | tail -20; FAIL=1; fi
+if PYTHONPATH=. python3 tests/test_hc_odds.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/test_hc_odds.py | tail -20; FAIL=1; fi
 
 say "Handicap placement (struck at live price, line/selection validation, caps/budget, cross-game accas in / same-game blocked, kickoff lock)"
-if python3 test_hc_place.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_hc_place.py | tail -24; FAIL=1; fi
+if PYTHONPATH=. python3 tests/test_hc_place.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/test_hc_place.py | tail -24; FAIL=1; fi
 
 say "Handicap settlement (margin goldens, 90'+ET pens-excluded basis vs result bets, voids, hostile scores)"
-if python3 test_hc_settle.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_hc_settle.py | tail -24; FAIL=1; fi
+if PYTHONPATH=. python3 tests/test_hc_settle.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/test_hc_settle.py | tail -24; FAIL=1; fi
 
 say "Handicap exploit sweep (book overround grid, covering dutches hc x 1X2 / hc x hc / OU x hc, randomized dutch fuzz)"
-if python3 qa_hc_exploit.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_hc_exploit.py | tail -20; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_hc_exploit.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_hc_exploit.py | tail -20; FAIL=1; fi
 
 say "Method of victory + O/U cards (pricing floors vs the KO book, KO-only gate, REG/ET/PENS + 90'-cards settlement, no-data void grace, feed normaliser)"
-if python3 test_mov_cards.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_mov_cards.py | tail -24; FAIL=1; fi
+if PYTHONPATH=. python3 tests/test_mov_cards.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/test_mov_cards.py | tail -24; FAIL=1; fi
+
+say "WC26 replay (real-tournament regression data; SKIPs cleanly until the snapshots are committed)"
+if PYTHONPATH=. python3 tests/test_replay_wc26.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/test_replay_wc26.py | tail -12; FAIL=1; fi
 
 say "Same-game multis (joint pricing vs an independent reference, 1500-combo fuzz, correlation farms killed, group settlement/void semantics)"
-if python3 qa_sgm.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_sgm.py | tail -24; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_sgm.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_sgm.py | tail -24; FAIL=1; fi
 
 say "BTTS + feed-tier degradation (pricing/settlement/accas, free-tier proofs: MoV push, cards auto-gate, scorers/lineups normaliser)"
-if python3 test_btts_feed.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 test_btts_feed.py | tail -24; FAIL=1; fi
+if PYTHONPATH=. python3 tests/test_btts_feed.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/test_btts_feed.py | tail -24; FAIL=1; fi
 
 say "Disallowed-goal (VAR) alerts (score reversion fires once, flap/restart silent, FT-tick fires, post-FT correction silent)"
-if python3 qa_var_alerts.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_var_alerts.py | tail -24; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_var_alerts.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_var_alerts.py | tail -24; FAIL=1; fi
 
 say "Handicap end-to-end over REAL HTTP (served hcOdds, placement, acca rejection, margin settlement, shootout basis)"
-if python3 qa_hc_http.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_hc_http.py | tail -24; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_hc_http.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_hc_http.py | tail -24; FAIL=1; fi
 
 say "Betting QA (void lifecycle, mid-game/last-min void, accas, sequencing, free-points)"
-if python3 qa_betting.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_betting.py | tail -20; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_betting.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_betting.py | tail -20; FAIL=1; fi
 
 say "Deep betting QA (~111 checks: odds, limits, settlement, accas, free bets, money conservation, adversarial)"
-if python3 qa_betting_deep.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_betting_deep.py | tail -24; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_betting_deep.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_betting_deep.py | tail -24; FAIL=1; fi
 
 say "Deep scoring QA (~60 checks: point math, ownership, live points, survival, NO infinity/negative/crash)"
-if python3 qa_scoring_deep.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_scoring_deep.py | tail -24; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_scoring_deep.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_scoring_deep.py | tail -24; FAIL=1; fi
 
 say "Deep survival/forecast QA (~66 checks: alive/out, furthest-stage, champion odds, leaderboards, churn)"
-if python3 qa_survival_deep.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_survival_deep.py | tail -24; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_survival_deep.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_survival_deep.py | tail -24; FAIL=1; fi
 
 say "Concurrency QA (free claims strictly one-per-player-per-drop under load)"
-if python3 qa_concurrency.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_concurrency.py | tail -16; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_concurrency.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_concurrency.py | tail -16; FAIL=1; fi
 
 say "Bet-concurrency QA (~25 checks: simultaneous bets can't overspend/breach caps/go negative)"
-if python3 qa_concurrency_bets.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_concurrency_bets.py | tail -20; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_concurrency_bets.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_concurrency_bets.py | tail -20; FAIL=1; fi
 
 say "Settlement QA (FT, extra time, penalty shootout, abandoned, glitch guard)"
-if python3 qa_settlement.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_settlement.py | tail -20; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_settlement.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_settlement.py | tail -20; FAIL=1; fi
 
 say "Resilience QA (corruption recovery, empty-clobber guard, 6h snapshots)"
-if python3 qa_resilience.py >/dev/null; then echo "  ok"; else echo "  FAIL"; python3 qa_resilience.py | tail -16; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_resilience.py >/dev/null; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_resilience.py | tail -16; FAIL=1; fi
 
 say "HTTP robustness QA (malformed/hostile input never 500s; server survives)"
-if python3 qa_http.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_http.py 2>&1 | tail -16; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_http.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_http.py 2>&1 | tail -16; FAIL=1; fi
 
 say "Idempotency + live-edge QA (no double bets; odds/settle/compute survive weird data)"
-if python3 qa_idempotency.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_idempotency.py 2>&1 | tail -16; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_idempotency.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_idempotency.py 2>&1 | tail -16; FAIL=1; fi
 
 say "End-to-end integration QA (real HTTP bets, live settlement + scoring together, concurrent over the wire)"
-if python3 qa_integration.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_integration.py 2>&1 | tail -24; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_integration.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_integration.py 2>&1 | tail -24; FAIL=1; fi
 echo "[qa] tiebreak + claim-window (FIFA 2026 group order, whole-day drops)"
-if python3 qa_tiebreak.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_tiebreak.py 2>&1 | tail -20; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_tiebreak.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_tiebreak.py 2>&1 | tail -20; FAIL=1; fi
 
 say "Bet-race QA (~35 checks: kickoff/void flip rejects a bet — engine matrix + real-HTTP flip + concurrency around a flip)"
-if python3 qa_bet_race.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_bet_race.py 2>&1 | tail -30; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_bet_race.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_bet_race.py 2>&1 | tail -30; FAIL=1; fi
 
 say "Notification QA (opening-day kickoff/goal/full-time alerts fire; pre-tournament stays silent; no live-shuffle leader spam)"
-if python3 qa_notify.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_notify.py 2>&1 | tail -20; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_notify.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_notify.py 2>&1 | tail -20; FAIL=1; fi
 
 say "Match-clock QA (real kickoff/half-time tracking: anchors, excludes HT, ticks accurately, never guesses without a feed minute)"
-if python3 qa_clock.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_clock.py 2>&1 | tail -20; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_clock.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_clock.py 2>&1 | tail -20; FAIL=1; fi
 
 say "Stats QA (over/under-performer never collapses onto one team; reads right on a chalk result; flips on an upset)"
-if python3 qa_stats.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_stats.py 2>&1 | tail -25; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_stats.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_stats.py 2>&1 | tail -25; FAIL=1; fi
 
 say "Admin/IO QA (~51 checks: caps clamping, export/import round-trip + secret whitelist, hostile payloads)"
-if python3 qa_admin_io.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_admin_io.py 2>&1 | tail -28; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_admin_io.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_admin_io.py 2>&1 | tail -28; FAIL=1; fi
 
 say "Claims/pins QA (~41 checks: passcode set/change/no-hijack, deterministic drops, one-per-person free claim)"
-if python3 qa_claims_pins.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_claims_pins.py 2>&1 | tail -24; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_claims_pins.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_claims_pins.py 2>&1 | tail -24; FAIL=1; fi
 
 say "Odds-audit QA (book overround, market lookup, house-edge integrity guard, auto matchday audit idempotency + resilience)"
-if python3 qa_odds_audit.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_odds_audit.py 2>&1 | tail -24; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_odds_audit.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_odds_audit.py 2>&1 | tail -24; FAIL=1; fi
 
 say "Anti-hedge / anti-arb QA (knockout 2-way book always margined incl. extreme favourites; no backing both sides of one match across singles/accas/free)"
-if python3 qa_hedge_arb.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_hedge_arb.py 2>&1 | tail -24; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_hedge_arb.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_hedge_arb.py 2>&1 | tail -24; FAIL=1; fi
 
 say "Calibration QA (overlay loader, goals knob, every guard, integrity ABORT, 1000-case market fuzz: no crash / no underround / in-band)"
-if python3 qa_calibration.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_calibration.py 2>&1 | tail -30; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_calibration.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_calibration.py 2>&1 | tail -30; FAIL=1; fi
 
 say "Odds display==placement QA (fixture-list odds priced from the same calibrated strengths as the bet slip; junk overlay ignored)"
-if python3 qa_odds_display_match.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_odds_display_match.py 2>&1 | tail -30; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_odds_display_match.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_odds_display_match.py 2>&1 | tail -30; FAIL=1; fi
 
 say "Frontend QA (~58 checks: JS parses, XSS escaping, owner lookup, KO captions, 2-dp money, wheel draw, multi-page)"
-if python3 qa_frontend.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_frontend.py 2>&1 | tail -22; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_frontend.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_frontend.py 2>&1 | tail -22; FAIL=1; fi
 
 say "Teams/odds integrity (~296 checks: per-team decimal/implied/american agree; favourite not inverted; composites usable)"
-if python3 qa_teams_integrity.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_teams_integrity.py 2>&1 | tail -20; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_teams_integrity.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_teams_integrity.py 2>&1 | tail -20; FAIL=1; fi
 
 say "Discord QA (~34 checks: command dispatch + Ed25519 signature boundary — forged interactions rejected)"
-if python3 qa_discord.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_discord.py 2>&1 | tail -22; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_discord.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_discord.py 2>&1 | tail -22; FAIL=1; fi
 
 say "Guild-gate QA (only Discord members can claim a name; safe-off until configured; fails closed)"
-if python3 qa_guild.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; python3 qa_guild.py 2>&1 | tail -16; FAIL=1; fi
+if PYTHONPATH=. python3 tests/qa_guild.py >/dev/null 2>&1; then echo "  ok"; else echo "  FAIL"; PYTHONPATH=. python3 tests/qa_guild.py 2>&1 | tail -16; FAIL=1; fi
 
 say "Bot command tests"
-if python3 test_bot.py; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
+if PYTHONPATH=. python3 tests/test_bot.py; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
 
 say "Win-odds forecast (live-aware sim) tests"
 if command -v node >/dev/null 2>&1; then
-  if node test_sim.js; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
+  if node tests/test_sim.js; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
 else
   echo "  (node not found — skipping; run this gate on your Mac for the JS checks)"
 fi
 
 say "Live smoke + security tests"
-if python3 smoke_test.py; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
+if PYTHONPATH=. python3 tests/smoke_test.py; then echo "  ok"; else echo "  FAIL"; FAIL=1; fi
 
 echo
 if [ "$FAIL" = 0 ]; then echo "ALL CHECKS PASSED — safe to commit + push."; else echo "CHECKS FAILED — do NOT deploy."; fi

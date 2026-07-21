@@ -1,72 +1,50 @@
 # World Cup 2026 Sweepstake
 
-Weighted draw + spinning-wheel reveal + live tracker. Teams are tiered by a
-blend of FIFA ranking and bookmaker odds, dealt fairly, revealed on a wheel,
-and tracked through to the final in three scoring modes.
+Weighted draw → spinning-wheel reveal → live tracker → a full margined sportsbook, run for five
+friends through the whole of WC26 on a zero-dependency Python 3 stack (stdlib only, one Oracle
+free-tier box). **WC26 final: Ismail 550.1 pts.** The live site is preserved as a static demo in
+`wc26-demo/` and the complete tournament data ships as replay/test fixtures.
 
-## Files
+## Layout
+
 | File | What it does |
-|------|--------------|
-| `teams.json` | 48 teams: tier, weight, group, FIFA/odds blend |
-| `players.py` / `draw.py` | draw engine (snake / weighted, leftover drop / pool) |
-| `main.py` | run the draw in the terminal → `draw_result.json` |
-| `wheel.html` | spinning-wheel reveal (the live draw) |
-| `update_results.py` | football-data.org → `results.json` |
-| `scoring.py` | → `tracker_data.json` (points + survival + hybrid) |
-| `tracker.html` | live tracker GUI, mode toggle, auto-refresh |
-| `server.py` / `setup.html` | self-host: web setup wizard + auto-poller |
-| `.github/workflows/update.yml` | scheduled refresh (GitHub Pages path) |
+|---|---|
+| `teams.json` / `players.py` / `draw.py` / `main.py` | tiered weighted draw → `draw_result.json` |
+| `wheel.html` | the live spinning-wheel reveal |
+| `update_results.py` | football-data.org → `results.json`; tier-aware: near-live detail enrichment, finished-game backfill, deep-field carry, `diag` probe |
+| `scoring.py` | results + draw → `tracker_data.json` (points / survival / both, odds, review data) |
+| `wager.py` | the sportsbook: result, O/U goals, European 3-way handicap, BTTS, cards, method of victory, exact score; accas + jointly-priced same-game multis; settlement incl. the premature-FT guard |
+| `server.py` | HTTP server, poller, Discord bot + web push alerts, admin |
+| `tracker.html` | the whole frontend: live scores, leaderboards, bracket, betting, match sheets |
+| `archive.py` / `review.py` | end-of-tournament preservation + analysis (see below) |
+| `check.sh` | the gate: 120+ suites (unit, HTTP end-to-end, exploit sweeps, replay). **Green or no deploy.** |
 
-## Scoring modes (toggle on the tracker; pick a default at setup)
-- **Points** — per goal +1, win +3, draw +1, clean sheet +1, round bonuses.
-- **Survival** — value of the furthest stage each team reaches (R32 15 … Winner 150). Last-team-standing.
-- **Both** — points + survival.
+## Scoring
+**Points** (goal +1, win +3, draw +1, clean sheet +1, round bonuses) · **Survival** (furthest-stage
+value) · **Both**. Betting winnings feed the leaderboard through a free-points cushion; `BET_NET_CAP`
+in `wager.py` can cap the swing (see `LESSONS-WC26.md` — you probably want it on next time).
 
-Edit `SCORING` / `SURVIVAL_VALUE` in `scoring.py` to retune.
+## Betting markets
+Six markets per game, each a margined book with a price-ladder cap, priced off a shared Poisson
+model of the two teams' composites. Accumulators across games; **same-game multis are priced off
+the joint distribution** (never the leg product — correlation is priced, not given away). The
+exploit surface — dutching, hedging, correlation farms, capped-price farming — is enumerated and
+fuzz-tested in the gate.
 
----
+## Feed tiers
+Free tier: results, points, result/O-U/handicap/exact-score/BTTS betting, all score alerts.
+Deep-data tier adds: cards betting (auto-detected), scorer-named goal alerts, line-ups +
+line-ups-released alerts, red-card alerts, match-sheet timelines. Everything degrades gracefully —
+undecidable bets push with a refund, absent markets hide rather than mis-settle.
 
-## Option A — Self-host on a server (Oracle Cloud Free Tier)
-Zero dependencies — just Python 3. Good for an always-on box like a Minecraft VM.
-
-1. Create an **Always Free** VM (Ampere A1 / Ubuntu) in Oracle Cloud.
-2. Open the port: add an **ingress rule for TCP 8000** to the VCN Security List
-   (and `sudo ufw allow 8000` if the firewall is on).
-3. Copy the project up and run it:
-   ```bash
-   git clone <your-repo> sweepstake && cd sweepstake
-   python3 server.py            # serves on 0.0.0.0:8000
-   ```
-4. Visit `http://<your-server-ip>:8000/` → the **setup wizard**: add players,
-   pick draw + scoring modes, paste your football-data.org token, hit run.
-   Share that same URL with everyone — they get the wheel and live tracker.
-
-Keep it running like a game server with systemd:
-```ini
-# /etc/systemd/system/sweepstake.service
-[Unit]
-Description=WC Sweepstake
-After=network.target
-[Service]
-WorkingDirectory=/home/ubuntu/sweepstake
-ExecStart=/usr/bin/python3 server.py
-Restart=always
-User=ubuntu
-Environment=PORT=8000
-[Install]
-WantedBy=multi-user.target
+## End of tournament
 ```
-```bash
-sudo systemctl enable --now sweepstake
+python3 archive.py    # in the site dir: zip of every data file, static wc26-demo/, repo snapshots
+python3 review.py     # participants / teams / betting-health report (--json to save)
 ```
-The token lives in `config.json` (gitignored) on your private box — keep the VM secure.
+`config.json: {"alerts": "off"}` silences notifications (they also auto-quiet once every game is
+finished). `test_replay_wc26.py` replays the real tournament through the engine as regression data.
 
-## Option B — GitHub Pages + Actions (static, no server)
-1. Push to GitHub; run the draw locally (`python main.py`) and commit `draw_result.json`.
-2. Add your token as a repo **Secret** `FOOTBALL_DATA_TOKEN` (never in the code).
-3. Enable **GitHub Pages** (root). The Action refreshes `tracker_data.json` every 10 min.
-4. Share `https://<you>.github.io/<repo>/tracker.html`.
-
-## Reuse for another tournament (e.g. Euro 2028)
-Set competition `EC` (in the setup wizard, or `COMPETITION` in the workflow) and
-regenerate `teams.json` for that field — same free tier covers the Euros.
+## Run it
+See `DEPLOY.md` (server) and `RESTORE.md` (disaster recovery). Setup wizard at `/` on first boot.
+For the next tournament: `LESSONS-WC26.md` first, then set `COMPETITION` and regenerate `teams.json`.

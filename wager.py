@@ -346,6 +346,61 @@ def _winner_side(m):
     return "HOME" if hs > as_ else ("AWAY" if as_ > hs else "DRAW")
 
 
+def match_decided(match):
+    """Is a FINISHED status trustworthy as FINAL for score-based markets? Feeds can tick a knockout to
+    FINISHED at the end of the 90 before flipping into extra time — but a LEVEL knockout score with no
+    shootout evidence (no pens fields, no HOME/AWAY winner) cannot actually be the end of the game, so
+    nothing settles on it. Group games can genuinely finish level, so they're exempt."""
+    if match.get("status") not in ("FINISHED", "AWARDED"):
+        return False
+    if not is_knockout(match):
+        return True
+    hs, as_ = match.get("homeScore"), match.get("awayScore")
+    try:
+        if hs is None or as_ is None or float(hs) != float(as_):
+            return True                             # a non-level knockout score is a real result at any duration
+    except (TypeError, ValueError):
+        return True
+    if match.get("penHome") is not None and match.get("penAway") is not None and match.get("penHome") != match.get("penAway"):
+        return True
+    if match.get("winner") in ("HOME", "AWAY"):
+        return True
+    return False                                    # level + no decider = the premature 90-minute tick
+
+
+def _reopen_premature(wagers, match, mid):
+    """AUTO-REPAIR: bets settled off a premature FINISHED tick get reopened the moment the feed shows the
+    game wasn't over (back IN_PLAY for extra time, or still level-undecided). Safe because every balance
+    and leaderboard figure is recomputed from wagers.json on render — resetting a wager re-derives it all.
+    Only score-settled wins/losses reopen; voids (cancellations, no-data pushes) are a different path."""
+    n = 0
+    for w in wagers or []:
+        if not isinstance(w, dict):
+            continue
+        legs = w.get("legs")
+        if legs and isinstance(legs, list):
+            touched = False
+            for leg in legs:
+                if isinstance(leg, dict) and leg.get("matchId") == mid and leg.get("result") in ("won", "lost"):
+                    leg.pop("result", None); touched = True
+            if touched:
+                if w.get("status") in ("won", "lost"):
+                    w["status"] = "pending"; w.pop("settled_at", None)
+                    try:
+                        w["return"] = round(_num(w.get("stake")) * _num(w.get("decimal")), 2)
+                    except Exception:
+                        pass
+                n += 1
+            continue
+        if w.get("matchId") == mid and w.get("status") in ("won", "lost") and w.get("result") is not None:
+            w["status"] = "pending"; w.pop("settled_at", None); w.pop("result", None)
+            den = _num(w.get("den")); num = _num(w.get("num"))
+            if den > 0:
+                w["return"] = round(_num(w.get("stake")) * (1.0 + num / den), 2)
+            n += 1
+    return n
+
+
 def can_bet_on(match, now=None):
     """Only before kick-off: status must be pre-match AND the kick-off time must still be in the future."""
     if not isinstance(match, dict):
@@ -525,13 +580,20 @@ def available_points(player, settled_points, wagers):
     return max(0.0, round(settled_points + free_bonus(player, wagers) + d.get("settled_net", 0.0) - d.get("pending_stake", 0.0), 2))
 
 
+BET_NET_CAP = None   # next-event knob: cap a player's leaderboard swing from betting to +/- this many
+                     # points (WC26 lesson: unlimited betting profit decided the sweepstake). None = off.
+
+
 def leaderboard_net(player, wagers, bonus=None):
     """The bet profit/loss that should hit a player's LEADERBOARD total. The free points (and any free-bet winnings
     already in settled_net) mean the first `bonus` points of net losses are absorbed and never cost real points —
     only genuine winnings, and losses beyond the free points, move the leaderboard."""
     b = free_bonus(player, wagers) if bonus is None else float(bonus)
     net = player_deltas(wagers).get(player, {}).get("settled_net", 0.0)
-    return round(net + min(b, max(0.0, -net)), 2)
+    out = round(net + min(b, max(0.0, -net)), 2)
+    if BET_NET_CAP is not None:
+        out = max(-abs(BET_NET_CAP), min(abs(BET_NET_CAP), out))
+    return out
 
 
 def grant_free_points(wagers, player, drop_id, amount=None, now=None):
@@ -624,8 +686,8 @@ def place(wagers, player, match, selection, stake, settled_points, comp_home, co
         if line not in OU_LINES:
             return False, "That goals line isn't offered."
     elif market == "hc":
-        if selection not in ("HOME", "AWAY"):
-            return False, "Pick a side for a handicap bet — home or away."
+        if selection not in ("HOME", "DRAW", "AWAY"):
+            return False, "Pick a handicap outcome — home, the handicap draw, or away."
         try:
             line = float(line)
         except (TypeError, ValueError):
@@ -826,7 +888,10 @@ def _cs_result(selection, match):
 HC_OVERROUND = 1.15          # same margin class as the O/U goals book (a touch above the 1X2's 1.08)
 HC_MIN_MARGIN = 0.02         # minimum book overround on any offered line (a capped near-certainty still has an edge)
 HC_MAX_PROB = 0.93           # deep price ladder like O/U (shortest ~1/13); beyond it the line is NOT offered
-HC_LINES = [-3.5, -2.5, -1.5, 1.5, 2.5, 3.5]   # HOME-team half-lines only -> a bet can never push. ±0.5 is
+HC_LINES = [-3, -2, -1, 1, 2, 3]   # HOME-team WHOLE-goal lines, Paddy-style European handicap: three
+                                   # outcomes per line (win by more than the line / by exactly it — the
+                                   # "handicap draw" / fail to cover). Legacy half-line bets placed before
+                                   # this change still settle two-way. ±0.5 stays off the board: it is
                                     #   deliberately absent: it duplicates the 1X2 result market under a DIFFERENT
                                     #   probability model (this Poisson grid vs _fair_probs), and two prices for one
                                     #   event across two models is exactly the cross-market dutch a sharp bettor
@@ -868,60 +933,77 @@ def _hc_home_prob(lh, la, line):
     return (cover / mass) if mass > 0 else 0.5
 
 
+def _hc_probs3(lh, la, line):
+    """European-handicap outcome probabilities for a WHOLE line: (P(home covers), P(handicap draw),
+    P(away covers)) with home covering when home + line > away and the draw when it lands exactly on
+    the line. Same shared Poisson grid, normalised so the three outcomes partition every scoreline."""
+    try:
+        line = float(line)
+    except (TypeError, ValueError):
+        return (1/3, 1/3, 1/3)
+    if line != line or line in (float("inf"), float("-inf")):
+        return (1/3, 1/3, 1/3)
+    ph_pmf = [_poisson_pmf(k, lh) for k in range(HC_GRID_MAX + 1)]
+    pa_pmf = [_poisson_pmf(k, la) for k in range(HC_GRID_MAX + 1)]
+    pw = pd = pl = 0.0
+    for h in range(HC_GRID_MAX + 1):
+        for a in range(HC_GRID_MAX + 1):
+            p = ph_pmf[h] * pa_pmf[a]
+            adj = h + line - a
+            if adj > 1e-9:
+                pw += p
+            elif adj < -1e-9:
+                pl += p
+            else:
+                pd += p
+    mass = pw + pd + pl
+    if mass <= 0:
+        return (1/3, 1/3, 1/3)
+    return (pw / mass, pd / mass, pl / mass)
+
+
 def hc_odds(comp_home, comp_away, lines=None):
-    """Handicap (goal-margin) prices per HOME line: {'-1.5': {'HOME': {...}, 'AWAY': {...}}, ...}.
-    The line is the handicap applied to the HOME side: HOME wins when home + line > away; AWAY is the exact
-    complement (half-lines -> never a push). Settles on the 90'+ET score, penalties excluded — the same basis
-    as Over/Under and exact score (NOT the knockout 'to advance' book, which a shootout can decide).
-    TWO-SIDED lines carry a guaranteed book overround with a post-rounding re-check, like goals_odds().
-    When ONE side of a line is a capped near-certainty (fair > HC_MAX_PROB — offering it at the ladder cap
-    would be a farmable bettor edge), only that side is dropped and the LONG side is priced alone at
-    fair x overround with its own post-rounding minimum-margin re-check. So a big favourite's +2.5 vanishes
-    but the underdog's -2.5 stays on the board — both teams get their +/- options wherever the price is safe."""
+    """European (Paddy-style) handicap prices per WHOLE home line:
+    {'-1': {'HOME': {...}, 'DRAW': {...}, 'AWAY': {...}}, ...}.
+    The line is applied to the HOME side: HOME covers when home + line > away, the HANDICAP DRAW lands
+    when the margin hits the line exactly, AWAY covers otherwise. Settles on the 90'+ET score, penalties
+    excluded — the same basis as Over/Under and exact score. Each outcome is priced at fair x HC_OVERROUND
+    with the shared ladder rule: a capped near-certainty (fair > HC_MAX_PROB) is dropped rather than sold
+    at a farmable price, and every SOLD outcome carries a post-rounding minimum margin over its own fair —
+    so any covering dutch (the three outcomes of a line, or combos across lines/markets) sums over 1.0."""
     lh, la = _team_lambdas(comp_home, comp_away)
     out = {}
     for L in (lines or HC_LINES):
-        p_home = min(0.999, max(1e-6, _hc_home_prob(lh, la, L)))
-        p_away = min(0.999, max(1e-6, 1.0 - p_home))
-        if p_home > HC_MAX_PROB or p_away > HC_MAX_PROB:
-            # one-sided offering: price ONLY the long side, never the capped near-certainty
-            sel, p = ("HOME", p_home) if p_home <= HC_MAX_PROB else ("AWAY", p_away)
-            implied = p * HC_OVERROUND
-            leg = None
-            for _ in range(8):                      # bump until the ROUNDED fraction still clears the margin
+        try:
+            Lf = float(L)
+        except (TypeError, ValueError):
+            continue
+        if Lf != Lf or Lf in (float("inf"), float("-inf")):
+            continue
+        pw, pd, pl = _hc_probs3(lh, la, Lf)
+        leg = {}
+        for sel, p in (("HOME", pw), ("DRAW", pd), ("AWAY", pl)):
+            p = min(0.999, max(1e-6, p))
+            if p > HC_MAX_PROB:
+                continue                            # ladder rule: never sell the capped near-certainty
+            implied = min(HC_MAX_PROB, p * HC_OVERROUND)
+            for _ in range(8):                      # post-rounding: the sold price must still beat fair
                 num, den = _nearest_fraction(1.0 / implied)
                 if den > 0 and (den / (num + den)) >= p * (1.0 + HC_MIN_MARGIN) - 1e-12:
-                    leg = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
+                    leg[sel] = {"frac": "%d/%d" % (num, den), "num": num, "den": den,
+                                "decimal": round(_dec((num, den)), 3)}
                     break
-                implied = min(0.999, implied + 0.005)
-            if leg:
-                out[_line_key(L)] = {sel: leg}
-            continue
-        iH = min(HC_MAX_PROB, p_home * HC_OVERROUND)
-        iA = min(HC_MAX_PROB, p_away * HC_OVERROUND)
-        target = 1.0 + HC_MIN_MARGIN
-        if iH + iA < target:                        # a capped side can't carry the margin -> lift the other side
-            if iH <= iA:
-                iH = min(HC_MAX_PROB, target - iA)
-            else:
-                iA = min(HC_MAX_PROB, target - iH)
-        leg = {}
-        for _ in range(8):                          # rebuild + re-check after fraction rounding, like goals_odds()
-            leg = {}
-            for sel, implied in (("HOME", iH), ("AWAY", iA)):
-                num, den = _nearest_fraction(1.0 / implied)
-                leg[sel] = {"frac": "%d/%d" % (num, den), "num": num, "den": den, "decimal": round(_dec((num, den)), 3)}
-            if (1.0 / leg["HOME"]["decimal"]) + (1.0 / leg["AWAY"]["decimal"]) > 1.0 + 1e-6:
-                break
-            if iH <= iA:
-                iH = min(HC_MAX_PROB, iH + 0.01)
-            else:
-                iA = min(HC_MAX_PROB, iA + 0.01)
-        out[_line_key(L)] = leg                     # every OFFERED price is bettor-negative vs fair
+                implied = min(HC_MAX_PROB, implied + 0.005)
+                if implied >= HC_MAX_PROB:
+                    break
+        if leg:
+            out[_line_key(Lf)] = leg
     return out
 
-
 def _hc_result(line, selection, match):
+    """'won'/'lost' for a handicap bet or None while unsettleable. WHOLE lines are European 3-way
+    (HOME / DRAW-on-the-line / AWAY); legacy HALF-line bets (placed before the switch) still settle
+    two-way — equality is impossible on a half, so nothing changes for them."""
     """'won'/'lost' for a handicap bet against the FINAL score (extra time included, penalties excluded),
     or None while it can't be settled. `line` is the stored HOME-team line; HOME covers when home + line > away,
     AWAY covers the exact complement — half-lines only, so a push is impossible."""
@@ -929,7 +1011,7 @@ def _hc_result(line, selection, match):
         line = float(line)
     except (TypeError, ValueError):
         return None
-    if line != line or line in (float("inf"), float("-inf")) or selection not in ("HOME", "AWAY"):
+    if line != line or line in (float("inf"), float("-inf")) or selection not in ("HOME", "DRAW", "AWAY"):
         return None
     hs, as_ = match.get("homeScore"), match.get("awayScore")
     if hs is None or as_ is None:
@@ -940,8 +1022,17 @@ def _hc_result(line, selection, match):
         return None
     if hs != hs or as_ != as_ or hs in (float("inf"), float("-inf")) or as_ in (float("inf"), float("-inf")) or hs < 0 or as_ < 0:
         return None
-    home_covers = (hs + line) > as_
-    return "won" if (home_covers if selection == "HOME" else not home_covers) else "lost"
+    adj = (hs + line) - as_
+    if abs(line - round(line)) > 1e-9:              # legacy half-line: two-way, no push possible
+        home_covers = adj > 0
+        return "won" if (home_covers if selection == "HOME" else not home_covers) else "lost"
+    if selection == "HOME":
+        return "won" if adj > 1e-9 else "lost"
+    if selection == "DRAW":
+        return "won" if abs(adj) <= 1e-9 else "lost"
+    if selection == "AWAY":
+        return "won" if adj < -1e-9 else "lost"
+    return None
 
 
 # ---------------------------------------------------------------- method of victory (knockouts only)
@@ -1174,7 +1265,7 @@ def _cards_result(line, selection, match):
 
 
 # ---------------------------------------------------------------- both teams to score (works on EVERY feed tier)
-BTTS_OVERROUND = 1.25
+BTTS_OVERROUND = 1.40   # VERY house-friendly — a coin-flippy fun market, tuned harsh on purpose
 BTTS_MAX_PROB = 0.93
 BTTS_MIN_MARGIN = 0.04
 
@@ -1243,8 +1334,14 @@ def _sgm_leg_pays(mk, sel, line, h, a):
     if mk == "ou":
         return (h + a) > line if sel == "OVER" else (h + a) < line
     if mk == "hc":
-        cov = (h + line) > a
-        return cov if sel == "HOME" else not cov
+        adj = (h + line) - a
+        if abs(line - round(line)) > 1e-9:          # legacy half-line legs: two-way
+            return (adj > 0) if sel == "HOME" else (adj < 0)
+        if sel == "HOME":
+            return adj > 1e-9
+        if sel == "DRAW":
+            return abs(adj) <= 1e-9
+        return adj < -1e-9
     if mk == "cs":
         return sel == "%d-%d" % (h, a)
     if mk == "btts":
@@ -1364,6 +1461,8 @@ def _leg_result(leg, match):
     status = match.get("status")
     if status in VOID_STATUSES:
         return "void"
+    if status in ("FINISHED", "AWARDED") and not match_decided(match):
+        return None                                  # premature 90' tick on a level knockout: not final
     if leg.get("market") == "ou":                    # Over/Under leg settles on total goals, not the winner
         if status not in ("FINISHED", "AWARDED"):
             return None
@@ -1420,6 +1519,13 @@ def settle(wagers, match, now=None):
     side = _winner_side(match)
     ts = int(now if now is not None else time.time())
     n = 0
+    decided = match_decided(match)
+    if not decided and status not in VOID_STATUSES:
+        # a knockout ticked FINISHED while level with no decider, or back IN_PLAY for extra time:
+        # nothing settles, and anything WRONGLY settled off the premature tick is reopened
+        n += _reopen_premature(wagers, match, mid)
+        if status in ("FINISHED", "AWARDED"):
+            return n                                # premature FT tick: wait for the real end
     for w in wagers or []:
         if not isinstance(w, dict) or w.get("status") != "pending":
             continue
@@ -1475,7 +1581,7 @@ def settle(wagers, match, now=None):
         if status in VOID_STATUSES:
             w["status"] = "void"; w["return"] = _num(w.get("stake")); w["settled_at"] = ts; n += 1; continue
         if w.get("market") == "cs":                  # exact-score single: settle on the final score (ET incl., pens excl.)
-            if status not in ("FINISHED", "AWARDED"):
+            if not decided:
                 continue
             r = _cs_result(w.get("selection"), match)
             if r == "won":
@@ -1488,7 +1594,7 @@ def settle(wagers, match, now=None):
                 continue
             w["settled_at"] = ts; n += 1; continue
         if w.get("market") == "ou":                  # Over/Under single: settle on final total goals (pens excluded)
-            if status not in ("FINISHED", "AWARDED"):
+            if not decided:
                 continue
             r = _ou_result(w.get("line"), w.get("selection"), _match_total(match))
             if r is None:
@@ -1500,7 +1606,7 @@ def settle(wagers, match, now=None):
             w["result"] = r
             w["settled_at"] = ts; n += 1; continue
         if w.get("market") == "hc":                  # handicap single: settle on the final goal margin (pens excluded)
-            if status not in ("FINISHED", "AWARDED"):
+            if not decided:
                 continue
             r = _hc_result(w.get("line"), w.get("selection"), match)
             if r is None:
@@ -1512,7 +1618,7 @@ def settle(wagers, match, now=None):
             w["result"] = r
             w["settled_at"] = ts; n += 1; continue
         if w.get("market") == "btts":                # both teams to score: pure function of the final score
-            if status not in ("FINISHED", "AWARDED"):
+            if not decided:
                 continue
             r = _btts_result(w.get("selection"), match)
             if r is None:
@@ -1524,7 +1630,7 @@ def settle(wagers, match, now=None):
             w["result"] = r
             w["settled_at"] = ts; n += 1; continue
         if w.get("market") == "mov":                 # method of victory: how the winner went through
-            if status not in ("FINISHED", "AWARDED"):
+            if not decided:
                 continue
             r = _mov_result(w.get("selection"), match)
             if r is None:
@@ -1543,7 +1649,7 @@ def settle(wagers, match, now=None):
             w["result"] = r
             w["settled_at"] = ts; n += 1; continue
         if w.get("market") == "cards":               # O/U cards: settle on 90' bookings from the deep-data feed
-            if status not in ("FINISHED", "AWARDED"):
+            if not decided:
                 continue
             r = _cards_result(w.get("line"), w.get("selection"), match)
             if r is None:
@@ -1713,8 +1819,8 @@ def place_acca(wagers, player, selections, stake, settled_points, now=None, grou
         elif mk == "hc":
             # Handicap legs, same reasoning: distinct matches (enforced above) -> independent margined
             # prices, no covering combination exists across games. Settles by _leg_result on the margin.
-            if s.get("selection") not in ("HOME", "AWAY"):
-                return False, "Pick a side for every handicap leg — home or away."
+            if s.get("selection") not in ("HOME", "DRAW", "AWAY"):
+                return False, "Pick an outcome for every handicap leg — home, the handicap draw, or away."
             try:
                 ln = float(s.get("line"))
             except (TypeError, ValueError):

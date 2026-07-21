@@ -693,7 +693,7 @@ function hcLineFor(mid,odds){
   if(!odds) return '-1.5';
   // default: the TWO-SIDED line with the most balanced prices — for a home favourite that's -1.5, for an
   // away favourite it's +1.5, never a lone 300/1 long shot (the old fixed '-1.5' default did exactly that)
-  const two=Object.keys(odds).filter(k=>odds[k].HOME&&odds[k].AWAY);
+  const two=Object.keys(odds).filter(k=>odds[k].HOME&&odds[k].AWAY);   // DRAW rides along whatever the line
   if(two.length){
     const bal=k=>Math.abs((1/(odds[k].HOME.num/odds[k].HOME.den+1))-(1/(odds[k].AWAY.num/odds[k].AWAY.den+1)));
     return two.sort((a,b)=>bal(a)-bal(b)||Math.abs(parseFloat(a))-Math.abs(parseFloat(b)))[0];
@@ -879,7 +879,7 @@ function renderBets(){
   } else if(fbet.open && fbMine){
     h+='<div style="margin:0 0 12px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;color:var(--muted)">🎁 You\'ve claimed today\'s free points — they\'re in your balance above. Bet them on any game. The next drop is another day.</div>';
   }
-  h+='<div style="color:var(--muted);font-size:12px;margin:0 0 10px">Tap a game to bet · tap it again to remove'+(accasOn?' · tap a second game to build a 🎰 accumulator':'')+'. Each game also has an <b>\u26bd Over/Under goals</b> market (pick a goals line \u2014 near-certain lines pay on a deeper ladder, down to 1/14), a <b>\u00b1 Handicap</b> market (give a side a goal start or deficit \u2014 pick the line, settles on the 90&#39;+extra-time score, penalties don\u2019t count) a <b>\ud83d\udfe8 Cards</b> market (total bookings in 90 minutes \u2014 every card counts 1; if the feed carries no cards data the bet pushes with a full refund), on knockouts a <b>\ud83c\udfc1 Method of victory</b> market (in 90&#39;, in extra time, or on penalties) and a <b>\ud83c\udfaf Exact score</b> market \u2014 type the final score (after extra time, 0\u20139 each way) and back it. Result = who goes through (a shootout win counts); everything settles automatically, and any market can be an accumulator leg \u2014 one pick per game.</div>';
+  h+='<div style="color:var(--muted);font-size:12px;margin:0 0 10px">Tap a game to bet · tap it again to remove'+(accasOn?' · tap a second game to build a 🎰 accumulator':'')+'. Each game also has an <b>\u26bd Over/Under goals</b> market (pick a goals line \u2014 near-certain lines pay on a deeper ladder, down to 1/14), a <b>\u00b1 Handicap</b> market (Paddy-style whole-goal lines \u2014 back a side to cover, or the <b>handicap draw</b> if the margin lands exactly on the line; settles on the 90&#39;+extra-time score, penalties don\u2019t count) a <b>\ud83d\udfe8 Cards</b> market (total bookings in 90 minutes \u2014 every card counts 1; if the feed carries no cards data the bet pushes with a full refund), on knockouts a <b>\ud83c\udfc1 Method of victory</b> market (in 90&#39;, in extra time, or on penalties) and a <b>\ud83c\udfaf Exact score</b> market \u2014 type the final score (after extra time, 0\u20139 each way) and back it. Result = who goes through (a shootout win counts); everything settles automatically, and any market can be an accumulator leg \u2014 one pick per game.</div>';
   if(ACCAMODE) h+='<div style="color:var(--muted);font-size:12.5px;margin:0 0 10px">🎰 Building an accumulator — odds multiply, but <b>every</b> leg must win. Up to '+maxLegs+' legs, and up to '+((caps.max_active_accas)||2)+' accas running at once.'+(retCap?(' Max return: <b>'+retCap+'</b>.'):'')+'</div>';
   if(!fx.length) h+='<div class="empty">No upcoming games to bet on right now — check back before kick-off.</div>';
   else h+='<div class="mdgrid">'+fx.map(m=>{
@@ -1039,6 +1039,8 @@ function renderBets(){
     if(ACCAMODE){
       const exact=ACCA.findIndex(l=>samePick(l,mid,sel,market,line));
       const sameMkt=ACCA.findIndex(l=>l.matchId===mid&&(l.market||'result')===market);
+      const movClash=exact<0&&sameMkt<0&&ACCA.some(l=>l.matchId===mid&&((l.market||'result')==='mov')!==(market==='mov'));
+      if(movClash){ BETMSG='Method of victory can\'t combine with another pick on the SAME game — pair it with picks on other games.'; renderBets(); return; }
       if(exact>=0){ ACCA.splice(exact,1); }                             // re-tap the exact leg -> remove it
       else if(sameMkt>=0){ ACCA[sameMkt]=pick(); }                      // same game+market -> switch that pick
       else {
@@ -1054,6 +1056,9 @@ function renderBets(){
       } else if(BETPICK && BETPICK.matchId===mid && (BETPICK.market||'result')===market){
         BETPICK=pick();                                                 // same game + same market -> switch the pick
       } else if(BETPICK && accasOn){
+        if(BETPICK.matchId===mid&&(((BETPICK.market||'result')==='mov')!==(market==='mov'))){
+          BETMSG='Method of victory can\'t combine with another pick on the SAME game — pair it with picks on other games.'; renderBets(); return;
+        }
         ACCA=[BETPICK,pick()];                                          // another market (same OR different game) -> accumulator
         ACCAMODE=true; BETPICK=null;                                    //   same-game combos are priced JOINTLY on Place
       } else {
@@ -1142,7 +1147,11 @@ function provResult(o, hs, as_){   // live/settled outcome of a bet or leg from 
   if(hs==null||as_==null) return null;           // no score yet -> unknown (don't coerce null to 0)
   hs=Number(hs); as_=Number(as_); if(isNaN(hs)||isNaN(as_)) return null;
   if((o.market||'result')==='ou'){ const over=(hs+as_)>Number(o.line); return (o.selection==='OVER'?over:!over)?'win':'lose'; }  // half-line: never level
-  if((o.market||'result')==='hc'){ const cov=(hs+Number(o.line))>as_; return (o.selection==='HOME'?cov:!cov)?'win':'lose'; }     // half-line: never level
+  if((o.market||'result')==='hc'){ const adj=(hs+Number(o.line))-as_;
+    if(Math.abs(Number(o.line)%1)>1e-9) return ((adj>0)===(o.selection==='HOME'))?'win':'lose';   // legacy half-line
+    if(o.selection==='HOME') return adj>0?'win':'lose';
+    if(o.selection==='DRAW') return adj===0?'win':'lose';
+    return adj<0?'win':'lose'; }
   if((o.market||'result')==='cards'||(o.market||'result')==='mov') return null;   // not derivable from the scoreline alone
   if((o.market||'result')==='btts'){ const both=hs>0&&as_>0;
     if(o.selection==='YES') return both?'win':'level';       // both scored = locked in; otherwise still possible
