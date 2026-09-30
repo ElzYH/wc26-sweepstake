@@ -1,4 +1,4 @@
-# World Cup 2026 Sweepstake
+# World Cup 2026 Sweepstake (Heavily VC Project)
 
 Weighted draw → spinning-wheel reveal → live tracker → a full margined sportsbook, run for five
 friends through the whole of WC26 on a zero-dependency Python 3 stack (stdlib only, one Oracle
